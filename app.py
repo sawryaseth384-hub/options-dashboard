@@ -6,7 +6,7 @@ st.set_page_config(layout="wide")
 st.title("AI Options Trading Dashboard")
 
 # ---- AI API KEY ----
-genai.configure(api_key="YOUR_GOOGLE_API_KEY")
+genai.configure(api_key="AIzaSyCPSMsdPKghaP3Nd9M6q2_j9bh3xmlR1zs")
 
 model = genai.GenerativeModel("gemini-1.5-flash")
 
