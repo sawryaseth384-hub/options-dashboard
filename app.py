@@ -1,45 +1,28 @@
 import streamlit as st
-import pandas as pd
-import requests
+import google.generativeai as genai
 
-st.title("AI Options Dashboard")
+st.set_page_config(layout="wide")
 
-url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
+st.title("AI Options Trading Dashboard")
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+# ---- AI API KEY ----
+genai.configure(api_key="YOUR_GOOGLE_API_KEY")
 
-try:
-    r = requests.get(url, headers=headers)
-    data = r.json()
+model = genai.GenerativeModel("gemini-1.5-flash")
 
-    records = data['records']['data']
+# ---- Dashboard Layout ----
+col1, col2 = st.columns([3,1])
 
-    rows = []
+with col1:
+    st.subheader("Market Data")
+    st.info("Market data section will appear here")
 
-    for i in records:
-        strike = i['strikePrice']
+with col2:
+    st.subheader("AI Trading Assistant")
 
-        call_oi = None
-        put_oi = None
+    user_prompt = st.text_area("Ask AI about Market")
 
-        if "CE" in i:
-            call_oi = i["CE"]["openInterest"]
-
-        if "PE" in i:
-            put_oi = i["PE"]["openInterest"]
-
-        rows.append({
-            "Strike Price": strike,
-            "Call OI": call_oi,
-            "Put OI": put_oi
-        })
-
-    df = pd.DataFrame(rows)
-
-    st.subheader("NIFTY Option Chain")
-    st.dataframe(df)
-
-except:
-    st.error("Failed to fetch NSE data")
+    if st.button("Analyze Market"):
+        if user_prompt:
+            response = model.generate_content(user_prompt)
+            st.success(response.text)
