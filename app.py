@@ -1,16 +1,21 @@
 from dhanhq import dhanhq
 import os
+import streamlit as st
 
-# environment variables
+# credentials
 client_id = os.getenv("DHAN_CLIENT_ID")
 access_token = os.getenv("DHAN_ACCESS_TOKEN")
 
-# connect to Dhan
+# connect
 dhan = dhanhq(client_id, access_token)
 
-# NIFTY security id = 13
-data = dhan.marketfeed({
-    "NSE_EQ": [13]
+# market feed request
+data = dhan.get_market_feed({
+    "NSE_EQ": [13]   # NIFTY
 })
 
-print(data)
+# extract price
+nifty_price = data["NSE_EQ"]["13"]["last_price"]
+
+# show on dashboard
+st.metric("NIFTY LTP", nifty_price)
