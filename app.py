@@ -2,17 +2,12 @@ import streamlit as st
 import requests
 import pandas as pd
 
-st.set_page_config(page_title="AI Options Dashboard", layout="wide")
-
 st.title("AI Options Trading Dashboard")
 
-# NSE headers
 headers = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json"
+    "User-Agent": "Mozilla/5.0"
 }
 
-# NSE session
 session = requests.Session()
 session.get("https://www.nseindia.com", headers=headers)
 
@@ -24,52 +19,41 @@ try:
     data = response.json()
 
     records = data["records"]["data"]
-    underlying = data["records"]["underlyingValue"]
+    nifty_price = data["records"]["underlyingValue"]
 
-    st.metric("NIFTY Price", underlying)
+    st.metric("NIFTY Price", nifty_price)
 
-    ce_oi = 0
-    pe_oi = 0
+    ce_total = 0
+    pe_total = 0
 
-    table_data = []
+    table = []
 
-    for i in records:
+    for item in records:
 
-        strike = i["strikePrice"]
+        strike = item["strikePrice"]
 
-        ce = i.get("CE")
-        pe = i.get("PE")
+        ce = item.get("CE")
+        pe = item.get("PE")
 
-        ce_oi_val = ce["openInterest"] if ce else 0
-        pe_oi_val = pe["openInterest"] if pe else 0
+        ce_oi = ce["openInterest"] if ce else 0
+        pe_oi = pe["openInterest"] if pe else 0
 
-        ce_ltp = ce["lastPrice"] if ce else 0
-        pe_ltp = pe["lastPrice"] if pe else 0
+        ce_total += ce_oi
+        pe_total += pe_oi
 
-        ce_oi += ce_oi_val
-        pe_oi += pe_oi_val
-
-        table_data.append({
+        table.append({
             "Strike": strike,
-            "CE OI": ce_oi_val,
-            "CE LTP": ce_ltp,
-            "PE LTP": pe_ltp,
-            "PE OI": pe_oi_val
+            "CE OI": ce_oi,
+            "PE OI": pe_oi
         })
 
-    df = pd.DataFrame(table_data)
+    df = pd.DataFrame(table)
 
-    pcr = round(pe_oi / ce_oi, 2)
+    pcr = round(pe_total / ce_total, 2)
 
-    col1, col2, col3 = st.columns(3)
+    st.write("PCR:", pcr)
 
-    col1.metric("Total CE OI", ce_oi)
-    col2.metric("Total PE OI", pe_oi)
-    col3.metric("PCR", pcr)
-
-    st.subheader("Option Chain")
-
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df)
 
 except Exception as e:
 
