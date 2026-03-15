@@ -1,70 +1,71 @@
 import streamlit as st
-import requests
+import yfinance as yf
 import pandas as pd
-import time
 
-st.title("AI Options Trading Dashboard")
+st.set_page_config(page_title="Options Research Dashboard", layout="wide")
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+st.title("Options Research Dashboard")
 
-session = requests.Session()
+# NIFTY ticker
+ticker = "^NSEI"
 
 try:
-    # NSE homepage visit for cookie
-    session.get("https://www.nseindia.com", headers=headers, timeout=10)
-    time.sleep(1)
 
-    url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
-    response = session.get(url, headers=headers, timeout=10)
+    # Fetch NIFTY data
+    nifty = yf.Ticker(ticker)
 
-    data = response.json()
+    hist = nifty.history(period="1d", interval="1m")
 
-    if "records" not in data:
-        st.error("NSE API blocked request. Refresh the page.")
-        st.json(data)
-        st.stop()
+    price = hist["Close"].iloc[-1]
 
-    records = data["records"]["data"]
-    price = data["records"]["underlyingValue"]
+    st.metric("NIFTY 50 Price", round(price,2))
 
-    st.metric("NIFTY Price", price)
+    st.subheader("Intraday Chart")
 
-    ce_total = 0
-    pe_total = 0
-    rows = []
+    st.line_chart(hist["Close"])
 
-    for item in records:
+    st.subheader("Recent Data")
 
-        strike = item["strikePrice"]
-
-        ce = item.get("CE")
-        pe = item.get("PE")
-
-        ce_oi = ce["openInterest"] if ce else 0
-        pe_oi = pe["openInterest"] if pe else 0
-
-        ce_total += ce_oi
-        pe_total += pe_oi
-
-        rows.append({
-            "Strike": strike,
-            "CE OI": ce_oi,
-            "PE OI": pe_oi
-        })
-
-    df = pd.DataFrame(rows)
-
-    pcr = round(pe_total / ce_total, 2)
-
-    st.subheader("Put Call Ratio")
-    st.write(pcr)
-
-    st.subheader("Option Chain")
-    st.dataframe(df)
+    st.dataframe(hist.tail(20))
 
 except Exception as e:
 
-    st.error("Error loading NSE data")
+    st.error("Error loading price data")
+    st.write(e)
+
+# ---------- OPTION CHAIN ----------
+
+try:
+
+    st.subheader("Option Chain")
+
+    expiries = nifty.options
+
+    if len(expiries) > 0:
+
+        expiry = expiries[0]
+
+        opt = nifty.option_chain(expiry)
+
+        calls = opt.calls
+        puts = opt.puts
+
+        st.write("Expiry:", expiry)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write("CALLS")
+            st.dataframe(calls)
+
+        with col2:
+            st.write("PUTS")
+            st.dataframe(puts)
+
+    else:
+        st.write("No options data")
+
+except Exception as e:
+
+    st.error("Option chain load error")
     st.write(e)
