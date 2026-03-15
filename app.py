@@ -1,21 +1,24 @@
+import streamlit as st
 from dhanhq import dhanhq
 import os
-import streamlit as st
 
-# credentials
+st.title("AI Options Trading Dashboard")
+
+# Dhan credentials
 client_id = os.getenv("DHAN_CLIENT_ID")
 access_token = os.getenv("DHAN_ACCESS_TOKEN")
 
-# connect
-dhan = dhanhq(client_id, access_token)
+try:
+    dhan = dhanhq(client_id, access_token)
 
-# market feed request
-data = dhan.get_market_feed({
-    "NSE_EQ": [13]   # NIFTY
-})
+    # Fetch NIFTY price
+    data = dhan.get_market_feed({
+        "NSE_EQ": [13]
+    })
 
-# extract price
-nifty_price = data["NSE_EQ"]["13"]["last_price"]
+    nifty_price = data["NSE_EQ"]["13"]["last_price"]
 
-# show on dashboard
-st.metric("NIFTY LTP", nifty_price)
+    st.metric("NIFTY LTP", nifty_price)
+
+except Exception as e:
+    st.error(e)
