@@ -1,21 +1,17 @@
 import streamlit as st
-import os
 import requests
 
 st.title("AI Options Trading Dashboard")
 
-# Get credentials from environment variables
-client_id = os.getenv("DHAN_CLIENT_ID")
-access_token = os.getenv("DHAN_ACCESS_TOKEN")
-
-# Debug (temporary)
-st.write("Client ID Loaded:", client_id)
+# Direct credentials
+CLIENT_ID = "1106299230"
+ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczNjM1OTc4LCJpYXQiOjE3NzM1NDk1NzgsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0._MqX20egfoTUbczsXOouL8PTBfoa8FkASXxoY_spTMGQUTvVOkV1OfxaQUu_7E-Z5eGGXClXFi1ap44wQDEQwQ"
 
 url = "https://api.dhan.co/v2/marketfeed/ltp"
 
 headers = {
-    "access-token": access_token,
-    "client-id": client_id,
+    "access-token": ACCESS_TOKEN,
+    "client-id": CLIENT_ID,
     "Content-Type": "application/json"
 }
 
@@ -27,7 +23,7 @@ try:
     response = requests.post(url, json=payload, headers=headers)
     data = response.json()
 
-    st.subheader("API Response:")
+    st.subheader("API Response")
     st.json(data)
 
     if data.get("status") == "success":
