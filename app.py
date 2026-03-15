@@ -1,37 +1,76 @@
 import streamlit as st
 import requests
+import pandas as pd
+
+st.set_page_config(page_title="AI Options Dashboard", layout="wide")
 
 st.title("AI Options Trading Dashboard")
 
-# Direct credentials
-CLIENT_ID = "1106299230"
-ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczNjM1OTc4LCJpYXQiOjE3NzM1NDk1NzgsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0._MqX20egfoTUbczsXOouL8PTBfoa8FkASXxoY_spTMGQUTvVOkV1OfxaQUu_7E-Z5eGGXClXFi1ap44wQDEQwQ"
-
-url = "https://api.dhan.co/v2/marketfeed/ltp"
-
+# NSE headers
 headers = {
-    "access-token": ACCESS_TOKEN,
-    "client-id": CLIENT_ID,
-    "Content-Type": "application/json"
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
 }
 
-payload = {
-    "NSE_EQ": [13]   # 13 = NIFTY
-}
+# NSE session
+session = requests.Session()
+session.get("https://www.nseindia.com", headers=headers)
+
+url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
 
 try:
-    response = requests.post(url, json=payload, headers=headers)
+
+    response = session.get(url, headers=headers)
     data = response.json()
 
-    st.subheader("API Response")
-    st.json(data)
+    records = data["records"]["data"]
+    underlying = data["records"]["underlyingValue"]
 
-    if data.get("status") == "success":
-        nifty_price = data["data"]["NSE_EQ"]["13"]["last_price"]
-        st.metric("NIFTY LTP", nifty_price)
+    st.metric("NIFTY Price", underlying)
 
-    else:
-        st.error("API returned error")
+    ce_oi = 0
+    pe_oi = 0
+
+    table_data = []
+
+    for i in records:
+
+        strike = i["strikePrice"]
+
+        ce = i.get("CE")
+        pe = i.get("PE")
+
+        ce_oi_val = ce["openInterest"] if ce else 0
+        pe_oi_val = pe["openInterest"] if pe else 0
+
+        ce_ltp = ce["lastPrice"] if ce else 0
+        pe_ltp = pe["lastPrice"] if pe else 0
+
+        ce_oi += ce_oi_val
+        pe_oi += pe_oi_val
+
+        table_data.append({
+            "Strike": strike,
+            "CE OI": ce_oi_val,
+            "CE LTP": ce_ltp,
+            "PE LTP": pe_ltp,
+            "PE OI": pe_oi_val
+        })
+
+    df = pd.DataFrame(table_data)
+
+    pcr = round(pe_oi / ce_oi, 2)
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Total CE OI", ce_oi)
+    col2.metric("Total PE OI", pe_oi)
+    col3.metric("PCR", pcr)
+
+    st.subheader("Option Chain")
+
+    st.dataframe(df, use_container_width=True)
 
 except Exception as e:
-    st.error(f"Error: {e}")
+
+    st.error(e)
