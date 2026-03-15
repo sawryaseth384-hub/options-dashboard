@@ -1,11 +1,11 @@
 import streamlit as st
-import requests
 import os
+import requests
 
 st.title("AI Options Trading Dashboard")
 
-client_id = os.getenv("1106299230")
-access_token = os.getenv("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczNjM1OTc4LCJpYXQiOjE3NzM1NDk1NzgsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0._MqX20egfoTUbczsXOouL8PTBfoa8FkASXxoY_spTMGQUTvVOkV1OfxaQUu_7E-Z5eGGXClXFi1ap44wQDEQwQ")
+client_id = os.getenv("DHAN_CLIENT_ID")
+access_token = os.getenv("DHAN_ACCESS_TOKEN")
 
 url = "https://api.dhan.co/v2/marketfeed/ltp"
 
@@ -16,26 +16,21 @@ headers = {
 }
 
 payload = {
-    "instruments": [
-        {
-            "exchangeSegment": "NSE_EQ",
-            "securityId": "13"
-        }
-    ]
+    "NSE_EQ": [13]
 }
 
 try:
-    r = requests.post(url, headers=headers, json=payload)
-    data = r.json()
+    response = requests.post(url, json=payload, headers=headers)
+    data = response.json()
 
-    # DEBUG — पूरा API response दिखाओ
     st.write("API Response:", data)
 
-    if "data" in data:
-        nifty_price = data["data"][0]["lastPrice"]
-        st.metric("NIFTY LTP", nifty_price)
+    if data["status"] == "success":
+        nifty = data["data"]["NSE_EQ"]["13"]["last_price"]
+        st.metric("NIFTY LTP", nifty)
+
     else:
         st.error("API returned error")
-        
+
 except Exception as e:
     st.error(e)
