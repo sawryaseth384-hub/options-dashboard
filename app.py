@@ -8,9 +8,9 @@ st.set_page_config(layout="wide")
 
 st.title("📊 NIFTY Options Dashboard")
 
-# -------------------------
+# -----------------------------
 # ENV VARIABLES
-# -------------------------
+# -----------------------------
 
 CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
 ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
@@ -21,15 +21,17 @@ if not CLIENT_ID or not ACCESS_TOKEN:
     st.write("ACCESS_TOKEN:", ACCESS_TOKEN)
     st.stop()
 
-# -------------------------
-# DHAN INIT
-# -------------------------
+# -----------------------------
+# DHAN API INIT
+# -----------------------------
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
-# -------------------------
-# NIFTY SPOT PRICE
-# -------------------------
+# -----------------------------
+# FETCH NIFTY SPOT
+# -----------------------------
+
+spot_price = None
 
 try:
 
@@ -37,23 +39,18 @@ try:
         securities={"IDX_I":[13]}
     )
 
-    spot_data = spot.get("data",{})
+    data = spot.get("data",{})
 
-    if len(spot_data)==0:
-        st.error("No spot data returned")
-        st.stop()
+    for exch in data.values():
 
-    first = list(spot_data.values())[0]
+        for sec in exch.values():
 
-    # Safe fallback
-    spot_price = (
-        first.get("last_price") or
-        first.get("lastPrice") or
-        first.get("close") or
-        first.get("ltp")
-    )
-
-    st.metric("NIFTY Spot", round(float(spot_price),2))
+            spot_price = (
+                sec.get("last_price") or
+                sec.get("lastPrice") or
+                sec.get("close") or
+                sec.get("ltp")
+            )
 
 except Exception as e:
 
@@ -61,9 +58,15 @@ except Exception as e:
     st.write(e)
     st.stop()
 
-# -------------------------
-# EXPIRY
-# -------------------------
+if spot_price is None:
+    st.error("Spot price not available")
+    st.stop()
+
+st.metric("NIFTY Spot", round(float(spot_price),2))
+
+# -----------------------------
+# FETCH EXPIRY
+# -----------------------------
 
 try:
 
@@ -72,11 +75,13 @@ try:
         under_exchange_segment="IDX_I"
     )
 
-    expiry = expiry_data.get("data",{}).get("data",[None])[0]
+    expiry_list = expiry_data.get("data",{}).get("data",[])
 
-    if expiry is None:
-        st.error("Expiry not found")
+    if len(expiry_list)==0:
+        st.error("No expiry available")
         st.stop()
+
+    expiry = expiry_list[0]
 
     st.write("Nearest Expiry:", expiry)
 
@@ -86,9 +91,11 @@ except Exception as e:
     st.write(e)
     st.stop()
 
-# -------------------------
-# OPTION CHAIN
-# -------------------------
+# -----------------------------
+# FETCH OPTION CHAIN
+# -----------------------------
+
+rows=[]
 
 try:
 
@@ -99,8 +106,6 @@ try:
     )
 
     oc = option_chain.get("data",{}).get("data",{}).get("oc",{})
-
-    rows=[]
 
     for strike,data in oc.items():
 
@@ -119,17 +124,17 @@ try:
 
         })
 
-    df=pd.DataFrame(rows)
-
 except Exception as e:
 
     st.error("Option chain fetch failed")
     st.write(e)
     st.stop()
 
-# -------------------------
+df=pd.DataFrame(rows)
+
+# -----------------------------
 # PCR
-# -------------------------
+# -----------------------------
 
 total_ce=df["CE_OI"].sum()
 total_pe=df["PE_OI"].sum()
@@ -141,9 +146,9 @@ if total_ce>0:
 
 st.metric("PCR",round(pcr,2))
 
-# -------------------------
+# -----------------------------
 # SUPPORT RESISTANCE
-# -------------------------
+# -----------------------------
 
 support=df.loc[df["PE_OI"].idxmax()]["Strike"]
 resistance=df.loc[df["CE_OI"].idxmax()]["Strike"]
@@ -153,9 +158,9 @@ col1,col2=st.columns(2)
 col1.metric("Support",support)
 col2.metric("Resistance",resistance)
 
-# -------------------------
+# -----------------------------
 # OI CHART
-# -------------------------
+# -----------------------------
 
 fig=go.Figure()
 
@@ -179,9 +184,9 @@ fig.update_layout(
 
 st.plotly_chart(fig,use_container_width=True)
 
-# -------------------------
+# -----------------------------
 # OPTION CHAIN TABLE
-# -------------------------
+# -----------------------------
 
 st.subheader("Option Chain")
 
