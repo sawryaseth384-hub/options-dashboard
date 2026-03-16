@@ -15,8 +15,8 @@ st.title("📊 NIFTY Options Dashboard")
 CLIENT_ID = os.environ.get("DHAN_CLIENT_ID")
 ACCESS_TOKEN = os.environ.get("DHAN_ACCESS_TOKEN")
 
-# Debug check
 if CLIENT_ID is None or ACCESS_TOKEN is None:
+
     st.error("Dhan API credentials missing")
 
     st.write("Debug Info 👇")
@@ -26,31 +26,32 @@ if CLIENT_ID is None or ACCESS_TOKEN is None:
     st.stop()
 
 # -----------------------
-# Initialize API
+# Initialize Dhan API
 # -----------------------
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
 # -----------------------
-# Get NIFTY Spot
+# Get NIFTY Spot Price
 # -----------------------
 
 try:
 
-    spot = dhan.quote_data(
+    spot = dhan.ohlc_data(
         securities={"IDX_I":[13]}
     )
 
-    spot_data = spot.get("data",{})
+    spot_data = spot.get("data", {})
 
-    spot_price = list(spot_data.values())[0]["lastPrice"]
+    spot_price = list(spot_data.values())[0]["last_price"]
 
-    st.metric("NIFTY Spot", spot_price)
+    st.metric("NIFTY Spot", round(spot_price,2))
 
 except Exception as e:
 
     st.error("Spot price fetch failed")
     st.write(e)
+
     st.stop()
 
 # -----------------------
@@ -72,6 +73,7 @@ except Exception as e:
 
     st.error("Expiry fetch failed")
     st.write(e)
+
     st.stop()
 
 # -----------------------
@@ -113,6 +115,7 @@ except Exception as e:
 
     st.error("Option chain fetch failed")
     st.write(e)
+
     st.stop()
 
 # -----------------------
@@ -165,7 +168,7 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------
-# Table
+# Option Chain Table
 # -----------------------
 
 st.subheader("Option Chain")
