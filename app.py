@@ -1,71 +1,133 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
+import plotly.graph_objects as go
+import os
+from dhanhq import dhanhq
 
-st.set_page_config(page_title="Options Research Dashboard", layout="wide")
+# -------------------------
+# Dhan API Credentials
+# -------------------------
 
-st.title("Options Research Dashboard")
+CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
+ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 
-# NIFTY ticker
-ticker = "^NSEI"
+dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
-try:
+st.set_page_config(layout="wide")
 
-    # Fetch NIFTY data
-    nifty = yf.Ticker(ticker)
+st.title("📊 NIFTY Options Dashboard")
 
-    hist = nifty.history(period="1d", interval="1m")
+# -------------------------
+# NIFTY Spot Price
+# -------------------------
 
-    price = hist["Close"].iloc[-1]
+spot = dhan.quote_data(
+    securities={"IDX_I":[13]}
+)
 
-    st.metric("NIFTY 50 Price", round(price,2))
+spot_price = spot["data"][0]["lastPrice"]
 
-    st.subheader("Intraday Chart")
+st.metric("NIFTY Spot", spot_price)
 
-    st.line_chart(hist["Close"])
+# -------------------------
+# Expiry List
+# -------------------------
 
-    st.subheader("Recent Data")
+expiry_data = dhan.expiry_list(
+    under_security_id=13,
+    under_exchange_segment="IDX_I"
+)
 
-    st.dataframe(hist.tail(20))
+expiry = expiry_data["data"]["data"][0]
 
-except Exception as e:
+st.write("Nearest Expiry:", expiry)
 
-    st.error("Error loading price data")
-    st.write(e)
+# -------------------------
+# Option Chain
+# -------------------------
 
-# ---------- OPTION CHAIN ----------
+option_chain = dhan.option_chain(
+    under_security_id=13,
+    under_exchange_segment="IDX_I",
+    expiry=expiry
+)
 
-try:
+oc = option_chain["data"]["data"]["oc"]
 
-    st.subheader("Option Chain")
+rows = []
 
-    expiries = nifty.options
+for strike, data in oc.items():
 
-    if len(expiries) > 0:
+    ce = data.get("ce", {})
+    pe = data.get("pe", {})
 
-        expiry = expiries[0]
+    rows.append({
 
-        opt = nifty.option_chain(expiry)
+        "Strike": float(strike),
 
-        calls = opt.calls
-        puts = opt.puts
+        "CE_OI": ce.get("oi", 0),
+        "CE_LTP": ce.get("last_price", 0),
 
-        st.write("Expiry:", expiry)
+        "PE_OI": pe.get("oi", 0),
+        "PE_LTP": pe.get("last_price", 0)
 
-        col1, col2 = st.columns(2)
+    })
 
-        with col1:
-            st.write("CALLS")
-            st.dataframe(calls)
+df = pd.DataFrame(rows)
 
-        with col2:
-            st.write("PUTS")
-            st.dataframe(puts)
+# -------------------------
+# PCR
+# -------------------------
 
-    else:
-        st.write("No options data")
+total_ce = df["CE_OI"].sum()
+total_pe = df["PE_OI"].sum()
 
-except Exception as e:
+pcr = total_pe / total_ce if total_ce != 0 else 0
 
-    st.error("Option chain load error")
-    st.write(e)
+st.metric("PCR", round(pcr,2))
+
+# -------------------------
+# Support / Resistance
+# -------------------------
+
+support = df.loc[df["PE_OI"].idxmax()]["Strike"]
+resistance = df.loc[df["CE_OI"].idxmax()]["Strike"]
+
+col1, col2 = st.columns(2)
+
+col1.metric("Support", support)
+col2.metric("Resistance", resistance)
+
+# -------------------------
+# OI Chart
+# -------------------------
+
+fig = go.Figure()
+
+fig.add_bar(
+    x=df["Strike"],
+    y=df["CE_OI"],
+    name="Call OI"
+)
+
+fig.add_bar(
+    x=df["Strike"],
+    y=df["PE_OI"],
+    name="Put OI"
+)
+
+fig.update_layout(
+    title="Open Interest",
+    xaxis_title="Strike Price",
+    yaxis_title="OI"
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# -------------------------
+# Data Table
+# -------------------------
+
+st.subheader("Option Chain")
+
+st.dataframe(df)
