@@ -5,24 +5,35 @@ import os
 from dhanhq import dhanhq
 
 st.set_page_config(layout="wide")
+
 st.title("📊 NIFTY Options Dashboard")
 
-# ---------------------------
-# Load API Credentials
-# ---------------------------
+# -----------------------
+# Load Environment Keys
+# -----------------------
 
-CLIENT_ID = os.getenv("1106299230")
-ACCESS_TOKEN = os.getenv("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczNjc3MTA0LCJpYXQiOjE3NzM1OTA3MDQsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0.jnn6DApddObFVi53XcsMcMgEJGn8TgGyWL6ZjLs3sAYZ4dQUd4Ope8PZQ5Jy7rPPdKK3sIm9Tn5i7ZuXplziow")
+CLIENT_ID = os.environ.get("DHAN_CLIENT_ID")
+ACCESS_TOKEN = os.environ.get("DHAN_ACCESS_TOKEN")
 
-if not CLIENT_ID or not ACCESS_TOKEN:
+# Debug check
+if CLIENT_ID is None or ACCESS_TOKEN is None:
     st.error("Dhan API credentials missing")
+
+    st.write("Debug Info 👇")
+    st.write("CLIENT_ID:", CLIENT_ID)
+    st.write("ACCESS_TOKEN:", ACCESS_TOKEN)
+
     st.stop()
+
+# -----------------------
+# Initialize API
+# -----------------------
 
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
-# ---------------------------
-# Fetch Spot Price
-# ---------------------------
+# -----------------------
+# Get NIFTY Spot
+# -----------------------
 
 try:
 
@@ -40,10 +51,11 @@ except Exception as e:
 
     st.error("Spot price fetch failed")
     st.write(e)
+    st.stop()
 
-# ---------------------------
-# Expiry
-# ---------------------------
+# -----------------------
+# Get Expiry
+# -----------------------
 
 try:
 
@@ -60,10 +72,11 @@ except Exception as e:
 
     st.error("Expiry fetch failed")
     st.write(e)
+    st.stop()
 
-# ---------------------------
+# -----------------------
 # Option Chain
-# ---------------------------
+# -----------------------
 
 try:
 
@@ -102,9 +115,9 @@ except Exception as e:
     st.write(e)
     st.stop()
 
-# ---------------------------
+# -----------------------
 # PCR
-# ---------------------------
+# -----------------------
 
 total_ce = df["CE_OI"].sum()
 total_pe = df["PE_OI"].sum()
@@ -113,21 +126,21 @@ pcr = total_pe / total_ce if total_ce != 0 else 0
 
 st.metric("PCR", round(pcr,2))
 
-# ---------------------------
+# -----------------------
 # Support / Resistance
-# ---------------------------
+# -----------------------
 
 support = df.loc[df["PE_OI"].idxmax()]["Strike"]
 resistance = df.loc[df["CE_OI"].idxmax()]["Strike"]
 
-col1,col2 = st.columns(2)
+col1, col2 = st.columns(2)
 
 col1.metric("Support", support)
 col2.metric("Resistance", resistance)
 
-# ---------------------------
+# -----------------------
 # OI Chart
-# ---------------------------
+# -----------------------
 
 fig = go.Figure()
 
@@ -151,9 +164,9 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ---------------------------
-# Option Chain Table
-# ---------------------------
+# -----------------------
+# Table
+# -----------------------
 
 st.subheader("Option Chain")
 
