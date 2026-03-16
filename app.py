@@ -11,8 +11,8 @@ st.title("📊 NIFTY Options Dashboard")
 # Load API Credentials
 # ---------------------------
 
-CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
-ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
+CLIENT_ID = os.getenv("1106299230")
+ACCESS_TOKEN = os.getenv("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczNjc3MTA0LCJpYXQiOjE3NzM1OTA3MDQsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0.jnn6DApddObFVi53XcsMcMgEJGn8TgGyWL6ZjLs3sAYZ4dQUd4Ope8PZQ5Jy7rPPdKK3sIm9Tn5i7ZuXplziow")
 
 if not CLIENT_ID or not ACCESS_TOKEN:
     st.error("Dhan API credentials missing")
