@@ -17,8 +17,6 @@ ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 
 if not CLIENT_ID or not ACCESS_TOKEN:
     st.error("Dhan API credentials missing")
-    st.write("CLIENT_ID:", CLIENT_ID)
-    st.write("ACCESS_TOKEN:", ACCESS_TOKEN)
     st.stop()
 
 # -----------------------------
@@ -39,34 +37,40 @@ try:
         securities={"IDX_I":[13]}
     )
 
-    data = spot.get("data",{})
+    data = spot.get("data", {})
 
     for exch in data.values():
-
         for sec in exch.values():
 
             spot_price = (
-                sec.get("last_price") or
-                sec.get("lastPrice") or
-                sec.get("close") or
-                sec.get("ltp")
+                sec.get("last_price")
+                or sec.get("lastPrice")
+                or sec.get("close")
+                or sec.get("ltp")
             )
 
 except Exception as e:
-
     st.error("Spot price fetch failed")
     st.write(e)
-    st.stop()
+
+# -----------------------------
+# SAFE DISPLAY
+# -----------------------------
 
 if spot_price is None:
-    st.error("Spot price not available")
-    st.stop()
 
-st.metric("NIFTY Spot", round(float(spot_price),2))
+    st.warning("⚠️ Spot price not available from API")
+
+else:
+
+    st.metric("NIFTY Spot", round(float(spot_price),2))
+
 
 # -----------------------------
 # FETCH EXPIRY
 # -----------------------------
+
+expiry = None
 
 try:
 
@@ -77,22 +81,20 @@ try:
 
     expiry_list = expiry_data.get("data",{}).get("data",[])
 
-    if len(expiry_list)==0:
-        st.error("No expiry available")
-        st.stop()
+    if len(expiry_list)>0:
+        expiry = expiry_list[0]
 
-    expiry = expiry_list[0]
+except:
+    pass
 
-    st.write("Nearest Expiry:", expiry)
-
-except Exception as e:
-
-    st.error("Expiry fetch failed")
-    st.write(e)
+if expiry is None:
+    st.error("Expiry not available")
     st.stop()
 
+st.write("Nearest Expiry:", expiry)
+
 # -----------------------------
-# FETCH OPTION CHAIN
+# OPTION CHAIN
 # -----------------------------
 
 rows=[]
@@ -117,9 +119,9 @@ try:
             "Strike":float(strike),
 
             "CE_OI":ce.get("oi",0),
-            "CE_LTP":ce.get("last_price",0),
-
             "PE_OI":pe.get("oi",0),
+
+            "CE_LTP":ce.get("last_price",0),
             "PE_LTP":pe.get("last_price",0)
 
         })
@@ -185,7 +187,7 @@ fig.update_layout(
 st.plotly_chart(fig,use_container_width=True)
 
 # -----------------------------
-# OPTION CHAIN TABLE
+# TABLE
 # -----------------------------
 
 st.subheader("Option Chain")
