@@ -4,80 +4,107 @@ import plotly.graph_objects as go
 import os
 from dhanhq import dhanhq
 
-# -------------------------
-# Dhan API Credentials
-# -------------------------
+st.set_page_config(layout="wide")
+st.title("📊 NIFTY Options Dashboard")
+
+# ---------------------------
+# Load API Credentials
+# ---------------------------
 
 CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
 ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 
+if not CLIENT_ID or not ACCESS_TOKEN:
+    st.error("Dhan API credentials missing")
+    st.stop()
+
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
-st.set_page_config(layout="wide")
+# ---------------------------
+# Fetch Spot Price
+# ---------------------------
 
-st.title("📊 NIFTY Options Dashboard")
+try:
 
-# -------------------------
-# NIFTY Spot Price
-# -------------------------
+    spot = dhan.quote_data(
+        securities={"IDX_I":[13]}
+    )
 
-spot = dhan.quote_data(
-    securities={"IDX_I":[13]}
-)
+    spot_data = spot.get("data",{})
 
-spot_price = spot["data"][0]["lastPrice"]
+    spot_price = list(spot_data.values())[0]["lastPrice"]
 
-st.metric("NIFTY Spot", spot_price)
+    st.metric("NIFTY Spot", spot_price)
 
-# -------------------------
-# Expiry List
-# -------------------------
+except Exception as e:
 
-expiry_data = dhan.expiry_list(
-    under_security_id=13,
-    under_exchange_segment="IDX_I"
-)
+    st.error("Spot price fetch failed")
+    st.write(e)
 
-expiry = expiry_data["data"]["data"][0]
+# ---------------------------
+# Expiry
+# ---------------------------
 
-st.write("Nearest Expiry:", expiry)
+try:
 
-# -------------------------
+    expiry_data = dhan.expiry_list(
+        under_security_id=13,
+        under_exchange_segment="IDX_I"
+    )
+
+    expiry = expiry_data["data"]["data"][0]
+
+    st.write("Nearest Expiry:", expiry)
+
+except Exception as e:
+
+    st.error("Expiry fetch failed")
+    st.write(e)
+
+# ---------------------------
 # Option Chain
-# -------------------------
+# ---------------------------
 
-option_chain = dhan.option_chain(
-    under_security_id=13,
-    under_exchange_segment="IDX_I",
-    expiry=expiry
-)
+try:
 
-oc = option_chain["data"]["data"]["oc"]
+    option_chain = dhan.option_chain(
+        under_security_id=13,
+        under_exchange_segment="IDX_I",
+        expiry=expiry
+    )
 
-rows = []
+    oc = option_chain["data"]["data"]["oc"]
 
-for strike, data in oc.items():
+    rows = []
 
-    ce = data.get("ce", {})
-    pe = data.get("pe", {})
+    for strike, data in oc.items():
 
-    rows.append({
+        ce = data.get("ce",{})
+        pe = data.get("pe",{})
 
-        "Strike": float(strike),
+        rows.append({
 
-        "CE_OI": ce.get("oi", 0),
-        "CE_LTP": ce.get("last_price", 0),
+            "Strike": float(strike),
 
-        "PE_OI": pe.get("oi", 0),
-        "PE_LTP": pe.get("last_price", 0)
+            "CE_OI": ce.get("oi",0),
+            "CE_LTP": ce.get("last_price",0),
 
-    })
+            "PE_OI": pe.get("oi",0),
+            "PE_LTP": pe.get("last_price",0)
 
-df = pd.DataFrame(rows)
+        })
 
-# -------------------------
+    df = pd.DataFrame(rows)
+
+except Exception as e:
+
+    st.error("Option chain fetch failed")
+    st.write(e)
+    st.stop()
+
+# ---------------------------
 # PCR
-# -------------------------
+# ---------------------------
 
 total_ce = df["CE_OI"].sum()
 total_pe = df["PE_OI"].sum()
@@ -86,21 +113,21 @@ pcr = total_pe / total_ce if total_ce != 0 else 0
 
 st.metric("PCR", round(pcr,2))
 
-# -------------------------
+# ---------------------------
 # Support / Resistance
-# -------------------------
+# ---------------------------
 
 support = df.loc[df["PE_OI"].idxmax()]["Strike"]
 resistance = df.loc[df["CE_OI"].idxmax()]["Strike"]
 
-col1, col2 = st.columns(2)
+col1,col2 = st.columns(2)
 
 col1.metric("Support", support)
 col2.metric("Resistance", resistance)
 
-# -------------------------
+# ---------------------------
 # OI Chart
-# -------------------------
+# ---------------------------
 
 fig = go.Figure()
 
@@ -117,16 +144,16 @@ fig.add_bar(
 )
 
 fig.update_layout(
-    title="Open Interest",
-    xaxis_title="Strike Price",
+    title="Open Interest Distribution",
+    xaxis_title="Strike",
     yaxis_title="OI"
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# -------------------------
-# Data Table
-# -------------------------
+# ---------------------------
+# Option Chain Table
+# ---------------------------
 
 st.subheader("Option Chain")
 
