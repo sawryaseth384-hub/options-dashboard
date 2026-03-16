@@ -19,87 +19,18 @@ if not CLIENT_ID or not ACCESS_TOKEN:
     st.error("Dhan API credentials missing")
     st.stop()
 
-# -----------------------------
-# DHAN INIT
-# -----------------------------
-
 dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
 
 # -----------------------------
-# FETCH NIFTY SPOT
+# EXPIRY
 # -----------------------------
 
-spot_price = None
+expiry_data = dhan.expiry_list(
+    under_security_id=13,
+    under_exchange_segment="IDX_I"
+)
 
-try:
-
-    spot = dhan.ohlc_data(
-        securities={"IDX_I":[13]}
-    )
-
-    data = spot.get("data")
-
-    if isinstance(data, dict):
-
-        for exch in data.values():
-
-            if isinstance(exch, dict):
-
-                for sec in exch.values():
-
-                    if isinstance(sec, dict):
-
-                        spot_price = (
-                            sec.get("last_price")
-                            or sec.get("lastPrice")
-                            or sec.get("close")
-                            or sec.get("ltp")
-                        )
-
-except Exception as e:
-
-    st.error("Spot price fetch failed")
-    st.write(e)
-
-# SAFE DISPLAY
-
-if spot_price:
-
-    st.metric("NIFTY Spot", round(float(spot_price),2))
-
-else:
-
-    st.warning("⚠️ Spot price not available from API")
-
-
-# -----------------------------
-# FETCH EXPIRY
-# -----------------------------
-
-expiry = None
-
-try:
-
-    expiry_data = dhan.expiry_list(
-        under_security_id=13,
-        under_exchange_segment="IDX_I"
-    )
-
-    expiry_list = expiry_data.get("data",{}).get("data",[])
-
-    if len(expiry_list) > 0:
-
-        expiry = expiry_list[0]
-
-except Exception as e:
-
-    st.error("Expiry fetch failed")
-    st.write(e)
-
-if expiry is None:
-
-    st.error("Expiry not available")
-    st.stop()
+expiry = expiry_data["data"]["data"][0]
 
 st.write("Nearest Expiry:", expiry)
 
@@ -107,76 +38,76 @@ st.write("Nearest Expiry:", expiry)
 # OPTION CHAIN
 # -----------------------------
 
+option_chain = dhan.option_chain(
+    under_security_id=13,
+    under_exchange_segment="IDX_I",
+    expiry=expiry
+)
+
+oc = option_chain["data"]["data"]["oc"]
+
 rows = []
 
-try:
+for strike,data in oc.items():
 
-    option_chain = dhan.option_chain(
-        under_security_id=13,
-        under_exchange_segment="IDX_I",
-        expiry=expiry
-    )
+    ce=data.get("ce",{})
+    pe=data.get("pe",{})
 
-    oc = option_chain.get("data",{}).get("data",{}).get("oc",{})
+    ce_oi=ce.get("oi",0)
+    pe_oi=pe.get("oi",0)
 
-    if isinstance(oc, dict):
+    # Skip empty strikes
+    if ce_oi==0 and pe_oi==0:
+        continue
 
-        for strike,data in oc.items():
+    rows.append({
 
-            ce = data.get("ce",{})
-            pe = data.get("pe",{})
+        "Strike":float(strike),
+        "CE_OI":ce_oi,
+        "PE_OI":pe_oi,
+        "CE_LTP":ce.get("last_price",0),
+        "PE_LTP":pe.get("last_price",0)
 
-            rows.append({
+    })
 
-                "Strike": float(strike),
+df=pd.DataFrame(rows)
 
-                "CE_OI": ce.get("oi",0),
-                "PE_OI": pe.get("oi",0),
+# -----------------------------
+# ATM / SPOT
+# -----------------------------
 
-                "CE_LTP": ce.get("last_price",0),
-                "PE_LTP": pe.get("last_price",0)
+atm_strike=df.iloc[(df["CE_OI"]+df["PE_OI"]).idxmax()]["Strike"]
 
-            })
-
-except Exception as e:
-
-    st.error("Option chain fetch failed")
-    st.write(e)
-    st.stop()
-
-df = pd.DataFrame(rows)
+st.metric("Approx NIFTY Spot",atm_strike)
 
 # -----------------------------
 # PCR
 # -----------------------------
 
-total_ce = df["CE_OI"].sum()
-total_pe = df["PE_OI"].sum()
+total_ce=df["CE_OI"].sum()
+total_pe=df["PE_OI"].sum()
 
-pcr = 0
+pcr=total_pe/total_ce
 
-if total_ce > 0:
-    pcr = total_pe / total_ce
-
-st.metric("PCR", round(pcr,2))
+st.metric("PCR",round(pcr,2))
 
 # -----------------------------
-# SUPPORT / RESISTANCE
+# SUPPORT RESISTANCE
 # -----------------------------
 
-support = df.loc[df["PE_OI"].idxmax()]["Strike"]
-resistance = df.loc[df["CE_OI"].idxmax()]["Strike"]
+support=df.loc[df["PE_OI"].idxmax()]["Strike"]
+resistance=df.loc[df["CE_OI"].idxmax()]["Strike"]
 
-col1,col2 = st.columns(2)
+col1,col2=st.columns(2)
 
-col1.metric("Support", support)
-col2.metric("Resistance", resistance)
+col1.metric("Support",support)
+col2.metric("Resistance",resistance)
 
 # -----------------------------
 # OI CHART
 # -----------------------------
 
-fig = go.Figure()
+fig=go.Figure()
 
 fig.add_bar(
     x=df["Strike"],
@@ -196,10 +127,10 @@ fig.update_layout(
     yaxis_title="OI"
 )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig,use_container_width=True)
 
 # -----------------------------
-# OPTION CHAIN TABLE
+# OPTION CHAIN
 # -----------------------------
 
 st.subheader("Option Chain")
