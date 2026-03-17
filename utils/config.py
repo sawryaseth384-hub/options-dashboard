@@ -1,16 +1,4 @@
 import os
 
-# 🔥 AUTO DETECT TOKEN
-ACCESS_TOKEN = (
-    os.getenv("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczODA5MTAwLCJpYXQiOjE3NzM3MjI3MDAsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0.UVhOeBb2aD_qKfYfmm69icPXAlY7TT5FAhu1lNu3imOdXJyvfj5MR6FC8kwgXbvLS2I2Ix77tU0UX7ho0YpTkQ")
-    or os.getenv("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczODA5MTAwLCJpYXQiOjE3NzM3MjI3MDAsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0.UVhOeBb2aD_qKfYfmm69icPXAlY7TT5FAhu1lNu3imOdXJyvfj5MR6FC8kwgXbvLS2I2Ix77tU0UX7ho0YpTkQ")
-)
-
-CLIENT_ID = (
-    os.getenv("1106299230")
-    or os.getenv("1106299230")
-)
-
-# ❌ SAFETY CHECK
-if not ACCESS_TOKEN or not CLIENT_ID:
-    raise ValueError("❌ Token or Client ID missing! Check ENV variables.")
+ACCESS_TOKEN = os.getenv("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczODA5MTAwLCJpYXQiOjE3NzM3MjI3MDAsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0.UVhOeBb2aD_qKfYfmm69icPXAlY7TT5FAhu1lNu3imOdXJyvfj5MR6FC8kwgXbvLS2I2Ix77tU0UX7ho0YpTkQ")
+CLIENT_ID = os.getenv("1106299230")
