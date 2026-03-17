@@ -1,6 +1,6 @@
 import requests
 import pandas as pd
-from utils.config import DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID
+from utils.config import ACCESS_TOKEN, CLIENT_ID
 
 BASE_URL = "https://api.dhan.co/v2"
 
@@ -10,8 +10,8 @@ def get_expiry_list(security_id=13):
     url = f"{BASE_URL}/optionchain/expirylist"
 
     headers = {
-        "access-token": DHAN_ACCESS_TOKEN,
-        "client-id": DHAN_CLIENT_ID,
+        "access-token": ACCESS_TOKEN,
+        "client-id": CLIENT_ID,
         "Content-Type": "application/json"
     }
 
@@ -29,8 +29,8 @@ def get_expiry_list(security_id=13):
 def get_option_chain(security_id=13):
 
     headers = {
-        "access-token": DHAN_ACCESS_TOKEN,
-        "client-id": DHAN_CLIENT_ID,
+        "access-token": ACCESS_TOKEN,
+        "client-id": CLIENT_ID,
         "Content-Type": "application/json"
     }
 
