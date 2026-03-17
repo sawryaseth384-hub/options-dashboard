@@ -1,75 +1,116 @@
 import streamlit as st
 import pandas as pd
 
+# 🔥 IMPORT ALL MODULES
 from ai_engine.market_quote import MarketQuote
 from ai_engine.data_processor import process_quote
+from ai_engine.option_chain import OptionChain
+from ai_engine.historical_data import HistoricalData
 
 # INIT
 mq = MarketQuote()
+oc = OptionChain()
+hd = HistoricalData()
 
-st.set_page_config(page_title="Options Dashboard", layout="wide")
-st.title("📊 Live Options Dashboard")
+# UI CONFIG
+st.set_page_config(page_title="AI Trading Dashboard", layout="wide")
+st.title("🚀 AI Options Trading Dashboard")
 
 # SIDEBAR
 st.sidebar.header("Settings")
 
-refresh_time = st.sidebar.slider("Refresh Time (sec)", 1, 10, 2)
+refresh_time = st.sidebar.slider("Refresh Time (sec)", 1, 10, 3)
 
-# 🔥 DEFAULT SAFE TEST INSTRUMENT
-instrument_input = st.sidebar.text_input(
-    "Enter Security ID (comma separated)",
-    "11536"  # Reliance (NSE_EQ)
+# 🔥 SELECT MODE
+mode = st.sidebar.selectbox(
+    "Select Data",
+    ["Live Market", "Option Chain", "Historical"]
 )
-
-instrument_list = [int(x.strip()) for x in instrument_input.split(",")]
-
-# 🔥 AUTO DETECT SEGMENT
-segment = "NSE_EQ"  # safe default
-
-instruments = {
-    segment: instrument_list
-}
 
 # AUTO REFRESH
 from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=refresh_time * 1000)
 
-# FETCH DATA
-raw_data = mq.get_quote(instruments)
+# ==============================
+# 🔥 1. LIVE MARKET DATA
+# ==============================
+if mode == "Live Market":
 
-# DEBUG (important)
-with st.expander("🔍 Debug Raw Data"):
-    st.json(raw_data)
+    st.subheader("📊 Live Market Data")
 
-if raw_data.get("status") != "success":
-    st.error("❌ API Error")
-    st.stop()
+    instruments = {
+        "NSE_EQ": [11536]   # Reliance test
+    }
 
-processed = process_quote(raw_data)
+    raw_data = mq.get_quote(instruments)
 
-if not processed:
-    st.warning("⚠️ No Data Received (Check Instrument ID)")
-    st.stop()
+    if raw_data.get("status") != "success":
+        st.error("API Error")
+        st.stop()
 
-df = pd.DataFrame(processed)
+    processed = process_quote(raw_data)
 
-# METRICS
-st.subheader("📈 Key Metrics")
+    if not processed:
+        st.warning("No Data")
+        st.stop()
 
-col1, col2, col3 = st.columns(3)
+    df = pd.DataFrame(processed)
 
-col1.metric("LTP", df["ltp"].iloc[0])
-col2.metric("OI", df["oi"].iloc[0])
-col3.metric("Volume", df["volume"].iloc[0])
+    col1, col2, col3 = st.columns(3)
 
-st.divider()
+    col1.metric("LTP", df["ltp"].iloc[0])
+    col2.metric("OI", df["oi"].iloc[0])
+    col3.metric("Volume", df["volume"].iloc[0])
 
-# TABLE
-st.subheader("📋 Market Data")
-st.dataframe(df, use_container_width=True)
+    st.dataframe(df, use_container_width=True)
+    st.line_chart(df["ltp"])
 
-st.divider()
 
-# CHART
-st.subheader("📊 Price Chart")
-st.line_chart(df["ltp"])
+# ==============================
+# 🔥 2. OPTION CHAIN
+# ==============================
+elif mode == "Option Chain":
+
+    st.subheader("📈 Option Chain")
+
+    security_id = 13  # NIFTY
+
+    # 🔥 GET EXPIRY LIST
+    expiries = oc.get_expiry_list(security_id)
+
+    if not expiries:
+        st.error("No expiry found")
+        st.stop()
+
+    expiry = st.selectbox("Select Expiry", expiries)
+
+    df = oc.get_chain(security_id, expiry)
+
+    if df.empty:
+        st.warning("No data")
+        st.stop()
+
+    st.dataframe(df, use_container_width=True)
+
+    # 🔥 PCR CALCULATION
+    pcr = df["pe_oi"].sum() / df["ce_oi"].sum()
+
+    st.metric("PCR", round(pcr, 2))
+
+
+# ==============================
+# 🔥 3. HISTORICAL DATA
+# ==============================
+elif mode == "Historical":
+
+    st.subheader("📊 Historical Data")
+
+    df = hd.get_intraday_data(11536)
+
+    if df.empty:
+        st.warning("No data")
+        st.stop()
+
+    st.line_chart(df["close"])
+
+    st.dataframe(df.tail(), use_container_width=True)
