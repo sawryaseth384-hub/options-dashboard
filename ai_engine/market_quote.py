@@ -12,9 +12,11 @@ def get_market_quote():
     }
 
     payload = {
-        "NSE_INDEX": ["Nifty 50", "Nifty Bank"]
+        "IDX_I": [13, 25]   # ✅ Nifty + BankNifty
     }
 
-    response = requests.post(url, headers=headers, json=payload)
-
-    return response.json()
+    try:
+        res = requests.post(url, headers=headers, json=payload)
+        return res.json()
+    except Exception as e:
+        return {"error": str(e)}
