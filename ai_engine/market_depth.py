@@ -3,7 +3,7 @@ from utils.config import DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID
 
 def get_market_depth():
 
-    url = "https://api.dhan.co/v2/marketfeed/quote"  # example
+    url = "https://api.dhan.co/v2/marketfeed/ltp"
 
     headers = {
         "access-token": DHAN_ACCESS_TOKEN,
@@ -12,15 +12,10 @@ def get_market_depth():
     }
 
     payload = {
-        "NSE_EQ": ["SBIN"]  # example stock
+        "IDX_I": [13]   # ✅ FIX (Nifty)
     }
 
-    response = requests.post(url, headers=headers, json=payload)
-
     try:
-        return response.json()
-    except:
-        return {
-            "error": "Invalid JSON response",
-            "raw": response.text
-        }
+        return requests.post(url, headers=headers, json=payload).json()
+    except Exception as e:
+        return {"error": str(e)}
