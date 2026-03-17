@@ -7,6 +7,8 @@ from ai_engine.option_chain import OptionChain
 from ai_engine.historical_data import HistoricalData
 
 from streamlit_autorefresh import st_autorefresh
+from utils.config import ACCESS_TOKEN, CLIENT_ID
+from diagnostic import run_diagnostics   # ✅ ADD
 
 # INIT
 mq = MarketQuote()
@@ -17,7 +19,9 @@ hd = HistoricalData()
 st.set_page_config(page_title="AI Trading Dashboard", layout="wide")
 st.title("🚀 AI Options Trading Dashboard")
 
-# SIDEBAR
+# ==============================
+# 🔥 SIDEBAR
+# ==============================
 st.sidebar.header("Settings")
 
 refresh_time = st.sidebar.slider("Refresh Time (sec)", 1, 10, 3)
@@ -30,6 +34,27 @@ mode = st.sidebar.selectbox(
 st_autorefresh(interval=refresh_time * 1000)
 
 # ==============================
+# 🔥 DIAGNOSTICS PANEL
+# ==============================
+st.sidebar.subheader("🧠 Diagnostics")
+
+if st.sidebar.button("Run Diagnostics"):
+
+    report = run_diagnostics(ACCESS_TOKEN, CLIENT_ID)
+
+    for key, value in report.items():
+        st.sidebar.write(f"{key.upper()} → {value}")
+
+# AUTO SHOW ERROR (important)
+diag = run_diagnostics(ACCESS_TOKEN, CLIENT_ID)
+
+if "❌" in str(diag):
+    st.warning("⚠️ System Issue Detected")
+    for k, v in diag.items():
+        if "❌" in v:
+            st.error(f"{k.upper()} → {v}")
+
+# ==============================
 # 🔥 1. LIVE MARKET
 # ==============================
 if mode == "Live Market":
@@ -40,10 +65,10 @@ if mode == "Live Market":
         "NSE_EQ": ["11536"]
     }
 
-    raw_data = mq.get_data(instruments)   # ✅ FIX
+    raw_data = mq.get_data(instruments)
 
     if raw_data.get("status") != "success":
-        st.error("API Error")
+        st.error(f"API Error → {raw_data}")   # ✅ SHOW FULL ERROR
         st.stop()
 
     processed = process_quote(raw_data)
@@ -71,7 +96,7 @@ elif mode == "Option Chain":
 
     st.subheader("📈 Option Chain")
 
-    expiries = oc.get_expiry_list()   # ✅ FIX
+    expiries = oc.get_expiry_list()
 
     if not expiries:
         st.error("No expiry found")
@@ -79,10 +104,10 @@ elif mode == "Option Chain":
 
     expiry = st.selectbox("Select Expiry", expiries)
 
-    data = oc.get_data()   # already auto expiry use karta hai
+    data = oc.get_data()
 
     if "error" in data:
-        st.error(data["error"])
+        st.error(f"Option Chain Error → {data}")
         st.stop()
 
     oc_data = data["data"]["data"]["oc"]
@@ -105,7 +130,6 @@ elif mode == "Option Chain":
 
     st.dataframe(df, use_container_width=True)
 
-    # 🔥 PCR
     if df["ce_oi"].sum() != 0:
         pcr = df["pe_oi"].sum() / df["ce_oi"].sum()
         st.metric("PCR", round(pcr, 2))
