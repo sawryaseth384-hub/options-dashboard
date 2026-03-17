@@ -1,27 +1,21 @@
 import streamlit as st
-import requests
-import os
-
-# Token Render से आएगा
-ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
-
-headers = {
-    "access-token": ACCESS_TOKEN
-}
+from ai_engine.market_quote import get_market_quote
 
 st.title("📊 Trading Dashboard")
 
-# -------------------------
-# MARKET DATA
-# -------------------------
-st.subheader("Market Data")
+data = get_market_quote()
 
-url = "https://api.dhan.co/v2/market-quote"
+# RAW DATA
+st.write("RAW DATA 👇")
+st.json(data)
 
-payload = {
-    "IDX_I": ["NIFTY", "BANKNIFTY"]
-}
+# SAFE DISPLAY
+try:
+    nifty = data.get("data", {}).get("IDX_I", {}).get("13", {}).get("last_price", "N/A")
+    banknifty = data.get("data", {}).get("IDX_I", {}).get("25", {}).get("last_price", "N/A")
 
-response = requests.post(url, json=payload, headers=headers)
+    st.metric("NIFTY", nifty)
+    st.metric("BANKNIFTY", banknifty)
 
-st.write(response.json())
+except:
+    st.error("Data error")
