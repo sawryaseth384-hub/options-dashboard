@@ -1,8 +1,8 @@
 import streamlit as st
-from ai_engine.data_fetcher import get_nifty_price
+from ai_engine.market_quote import get_market_quote
 
 st.title("AI Options Dashboard")
 
-data = get_nifty_price()
+data = get_market_quote()
 
 st.write(data)
