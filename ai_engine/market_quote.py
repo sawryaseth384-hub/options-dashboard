@@ -1,10 +1,7 @@
 import requests
-import os
+from utils.config import DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID
 
-DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
-DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
-
-def get_nifty_price():
+def get_market_quote():
 
     url = "https://api.dhan.co/v2/marketfeed/ltp"
 
@@ -15,7 +12,7 @@ def get_nifty_price():
     }
 
     payload = {
-        "NSE_INDEX": ["Nifty 50"]
+        "NSE_INDEX": ["Nifty 50", "Nifty Bank"]
     }
 
     response = requests.post(url, headers=headers, json=payload)
