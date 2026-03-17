@@ -1,13 +1,16 @@
 import requests
+import os
 
-DHAN_TOKEN = "YOUR_DHAN_API_TOKEN"
+DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
+DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
 
 def get_nifty_price():
 
     url = "https://api.dhan.co/v2/marketfeed/ltp"
 
     headers = {
-        "access-token": DHAN_TOKEN,
+        "access-token": DHAN_ACCESS_TOKEN,
+        "client-id": DHAN_CLIENT_ID,
         "Content-Type": "application/json"
     }
 
@@ -15,8 +18,6 @@ def get_nifty_price():
         "NSE_INDEX": ["Nifty 50"]
     }
 
-    r = requests.post(url, json=payload, headers=headers)
+    response = requests.post(url, headers=headers, json=payload)
 
-    data = r.json()
-
-    return data
+    return response.json()
