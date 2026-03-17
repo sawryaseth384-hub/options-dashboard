@@ -1,4 +1,5 @@
 import streamlit as st
+import json
 
 from ai_engine.market_quote import get_market_quote
 from ai_engine.option_chain import get_option_chain
@@ -9,34 +10,47 @@ from ai_engine.instrument_list import get_instrument_list
 
 st.set_page_config(layout="wide")
 
-st.title("📡 DATA WAR ROOM")
+st.title("🔥 DATA WAR ROOM")
 
-# ---------------- MARKET QUOTE ----------------
-st.header("📊 Market Quote")
-quote = get_market_quote()
-st.json(quote)
+# ---------------- FUNCTION ----------------
+def show_section(title, func):
 
-# ---------------- OPTION CHAIN ----------------
-st.header("📈 Option Chain")
-option = get_option_chain()
-st.json(option)
+    st.subheader(title)
 
-# ---------------- MARKET DEPTH ----------------
-st.header("📉 Market Depth")
-depth = get_market_depth()
-st.json(depth)
+    try:
+        data = func()
 
-# ---------------- LIVE FEED ----------------
-st.header("⚡ Live Market Feed")
-live = get_live_market_feed()
-st.json(live)
+        col1, col2 = st.columns([3,1])
 
-# ---------------- HISTORICAL ----------------
-st.header("📅 Historical Data")
-history = get_historical_data()
-st.json(history)
+        with col1:
+            st.json(data)
 
-# ---------------- INSTRUMENT LIST ----------------
-st.header("📜 Instrument List")
-inst = get_instrument_list()
-st.json(inst)
+        with col2:
+            st.success("✅ OK")
+
+    except Exception as e:
+
+        col1, col2 = st.columns([3,1])
+
+        with col1:
+            st.error(str(e))
+
+        with col2:
+            st.error("❌ ERROR")
+
+    st.divider()
+
+
+# ---------------- DASHBOARD ----------------
+
+show_section("📊 Market Quote", get_market_quote)
+
+show_section("📈 Option Chain", get_option_chain)
+
+show_section("📉 Market Depth", get_market_depth)
+
+show_section("⚡ Live Market Feed", get_live_market_feed)
+
+show_section("📅 Historical Data", get_historical_data)
+
+show_section("📜 Instrument List", get_instrument_list)
