@@ -12,9 +12,8 @@ def get_option_chain():
     }
 
     payload = {
-        "UnderlyingScrip": "NIFTY",
-        "UnderlyingSeg": "IDX_I",
-        "Expiry": "",  # blank = nearest expiry
+        "securityId": "13",   # NIFTY
+        "exchangeSegment": "NSE_FNO"
     }
 
     response = requests.post(url, headers=headers, json=payload)
