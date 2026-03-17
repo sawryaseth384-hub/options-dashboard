@@ -3,18 +3,24 @@ from utils.config import DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID
 
 def get_market_depth():
 
-    url = "https://api.dhan.co/v2/marketfeed/depth"
+    url = "https://api.dhan.co/v2/marketfeed/quote"  # example
 
     headers = {
         "access-token": DHAN_ACCESS_TOKEN,
-        "client-id": str(DHAN_CLIENT_ID)
+        "client-id": DHAN_CLIENT_ID,
+        "Content-Type": "application/json"
     }
 
     payload = {
-        "securityId": ["13"],
-        "exchangeSegment": "NSE_FNO"
+        "NSE_EQ": ["SBIN"]  # example stock
     }
 
     response = requests.post(url, headers=headers, json=payload)
 
-    return response.json()
+    try:
+        return response.json()
+    except:
+        return {
+            "error": "Invalid JSON response",
+            "raw": response.text
+        }
