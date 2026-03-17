@@ -7,7 +7,7 @@ def get_instrument_list():
     try:
         df = pd.read_csv(url)
 
-        return df.head(20).to_dict(orient="records")   # ✅ NO COLUMN FILTER
+        return df.head(10).to_dict(orient="records")
 
     except Exception as e:
         return {"error": str(e)}
