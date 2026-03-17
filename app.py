@@ -1,21 +1,28 @@
 import streamlit as st
+
+# AI ENGINE IMPORTS
+from ai_engine.option_chain import get_option_chain
 from ai_engine.market_quote import get_market_quote
+from ai_engine.market_depth import get_market_depth
 
-st.title("📊 Trading Dashboard")
+st.set_page_config(layout="wide")
 
-data = get_market_quote()
+st.title("📊 AI Options Dashboard (Dhan)")
 
-# RAW DATA
-st.write("RAW DATA 👇")
-st.json(data)
+# ===== SYMBOL INPUT =====
+symbol = st.text_input("Enter Symbol", "NIFTY")
 
-# SAFE DISPLAY
-try:
-    nifty = data.get("data", {}).get("IDX_I", {}).get("13", {}).get("last_price", "N/A")
-    banknifty = data.get("data", {}).get("IDX_I", {}).get("25", {}).get("last_price", "N/A")
+# ===== DATA FETCH BUTTON =====
+if st.button("Get Data"):
 
-    st.metric("NIFTY", nifty)
-    st.metric("BANKNIFTY", banknifty)
+    st.subheader("📈 Market Quote")
+    quote = get_market_quote(symbol)
+    st.write(quote)
 
-except:
-    st.error("Data error")
+    st.subheader("📊 Market Depth")
+    depth = get_market_depth(symbol)
+    st.write(depth)
+
+    st.subheader("📉 Option Chain")
+    option = get_option_chain(symbol)
+    st.write(option)
