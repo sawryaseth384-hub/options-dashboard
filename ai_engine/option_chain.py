@@ -7,13 +7,14 @@ def get_option_chain():
 
     headers = {
         "access-token": DHAN_ACCESS_TOKEN,
-        "client-id": DHAN_CLIENT_ID,
+        "client-id": str(DHAN_CLIENT_ID),
         "Content-Type": "application/json"
     }
 
     payload = {
         "UnderlyingScrip": "NIFTY",
-        "ExchangeSegment": "NSE_FNO"
+        "UnderlyingSeg": "IDX_I",
+        "Expiry": "",  # blank = nearest expiry
     }
 
     response = requests.post(url, headers=headers, json=payload)
