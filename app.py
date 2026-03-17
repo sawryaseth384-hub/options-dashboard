@@ -1,6 +1,6 @@
 import streamlit as st
 
-from services.market_quote import get_market_quote
+
 from services.option_chain import get_option_chain
 from services.historical_data import get_historical_data
 from services.instrument_list import get_instrument_list
