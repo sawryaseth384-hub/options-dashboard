@@ -1,26 +1,21 @@
 import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import requests
+from ai_engine.signal_generator import generate_signal
 
-st.set_page_config(layout="wide")
+st.title("AI Options War Room")
 
-st.title("📊 NIFTY AI Options Dashboard")
+pcr = 1.15
 
-API_URL = "PUT_COLAB_API_URL_HERE"
+signal = generate_signal(pcr)
 
-data = requests.get(API_URL).json()
+st.metric("PCR", pcr)
 
-spot = data["spot"]
-df = pd.DataFrame(data["option_chain"])
+st.subheader("AI Signal")
 
-st.metric("NIFTY Spot", spot)
+if signal == "BULLISH":
+    st.success("BUY CALL")
 
-st.dataframe(df)
+elif signal == "BEARISH":
+    st.error("BUY PUT")
 
-fig = go.Figure()
-
-fig.add_bar(x=df["strike"], y=df["CE_OI"], name="Call OI")
-fig.add_bar(x=df["strike"], y=df["PE_OI"], name="Put OI")
-
-st.plotly_chart(fig, use_container_width=True)
+else:
+    st.warning("NO TRADE")
