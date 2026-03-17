@@ -12,9 +12,9 @@ def get_historical_data():
     }
 
     payload = {
-        "securityId": "13",                # NIFTY
-        "exchangeSegment": "IDX_I",        # IMPORTANT
-        "instrument": "INDEX",             # ❗ REQUIRED (your error fix)
+        "securityId": "13",
+        "exchangeSegment": "IDX_I",
+        "instrument": "INDEX",   # ✅ FIX
         "interval": "1",
         "oi": False,
         "fromDate": "2025-03-10 09:15:00",
@@ -22,12 +22,6 @@ def get_historical_data():
     }
 
     try:
-        response = requests.post(url, headers=headers, json=payload)
-
-        # DEBUG print
-        print("RAW:", response.text)
-
-        return response.json()
-
+        return requests.post(url, headers=headers, json=payload).json()
     except Exception as e:
         return {"error": str(e)}
