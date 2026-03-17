@@ -150,3 +150,9 @@ elif mode == "Historical":
 
     st.line_chart(df["close"])
     st.dataframe(df.tail(), use_container_width=True)
+
+import streamlit as st
+from utils.config import ACCESS_TOKEN, CLIENT_ID
+
+st.write("TOKEN:", "OK" if ACCESS_TOKEN else "MISSING")
+st.write("CLIENT:", CLIENT_ID)
