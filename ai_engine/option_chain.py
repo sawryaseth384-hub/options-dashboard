@@ -1,82 +1,72 @@
 import requests
-import pandas as pd
 from utils.config import ACCESS_TOKEN, CLIENT_ID
 
-BASE_URL = "https://api.dhan.co/v2"
 
+class OptionChain:
 
-# 🔥 1. GET EXPIRY LIST
-def get_expiry_list(security_id=13):
-    url = f"{BASE_URL}/optionchain/expirylist"
+    def __init__(self):
+        self.base_url = "https://api.dhan.co/v2"
 
-    headers = {
-        "access-token": ACCESS_TOKEN,
-        "client-id": CLIENT_ID,
-        "Content-Type": "application/json"
-    }
+    # 🔹 GET EXPIRY LIST
+    def get_expiry_list(self):
+        url = f"{self.base_url}/optionchain/expirylist"
 
-    payload = {
-        "UnderlyingScrip": security_id,
-        "UnderlyingSeg": "IDX_I"
-    }
+        headers = {
+            "access-token": ACCESS_TOKEN,
+            "client-id": CLIENT_ID,
+            "Content-Type": "application/json"
+        }
 
-    res = requests.post(url, headers=headers, json=payload).json()
+        payload = {
+            "UnderlyingScrip": 13,
+            "UnderlyingSeg": "IDX_I"
+        }
 
-    return res.get("data", [])
+        try:
+            res = requests.post(url, headers=headers, json=payload)
+            data = res.json()
 
+            if data.get("status") == "success":
+                return data.get("data", [])
+            else:
+                return []
 
-# 🔥 2. GET OPTION CHAIN (AUTO EXPIRY)
-def get_option_chain(security_id=13):
+        except Exception as e:
+            return []
 
-    headers = {
-        "access-token": ACCESS_TOKEN,
-        "client-id": CLIENT_ID,
-        "Content-Type": "application/json"
-    }
+    # 🔹 GET OPTION CHAIN (WITH EXPIRY)
+    def get_data(self):
 
-    # 👉 AUTO EXPIRY
-    expiries = get_expiry_list(security_id)
+        expiry_list = self.get_expiry_list()
 
-    if not expiries:
-        return pd.DataFrame({"error": ["No expiry found"]})
+        if not expiry_list:
+            return {"error": "No expiry data"}
 
-    expiry = expiries[0]  # nearest expiry
+        # 🔥 nearest expiry auto select
+        expiry = expiry_list[0]
 
-    url = f"{BASE_URL}/optionchain"
+        url = f"{self.base_url}/optionchain"
 
-    payload = {
-        "UnderlyingScrip": security_id,
-        "UnderlyingSeg": "IDX_I",
-        "Expiry": expiry
-    }
+        headers = {
+            "access-token": ACCESS_TOKEN,
+            "client-id": CLIENT_ID,
+            "Content-Type": "application/json"
+        }
 
-    try:
-        data = requests.post(url, headers=headers, json=payload).json()
+        payload = {
+            "UnderlyingScrip": 13,
+            "UnderlyingSeg": "IDX_I",
+            "Expiry": expiry
+        }
 
-        oc = data.get("data", {}).get("oc", {})
+        try:
+            res = requests.post(url, headers=headers, json=payload)
+            data = res.json()
 
-        rows = []
+            return {
+                "expiry": expiry,
+                "data": data
+            }
 
-        for strike, values in oc.items():
-
-            ce = values.get("ce", {})
-            pe = values.get("pe", {})
-
-            rows.append({
-                "strike": float(strike),
-
-                "ce_ltp": ce.get("last_price", 0),
-                "ce_oi": ce.get("oi", 0),
-                "ce_volume": ce.get("volume", 0),
-
-                "pe_ltp": pe.get("last_price", 0),
-                "pe_oi": pe.get("oi", 0),
-                "pe_volume": pe.get("volume", 0),
-            })
-
-        df = pd.DataFrame(rows).sort_values("strike")
-
-        return df
-
-    except Exception as e:
-        return pd.DataFrame({"error": [str(e)]})
+        except Exception as e:
+            return {"error": str(e)}
