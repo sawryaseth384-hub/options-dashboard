@@ -7,18 +7,18 @@ def get_instrument_list():
     try:
         df = pd.read_csv(url)
 
-        # सिर्फ useful columns रखो
+        # सही column names (FIXED)
         df = df[[
             "SEM_EXM_EXCH_ID",
             "SEM_SEGMENT",
             "SEM_TRADING_SYMBOL",
-            "SEM_SM_SYMBOL_NAME",
+            "SEM_CUSTOM_SYMBOL",   # ✅ FIXED
             "SEM_EXPIRY_DATE",
             "SEM_STRIKE_PRICE",
             "SEM_OPTION_TYPE"
         ]]
 
-        return df.head(50).to_dict(orient="records")
+        return df.head(20).to_dict(orient="records")
 
     except Exception as e:
         return {"error": str(e)}
