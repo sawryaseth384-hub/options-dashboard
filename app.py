@@ -1,59 +1,59 @@
 import streamlit as st
 import pandas as pd
 
-# 🔹 AI ENGINE IMPORT
 from ai_engine.market_quote import MarketQuote
 from ai_engine.data_processor import process_quote
 
-# 🔹 INIT API
+# INIT
 mq = MarketQuote()
 
-# 🔹 PAGE CONFIG
 st.set_page_config(page_title="Options Dashboard", layout="wide")
-
 st.title("📊 Live Options Dashboard")
-st.markdown("Real-time data from Dhan API")
 
-# 🔹 SIDEBAR
+# SIDEBAR
 st.sidebar.header("Settings")
 
 refresh_time = st.sidebar.slider("Refresh Time (sec)", 1, 10, 2)
 
-# 🔹 INSTRUMENT INPUT (future expand)
+# 🔥 DEFAULT SAFE TEST INSTRUMENT
 instrument_input = st.sidebar.text_input(
     "Enter Security ID (comma separated)",
-    "49081"
+    "11536"  # Reliance (NSE_EQ)
 )
 
 instrument_list = [int(x.strip()) for x in instrument_input.split(",")]
 
+# 🔥 AUTO DETECT SEGMENT
+segment = "NSE_EQ"  # safe default
+
 instruments = {
-    "NSE_FNO": instrument_list
+    segment: instrument_list
 }
 
-# 🔹 AUTO REFRESH
+# AUTO REFRESH
 from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=refresh_time * 1000)
 
-# 🔹 FETCH DATA
+# FETCH DATA
 raw_data = mq.get_quote(instruments)
 
-# 🔴 ERROR HANDLE
+# DEBUG (important)
+with st.expander("🔍 Debug Raw Data"):
+    st.json(raw_data)
+
 if raw_data.get("status") != "success":
-    st.error("❌ API Error: Check Token / Client ID")
-    st.write(raw_data)
+    st.error("❌ API Error")
     st.stop()
 
-# 🔹 PROCESS DATA
 processed = process_quote(raw_data)
 
 if not processed:
-    st.warning("⚠️ No Data Received")
+    st.warning("⚠️ No Data Received (Check Instrument ID)")
     st.stop()
 
 df = pd.DataFrame(processed)
 
-# 🔹 METRICS
+# METRICS
 st.subheader("📈 Key Metrics")
 
 col1, col2, col3 = st.columns(3)
@@ -64,16 +64,12 @@ col3.metric("Volume", df["volume"].iloc[0])
 
 st.divider()
 
-# 🔹 TABLE
+# TABLE
 st.subheader("📋 Market Data")
 st.dataframe(df, use_container_width=True)
 
 st.divider()
 
-# 🔹 CHART
+# CHART
 st.subheader("📊 Price Chart")
 st.line_chart(df["ltp"])
-
-# 🔹 RAW DATA (DEBUG)
-with st.expander("🔍 Raw API Data"):
-    st.json(raw_data)
