@@ -1,21 +1,8 @@
 import streamlit as st
-from ai_engine.signal_generator import generate_signal
+from ai_engine.data_fetcher import get_nifty_price
 
-st.title("AI Options War Room")
+st.title("AI Options Dashboard")
 
-pcr = 1.15
+data = get_nifty_price()
 
-signal = generate_signal(pcr)
-
-st.metric("PCR", pcr)
-
-st.subheader("AI Signal")
-
-if signal == "BULLISH":
-    st.success("BUY CALL")
-
-elif signal == "BEARISH":
-    st.error("BUY PUT")
-
-else:
-    st.warning("NO TRADE")
+st.write(data)
