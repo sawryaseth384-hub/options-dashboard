@@ -1,22 +1,19 @@
 import requests
-from utils.config import DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID
+import os
 
 def get_market_quote():
+    ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 
     url = "https://api.dhan.co/v2/marketfeed/ltp"
 
     headers = {
-        "access-token": DHAN_ACCESS_TOKEN,
-        "client-id": DHAN_CLIENT_ID,
+        "access-token": ACCESS_TOKEN,
         "Content-Type": "application/json"
     }
 
     payload = {
-        "IDX_I": [13, 25]   # ✅ Nifty + BankNifty
+        "IDX_I": [13, 25]
     }
 
-    try:
-        res = requests.post(url, headers=headers, json=payload)
-        return res.json()
-    except Exception as e:
-        return {"error": str(e)}
+    res = requests.post(url, json=payload, headers=headers)
+    return res.json()
