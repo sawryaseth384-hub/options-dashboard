@@ -1,1 +1,4 @@
+import os
 
+DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
+DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
