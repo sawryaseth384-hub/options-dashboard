@@ -1,19 +1,20 @@
 import requests
-import os
+from utils.config import DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID
 
 def get_market_quote():
-    ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 
-    url = "https://api.dhan.co/v2/marketfeed/ltp"
+    url = "https://api.dhan.co/v2/marketfeed/quote"
 
     headers = {
-        "access-token": ACCESS_TOKEN,
+        "access-token": DHAN_ACCESS_TOKEN,
+        "client-id": DHAN_CLIENT_ID,
         "Content-Type": "application/json"
     }
 
     payload = {
-        "IDX_I": [13, 25]
+        "NSE_FNO": [49081]   # NIFTY example
     }
 
-    res = requests.post(url, json=payload, headers=headers)
-    return res.json()
+    response = requests.post(url, headers=headers, json=payload)
+
+    return response.json()
