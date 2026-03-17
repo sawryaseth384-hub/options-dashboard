@@ -1,40 +1,27 @@
 import streamlit as st
+import requests
+import os
 
+# Token Render से आएगा
+ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 
-from services.option_chain import get_option_chain
-from services.historical_data import get_historical_data
-from services.instrument_list import get_instrument_list
-from services.market_depth import get_market_depth
-from services.live_market_feed import get_live_market_feed
+headers = {
+    "access-token": ACCESS_TOKEN
+}
 
-st.set_page_config(layout="wide")
+st.title("📊 Trading Dashboard")
 
-st.title("🔥 DATA WAR ROOM")
+# -------------------------
+# MARKET DATA
+# -------------------------
+st.subheader("Market Data")
 
-# Market Quote
-st.header("📊 Market Quote")
-st.json(get_market_quote())
+url = "https://api.dhan.co/v2/market-quote"
 
-# Option Chain
-st.header("📈 Option Chain")
-st.json(get_option_chain())
+payload = {
+    "IDX_I": ["NIFTY", "BANKNIFTY"]
+}
 
-# Historical
-st.header("📅 Historical Data")
-st.json(get_historical_data())
+response = requests.post(url, json=payload, headers=headers)
 
-# Instrument List
-st.header("📜 Instrument List")
-st.json(get_instrument_list())
-
-# Market Depth
-st.header("📉 Market Depth")
-st.json(get_market_depth())
-
-# Live Feed
-st.header("⚡ Live Market Feed")
-
-live = get_live_market_feed()
-
-for msg in live["messages"]:
-    st.text(msg)
+st.write(response.json())
