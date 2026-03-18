@@ -2,61 +2,41 @@ import streamlit as st
 
 def show_stocks(data):
 
-    # ===== INDIAN MARKET =====
-    st.markdown("### 🇮🇳 Indian Market")
+    st.markdown("## 📊 Stocks Overview")
 
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric("NIFTY", data["NIFTY"]["ltp"], data["NIFTY"]["change"])
-
-    with col2:
-        st.metric("BANKNIFTY", data["BANKNIFTY"]["ltp"], data["BANKNIFTY"]["change"])
-
-    with col3:
-        st.metric("SENSEX", data["SENSEX"]["ltp"], data["SENSEX"]["change"])
-
-    with col4:
-        st.metric("VIX", data["VIX"]["ltp"], data["VIX"]["change"])
-
-
-    # ===== GLOBAL MARKET =====
-    st.markdown("### 🌍 Global Market")
-
+    # ===== SIMPLE GRID =====
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("DOW", data["DOW"]["ltp"], data["DOW"]["change"])
+        st.metric(
+            label="NIFTY",
+            value=data["NIFTY"]["ltp"],
+            delta=data["NIFTY"]["change"]
+        )
 
     with col2:
-        st.metric("NASDAQ", data["NASDAQ"]["ltp"], data["NASDAQ"]["change"])
+        st.metric(
+            label="BANKNIFTY",
+            value=data["BANKNIFTY"]["ltp"],
+            delta=data["BANKNIFTY"]["change"]
+        )
 
     with col3:
-        st.metric("GIFT NIFTY", data["GIFT"]["ltp"], data["GIFT"]["change"])
+        st.metric(
+            label="SENSEX",
+            value=data["SENSEX"]["ltp"],
+            delta=data["SENSEX"]["change"]
+        )
 
+    st.divider()
 
-    # ===== COMMODITY =====
-    st.markdown("### 🪙 Commodity")
+    # ===== EXTRA STOCKS TABLE (OPTIONAL) =====
+    st.markdown("### 📋 Top Stocks")
 
-    col1, col2, col3 = st.columns(3)
+    sample_data = [
+        {"Stock": "RELIANCE", "Price": 2500, "Change": "+10"},
+        {"Stock": "TCS", "Price": 3800, "Change": "-20"},
+        {"Stock": "INFY", "Price": 1500, "Change": "+15"},
+    ]
 
-    with col1:
-        st.metric("CRUDE", data["CRUDE"]["ltp"], data["CRUDE"]["change"])
-
-    with col2:
-        st.metric("GOLD", data["GOLD"]["ltp"], data["GOLD"]["change"])
-
-    with col3:
-        st.metric("SILVER", data["SILVER"]["ltp"], data["SILVER"]["change"])
-
-
-    # ===== CURRENCY =====
-    st.markdown("### 💱 Currency")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric("USDINR", data["USDINR"]["ltp"], data["USDINR"]["change"])
-
-    with col2:
-        st.metric("DXY", data["DXY"]["ltp"], data["DXY"]["change"])
+    st.dataframe(sample_data, use_container_width=True)
