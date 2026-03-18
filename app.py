@@ -1,58 +1,48 @@
 import streamlit as st
-from live_ws import DhanLive
-import time
+import requests
 
-st.set_page_config(page_title="Live Dhan Dashboard", layout="wide")
+st.title("📊 DHAN DATA DASHBOARD")
 
-st.title("🚀 LIVE DHAN MARKET FEED")
-
-# ✅ Secrets
 CLIENT_ID = st.secrets["CLIENT_ID"]
 ACCESS_TOKEN = st.secrets["ACCESS_TOKEN"]
 
-st.success("✅ Credentials Loaded")
+# 🔥 API CALL BUTTON
+if st.button("Fetch Data"):
 
-# 🔥 Start WebSocket only once
-if "ws" not in st.session_state:
-    st.session_state.ws = DhanLive(CLIENT_ID, ACCESS_TOKEN)
-    st.session_state.ws.start()
+    url = "https://api.dhan.co/v2/marketfeed/quote"
 
-st.success("🟢 Live Connected")
+    headers = {
+        "access-token": ACCESS_TOKEN,
+        "client-id": CLIENT_ID,
+        "Content-Type": "application/json"
+    }
 
-# 🔥 UI placeholders
-col1, col2, col3 = st.columns(3)
+    payload = {
+        "NSE_EQ": [11536],     # Reliance
+        "NSE_FNO": [49081]     # Option
+    }
 
-ltp_box = col1.empty()
-oi_box = col2.empty()
-vol_box = col3.empty()
+    res = requests.post(url, headers=headers, json=payload)
+    data = res.json()
 
-json_box = st.empty()
+    st.subheader("📡 RAW DATA")
+    st.json(data)
 
-# 🔥 SAFE LOOP
-for _ in range(1000):
+    # 🔥 Table View
+    if data.get("status") == "success":
 
-    data = st.session_state.ws.latest_data
+        output = []
 
-    if data:
-        try:
-            segment = list(data["data"].keys())[0]
-            instrument = list(data["data"][segment].keys())[0]
-            d = data["data"][segment][instrument]
+        for segment, items in data["data"].items():
+            for sec_id, values in items.items():
 
-            ltp = d.get("last_price", 0)
-            oi = d.get("oi", 0)
-            vol = d.get("volume", 0)
+                output.append({
+                    "Segment": segment,
+                    "SecurityID": sec_id,
+                    "Price": values.get("last_price"),
+                    "OI": values.get("oi"),
+                    "Volume": values.get("volume")
+                })
 
-            ltp_box.metric("📈 LTP", ltp)
-            oi_box.metric("📊 OI", oi)
-            vol_box.metric("📦 Volume", vol)
-
-            json_box.json(data)
-
-        except Exception as e:
-            st.warning(f"⏳ Waiting for proper data... {e}")
-
-    else:
-        st.warning("⏳ Waiting for live data...")
-
-    time.sleep(1)
+        st.subheader("📊 TABLE VIEW")
+        st.dataframe(output)
