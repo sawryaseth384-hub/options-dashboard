@@ -1,131 +1,63 @@
 import streamlit as st
-import traceback
 
-# 🔥 PAGE CONFIG
 st.set_page_config(page_title="AI Trading Dashboard", layout="wide")
 
 st.title("🚀 AI Trading Dashboard")
 
-# =========================
-# 🔐 CONFIG CHECK
-# =========================
-st.header("⚙️ Config Status")
-
+# ✅ CORRECT SECRET KEYS (MATCH WITH YOUR SECRETS)
 try:
-    CLIENT_ID = st.secrets["CLIENT_ID"]
-    ACCESS_TOKEN = st.secrets["ACCESS_TOKEN"]
+    CLIENT_ID = st.secrets["DHAN_CLIENT_ID"]
+    ACCESS_TOKEN = st.secrets["DHAN_ACCESS_TOKEN"]
 
-    st.success("✅ CLIENT_ID Loaded")
-    st.success("✅ ACCESS_TOKEN Loaded")
+    st.success("CLIENT_ID Loaded ✅")
+    st.success("ACCESS_TOKEN Loaded ✅")
 
 except Exception as e:
-    st.error("❌ Secrets Error")
-    st.code(traceback.format_exc())
+    st.error(f"Secrets Error: {e}")
     st.stop()
 
-# =========================
-# 📦 IMPORT MODULE CHECK
-# =========================
-st.header("📦 Module Status")
 
-modules = {}
+# 🚀 MODULE CHECK
+st.subheader("📦 Module Status")
 
+# Market Quote
 try:
-    from ai_engine.market_quote import MarketQuote
-    modules["MarketQuote"] = "✅ Loaded"
-except:
-    modules["MarketQuote"] = "❌ Error"
+    from market_quote import MarketQuote
+    st.success("MarketQuote → ✅ Loaded")
+except Exception as e:
+    st.error(f"MarketQuote → ❌ Error: {e}")
 
+# Data Processor
 try:
     from ai_engine.data_processor import DataProcessor
-    modules["DataProcessor"] = "✅ Loaded"
-except:
-    modules["DataProcessor"] = "❌ Error"
+    st.success("DataProcessor → ✅ Loaded")
+except Exception as e:
+    st.error(f"DataProcessor → ❌ Error: {e}")
 
+# Signal Engine
 try:
     from ai_engine.signal_engine import SignalEngine
-    modules["SignalEngine"] = "✅ Loaded"
-except:
-    modules["SignalEngine"] = "❌ Error"
+    st.success("SignalEngine → ✅ Loaded")
+except Exception as e:
+    st.error(f"SignalEngine → ❌ Error: {e}")
 
-# show module status
-for k, v in modules.items():
-    st.write(f"{k} → {v}")
 
-# =========================
-# 🚀 AI ENGINE CONTROL PANEL
-# =========================
-st.header("🚀 AI Engine Control Panel")
+# 🚀 API TEST BUTTON
+st.subheader("🧪 API Test")
 
-if "❌ Error" in modules.values():
-    st.warning("⚠️ Fix modules first")
-    st.stop()
-
-# init
-mq = MarketQuote()
-dp = DataProcessor()
-se = SignalEngine()
-
-# =========================
-# 🎯 INPUT SECTION
-# =========================
-st.subheader("🎯 Instrument Selection")
-
-segment = st.selectbox("Segment", ["NSE_EQ", "NSE_FNO"])
-instrument_id = st.number_input("Instrument ID", value=11536)
-
-payload = {
-    segment: [int(instrument_id)]
-}
-
-# =========================
-# 🔍 RUN ENGINE
-# =========================
-if st.button("🔥 Run AI Engine"):
-
+if st.button("Test Market Quote API"):
     try:
-        st.info("📡 Fetching Data...")
+        from market_quote import MarketQuote
 
-        data = mq.get_data(payload)
+        mq = MarketQuote()
 
-        # 🔥 RAW DEBUG
-        with st.expander("🔍 Raw API Response"):
-            st.json(data)
+        instruments = {
+            "NSE_FNO": [49081]
+        }
 
-        if data.get("status") == "error":
-            st.error("❌ API Error")
-            st.json(data)
-            st.stop()
+        data = mq.get_data(instruments)
 
-        # =========================
-        # 📊 PROCESS DATA
-        # =========================
-        ltp = dp.extract_ltp(data, segment, instrument_id)
-        oi = dp.extract_oi(data, segment, instrument_id)
-        vol = dp.extract_volume(data, segment, instrument_id)
-
-        st.subheader("📊 Market Data")
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("LTP", ltp)
-        col2.metric("OI", oi)
-        col3.metric("Volume", vol)
-
-        # =========================
-        # 🤖 AI SIGNAL
-        # =========================
-        signal = se.generate_signal(ltp, oi, vol)
-
-        st.subheader("🤖 AI Signal")
-
-        if signal == "STRONG TREND":
-            st.success(signal)
-        elif signal == "MOMENTUM":
-            st.warning(signal)
-        else:
-            st.info(signal)
+        st.json(data)
 
     except Exception as e:
-        st.error("💥 Engine Crash")
-        st.code(traceback.format_exc())
+        st.error(f"API Error: {e}")
