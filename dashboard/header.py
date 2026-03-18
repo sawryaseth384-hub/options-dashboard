@@ -1,58 +1,55 @@
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
+import random
 
 def show_header():
 
-    st.markdown("<h1 style='text-align:center;'>📊 AI OPTIONS DASHBOARD</h1>", unsafe_allow_html=True)
+    # 🔁 AUTO REFRESH (हर 5 सेकंड)
+    st_autorefresh(interval=5000, key="refresh")
 
-    def row(title, items):
-        st.markdown(f"### {title}")
-        cols = st.columns(len(items))
+    st.markdown("<h4 style='text-align:center;'>⚡ LIVE MARKET</h4>", unsafe_allow_html=True)
 
-        for col, (name, value, change) in zip(cols, items):
-            color = "green" if "+" in change else "red"
+    # ===== DUMMY LIVE DATA (later API) =====
+    def tick(name, base):
+        change = random.randint(-200, 200)
+        value = base + change
+        arrow = "▲" if change > 0 else "▼"
+        color = "green" if change > 0 else "red"
 
-            col.markdown(f"""
-            <div style='padding:10px;border-radius:12px;background:#f5f7fa;text-align:center'>
-                <b>{name}</b><br>
-                {value}<br>
-                <span style='color:{color}'>{change}</span>
-            </div>
-            """, unsafe_allow_html=True)
+        return f"<span style='margin-right:15px;'><b>{name}</b> {value} <span style='color:{color}'>{arrow}{abs(change)}</span></span>"
 
-    # 🇮🇳 MARKET CORE
-    row("🇮🇳 Market Core", [
-        ("NIFTY", "23,700", "+120"),
-        ("BANKNIFTY", "55,200", "+300"),
-        ("SENSEX", "78,500", "+250"),
-        ("FINNIFTY", "20,100", "+80"),
-        ("VIX", "18.2", "-0.5"),
-    ])
+    # ===== ROWS =====
 
-    # 🌍 GLOBAL
-    row("🌍 Global Trigger", [
-        ("DOW", "38,000", "+200"),
-        ("NASDAQ", "16,500", "-50"),
-        ("GIFT NIFTY", "23,750", "+80"),
-    ])
+    st.markdown(f"""
+    <div style='font-size:14px'>
+    {tick("NIFTY", 23700)}
+    {tick("BANKNIFTY", 55200)}
+    {tick("SENSEX", 78500)}
+    {tick("VIX", 18)}
+    </div>
+    """, unsafe_allow_html=True)
 
-    # 🪙 COMMODITY
-    row("🪙 Commodity Impact", [
-        ("CRUDE", "6,500", "+30"),
-        ("GOLD", "72,000", "+100"),
-        ("SILVER", "85,000", "+200"),
-    ])
+    st.markdown(f"""
+    <div style='font-size:14px'>
+    {tick("DOW", 38000)}
+    {tick("NASDAQ", 16500)}
+    {tick("GIFT", 23750)}
+    </div>
+    """, unsafe_allow_html=True)
 
-    # 💱 CURRENCY
-    row("💱 Money Flow", [
-        ("USDINR", "83.10", "+0.10"),
-        ("DXY", "104.2", "-0.2"),
-    ])
+    st.markdown(f"""
+    <div style='font-size:14px'>
+    {tick("CRUDE", 6500)}
+    {tick("GOLD", 72000)}
+    {tick("SILVER", 85000)}
+    </div>
+    """, unsafe_allow_html=True)
 
-    # 📊 SENTIMENT
-    row("📊 Market Sentiment", [
-        ("PCR", "1.2", "+"),
-        ("OI", "CALL BUILDUP", "-"),
-        ("FII", "+1200Cr", "+"),
-    ])
+    st.markdown(f"""
+    <div style='font-size:14px'>
+    {tick("USDINR", 83)}
+    {tick("DXY", 104)}
+    </div>
+    """, unsafe_allow_html=True)
 
     st.divider()
