@@ -26,14 +26,12 @@ def show_header(data):
         item("DXY", data["DXY"]["ltp"], data["DXY"]["change"])
     )
 
-    html = f"""
-    <div style='background:#0b1220; padding:10px; border-radius:10px;'>
+    st.markdown(f"""
+    <div style='background:#0b1220;padding:10px;border-radius:10px'>
         <marquee>{line1}</marquee>
         <marquee>{line2}</marquee>
     </div>
-    """
-
-    st.markdown(html, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 
 def check_alerts(data):
