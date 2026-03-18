@@ -11,11 +11,21 @@ class DhanLive:
 
     def on_message(self, ws, message):
         try:
-            self.latest_data = json.loads(message)
+            data = json.loads(message)
+            self.latest_data = data
+            print("LIVE:", data)  # debug
         except:
             pass
 
+    def on_error(self, ws, error):
+        print("ERROR:", error)
+
+    def on_close(self, ws, close_status_code, close_msg):
+        print("Closed")
+
     def on_open(self, ws):
+        print("Connected")
+
         payload = {
             "RequestCode": 15,
             "InstrumentCount": 1,
@@ -26,6 +36,7 @@ class DhanLive:
                 }
             ]
         }
+
         ws.send(json.dumps(payload))
 
     def start(self):
@@ -36,6 +47,8 @@ class DhanLive:
                 f"client-id: {self.client_id}"
             ],
             on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close,
             on_open=self.on_open
         )
 
