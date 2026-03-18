@@ -16,12 +16,3 @@ def fetch_data():
         "usd": {"ltp": 83.1, "change": 0.1},
         "dxy": {"ltp": 104.2, "change": -0.2},
     }
-
-
-# 🔥 OPTION CHAIN (dummy for now)
-def get_option_chain():
-    return [
-        {"strike": 22300, "call_oi": 120000, "put_oi": 90000},
-        {"strike": 22400, "call_oi": 150000, "put_oi": 110000},
-        {"strike": 22500, "call_oi": 180000, "put_oi": 140000},
-    ]
