@@ -1,36 +1,53 @@
 import streamlit as st
 
+def item(name, ltp, change):
+    color = "#00c853" if change >= 0 else "#ff1744"
+    arrow = "▲" if change >= 0 else "▼"
+
+    return f"""
+    <span style='margin-right:25px; font-size:13px; color:#ccc'>
+        <b style='color:white'>{name}</b> {ltp}
+        <span style='color:{color}'> {arrow} {change}</span>
+    </span>
+    """
+
+
 def show_header(data):
 
-    line1 = f"""
-    NIFTY {data['nifty']['ltp']} ▲ {data['nifty']['change']} |
-    BANKNIFTY {data['banknifty']['ltp']} ▲ {data['banknifty']['change']} |
-    SENSEX {data['sensex']['ltp']} ▲ {data['sensex']['change']} |
-    VIX {data['vix']['ltp']} ▼ {data['vix']['change']}
-    """
+    # 🔥 LINE 1 (Indian Market)
+    line1 = (
+        item("NIFTY", data["nifty"]["ltp"], data["nifty"]["change"]) +
+        item("BANKNIFTY", data["banknifty"]["ltp"], data["banknifty"]["change"]) +
+        item("SENSEX", data["sensex"]["ltp"], data["sensex"]["change"]) +
+        item("VIX", data["vix"]["ltp"], data["vix"]["change"])
+    )
 
-    line2 = f"""
-    DOW {data['dow']['ltp']} ▲ {data['dow']['change']} |
-    NASDAQ {data['nasdaq']['ltp']} ▼ {data['nasdaq']['change']} |
-    GIFT {data['gift']['ltp']} ▲ {data['gift']['change']} |
-    CRUDE {data['crude']['ltp']} ▲ {data['crude']['change']} |
-    GOLD {data['gold']['ltp']} ▲ {data['gold']['change']} |
-    SILVER {data['silver']['ltp']} ▲ {data['silver']['change']} |
-    USDINR {data['usd']['ltp']} ▲ {data['usd']['change']} |
-    DXY {data['dxy']['ltp']} ▼ {data['dxy']['change']}
-    """
+    # 🔥 LINE 2 (Global + Commodity)
+    line2 = (
+        item("DOW", data["dow"]["ltp"], data["dow"]["change"]) +
+        item("NASDAQ", data["nasdaq"]["ltp"], data["nasdaq"]["change"]) +
+        item("GIFT", data["gift"]["ltp"], data["gift"]["change"]) +
+        item("CRUDE", data["crude"]["ltp"], data["crude"]["change"]) +
+        item("GOLD", data["gold"]["ltp"], data["gold"]["change"]) +
+        item("SILVER", data["silver"]["ltp"], data["silver"]["change"]) +
+        item("USDINR", data["usd"]["ltp"], data["usd"]["change"]) +
+        item("DXY", data["dxy"]["ltp"], data["dxy"]["change"])
+    )
 
-    st.info(line1)
-    st.info(line2)
+    # 🔥 STYLE (Dhan जैसा top strip)
+    st.markdown("""
+        <style>
+        .header-strip {
+            background-color: #0E1117;
+            padding: 8px 15px;
+            border-radius: 8px;
+            margin-bottom: 5px;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-
-def check_alerts(data):
-    alerts = []
-
-    if abs(data["nifty"]["change"]) > 100:
-        alerts.append("⚠️ NIFTY high movement")
-
-    if abs(data["banknifty"]["change"]) > 200:
-        alerts.append("⚠️ BANKNIFTY high movement")
-
-    return alerts
+    # 🔥 OUTPUT
+    st.markdown(f"<div class='header-strip'>{line1}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='header-strip'>{line2}</div>", unsafe_allow_html=True)
