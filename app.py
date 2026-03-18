@@ -7,5 +7,4 @@ st.set_page_config(page_title="Dhan Header", layout="wide")
 
 data = fetch_data()
 
-# ONLY HEADER
 show_header(data)
