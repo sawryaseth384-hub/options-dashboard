@@ -1,6 +1,0 @@
-col1, col2, col3, col4 = st.columns(4)
-
-col1.metric("NIFTY", "23,700", "+120")
-col2.metric("BANKNIFTY", "55,200", "+300")
-col3.metric("FINNIFTY", "20,100", "+80")
-col4.metric("VIX", "18", "-0.5")
