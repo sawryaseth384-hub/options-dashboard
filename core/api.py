@@ -1,7 +1,4 @@
-import random
-
 def fetch_data():
-    # 🔥 fallback safe data (no crash)
     return {
         "nifty": {"ltp": 23700, "change": 120},
         "banknifty": {"ltp": 55200, "change": 300},
