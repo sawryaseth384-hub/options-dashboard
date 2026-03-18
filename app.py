@@ -28,7 +28,7 @@ vol_box = col3.empty()
 
 json_box = st.empty()
 
-# 🔥 Safe loop (Streamlit friendly)
+# 🔥 SAFE LOOP
 for _ in range(1000):
 
     data = st.session_state.ws.latest_data
@@ -43,7 +43,6 @@ for _ in range(1000):
             oi = d.get("oi", 0)
             vol = d.get("volume", 0)
 
-            # 🎯 UI update
             ltp_box.metric("📈 LTP", ltp)
             oi_box.metric("📊 OI", oi)
             vol_box.metric("📦 Volume", vol)
