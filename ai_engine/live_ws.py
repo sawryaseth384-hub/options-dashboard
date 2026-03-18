@@ -7,25 +7,15 @@ class DhanLive:
     def __init__(self, client_id, access_token):
         self.client_id = client_id
         self.access_token = access_token
-        self.ws = None
         self.latest_data = {}
 
     def on_message(self, ws, message):
         try:
-            data = json.loads(message)
-            self.latest_data = data
+            self.latest_data = json.loads(message)
         except:
             pass
 
-    def on_error(self, ws, error):
-        print("ERROR:", error)
-
-    def on_close(self, ws, close_status_code, close_msg):
-        print("Connection Closed")
-
     def on_open(self, ws):
-        print("Connected to Dhan Live")
-
         payload = {
             "RequestCode": 15,
             "InstrumentCount": 1,
@@ -36,22 +26,19 @@ class DhanLive:
                 }
             ]
         }
-
         ws.send(json.dumps(payload))
 
     def start(self):
-        self.ws = websocket.WebSocketApp(
+        ws = websocket.WebSocketApp(
             "wss://api-feed.dhan.co",
             header=[
                 f"access-token: {self.access_token}",
                 f"client-id: {self.client_id}"
             ],
             on_message=self.on_message,
-            on_error=self.on_error,
-            on_close=self.on_close,
             on_open=self.on_open
         )
 
-        thread = threading.Thread(target=self.ws.run_forever)
+        thread = threading.Thread(target=ws.run_forever)
         thread.daemon = True
         thread.start()
