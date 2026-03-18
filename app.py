@@ -93,3 +93,29 @@ if data.get("status") == "success":
     st.metric("LTP", d.get("last_price", 0))
     st.metric("OI", d.get("oi", 0))
     st.metric("Volume", d.get("volume", 0))
+    import streamlit as st
+from live_ws import DhanLive
+import time
+
+st.title("🚀 LIVE MARKET FEED")
+
+CLIENT_ID = st.secrets["CLIENT_ID"]
+ACCESS_TOKEN = st.secrets["ACCESS_TOKEN"]
+
+# 🔥 Start WebSocket
+if "ws" not in st.session_state:
+    st.session_state.ws = DhanLive(CLIENT_ID, ACCESS_TOKEN)
+    st.session_state.ws.start()
+
+st.write("🟢 Live Connected")
+
+# 🔥 LIVE DATA DISPLAY
+placeholder = st.empty()
+
+while True:
+    data = st.session_state.ws.latest_data
+
+    if data:
+        placeholder.json(data)
+
+    time.sleep(1)
