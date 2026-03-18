@@ -1,37 +1,82 @@
 import streamlit as st
+import requests
 
-st.title("🚀 AI Trading Dashboard")
+st.set_page_config(page_title="Dhan API Test", layout="wide")
 
-# ✅ DIRECT KEYS (NO DHAN_)
+st.title("🚀 Dhan Data API Test")
+
+# =========================
+# 🔐 CONFIG (SECRETS)
+# =========================
+
 try:
     CLIENT_ID = st.secrets["CLIENT_ID"]
     ACCESS_TOKEN = st.secrets["ACCESS_TOKEN"]
 
-    st.success("CLIENT_ID Loaded ✅")
-    st.success("ACCESS_TOKEN Loaded ✅")
+    st.success("✅ Credentials Loaded")
 
 except Exception as e:
-    st.error(f"Secrets Error: {e}")
+    st.error("❌ Secrets missing")
     st.stop()
 
 
-# 🔥 MODULE CHECK
-st.subheader("📦 Module Status")
+# =========================
+# 🔥 INPUT
+# =========================
 
-try:
-    from market_quote import MarketQuote
-    st.success("MarketQuote → ✅ Loaded")
-except Exception as e:
-    st.error(f"MarketQuote → ❌ {e}")
+st.subheader("📊 Instrument Input")
 
-try:
-    from ai_engine.data_processor import DataProcessor
-    st.success("DataProcessor → ✅ Loaded")
-except Exception as e:
-    st.error(f"DataProcessor → ❌ {e}")
+exchange = st.selectbox("Exchange", ["NSE_EQ", "NSE_FNO"])
+security_id = st.text_input("Security ID", "49081")
 
-try:
-    from ai_engine.signal_engine import SignalEngine
-    st.success("SignalEngine → ✅ Loaded")
-except Exception as e:
-    st.error(f"SignalEngine → ❌ {e}")
+# =========================
+# 🚀 API CALL
+# =========================
+
+if st.button("🚀 Fetch Data"):
+
+    url = "https://api.dhan.co/v2/marketfeed/quote"
+
+    headers = {
+        "access-token": ACCESS_TOKEN,
+        "client-id": CLIENT_ID,
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    try:
+        payload = {
+            exchange: [int(security_id)]
+        }
+
+        st.write("📤 Payload:", payload)
+
+        res = requests.post(url, headers=headers, json=payload)
+
+        st.write("📡 Status Code:", res.status_code)
+
+        data = res.json()
+
+        st.subheader("📥 Response")
+        st.json(data)
+
+        # =========================
+        # 🔥 SIMPLE DATA CHECK
+        # =========================
+
+        if data.get("status") == "success":
+            st.success("✅ API WORKING")
+
+            segment = list(data["data"].keys())[0]
+            instrument = list(data["data"][segment].keys())[0]
+
+            ltp = data["data"][segment][instrument].get("last_price")
+
+            st.metric("LTP", ltp)
+
+        else:
+            st.error("❌ API FAILED")
+            st.write(data)
+
+    except Exception as e:
+        st.error(f"❌ ERROR: {e}")
