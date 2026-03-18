@@ -1,41 +1,33 @@
 import streamlit as st
-from dhanhq import DhanContext, dhanhq
+import requests
 
-# =============================
-# 🔐 LOAD SECRETS
-# =============================
-client_id = st.secrets["DHAN_CLIENT_ID"]
-access_token = st.secrets["DHAN_ACCESS_TOKEN"]
+st.title("🔥 DHAN API TEST")
 
-# =============================
-# 🚀 CONNECT DHAN
-# =============================
-dhan_context = DhanContext(client_id, access_token)
-dhan = dhanhq(dhan_context)
+# ✅ सही तरीके से secrets पढ़ना
+CLIENT_ID = st.secrets["CLIENT_ID"]
+ACCESS_TOKEN = st.secrets["ACCESS_TOKEN"]
 
-st.success("✅ Dhan Connected")
+# ✅ headers
+headers = {
+    "access-token": ACCESS_TOKEN,
+    "client-id": CLIENT_ID,
+    "Content-Type": "application/json"
+}
 
-st.write("Client ID:", client_id)
-st.write("Token Length:", len(access_token))
+# ✅ payload
+payload = {
+    "NSE_FNO": [49081]
+}
 
-# =============================
-# 📊 API TEST
-# =============================
-st.header("API Test")
+# ✅ API CALL
+url = "https://api.dhan.co/v2/marketfeed/quote"
 
-if st.button("Test Market Data"):
-
+if st.button("Test API"):
     try:
-        # 👇 IMPORTANT: indentation सही
-        instruments = {
-            "NSE_EQ": [11536]
-        }
-
-        data = dhan.market_quote(instruments)
-
-        st.success("✅ API Working")
-        st.json(data)
+        res = requests.post(url, headers=headers, json=payload)
+        
+        st.write("Status Code:", res.status_code)
+        st.json(res.json())
 
     except Exception as e:
-        st.error("❌ API Failed")
-        st.write(e)
+        st.error(str(e))
