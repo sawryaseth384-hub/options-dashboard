@@ -4,7 +4,6 @@ import streamlit as st
 from core.api import fetch_data
 
 # UI
-from dashboard.header import show_header
 from dashboard.header import show_header, check_alerts
 from dashboard.navbar import show_navbar
 from dashboard.stocks import show_stocks
@@ -13,11 +12,16 @@ from dashboard.futures import show_futures
 
 st.set_page_config(page_title="Pro Dashboard", layout="wide")
 
-# 🔥 DATA FETCH (MAIN ENGINE)
+# 🔥 DATA FETCH
 data = fetch_data()
 
 # 🔥 HEADER
 show_header(data)
+
+# 🔥 ALERT
+alerts = check_alerts(data)
+for alert in alerts:
+    st.warning(alert)
 
 # 🔥 NAVBAR
 tab = show_navbar()
