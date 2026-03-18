@@ -1,8 +1,6 @@
-# core/api.py
-
 def fetch_data():
 
-    # 👉 अभी dummy (replace with your Dhan API)
+    # 🔥 अभी dummy (later Dhan API)
     return {
         "NIFTY": {"ltp": 23700, "change": 120},
         "BANKNIFTY": {"ltp": 55200, "change": 300},
