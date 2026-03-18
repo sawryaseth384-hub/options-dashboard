@@ -1,5 +1,5 @@
 import requests
-from utils.config import ACCESS_TOKEN, CLIENT_ID
+import streamlit as st
 
 
 class MarketQuote:
@@ -9,9 +9,8 @@ class MarketQuote:
 
     def get_data(self, instruments):
 
-        # Ensure all values are integers
-        for key in instruments:
-            instruments[key] = [int(x) for x in instruments[key]]
+        ACCESS_TOKEN = st.secrets["ACCESS_TOKEN"]
+        CLIENT_ID = st.secrets["CLIENT_ID"]
 
         headers = {
             "access-token": ACCESS_TOKEN,
@@ -20,35 +19,12 @@ class MarketQuote:
         }
 
         try:
-            print("TOKEN LENGTH:", len(ACCESS_TOKEN) if ACCESS_TOKEN else 0)
-            print("CLIENT ID:", CLIENT_ID)
-            print("PAYLOAD:", instruments)
-
             res = requests.post(self.url, headers=headers, json=instruments)
 
-            print("STATUS CODE:", res.status_code)
-
-            data = res.json()
-
-            print("RESPONSE:", data)
-
-            if res.status_code != 200:
-                return {
-                    "status": "error",
-                    "http_error": res.status_code,
-                    "response": data
-                }
-
-            if data.get("status") != "success":
-                return {
-                    "status": "error",
-                    "api_error": data
-                }
-
-            return data
+            return {
+                "status_code": res.status_code,
+                "data": res.json()
+            }
 
         except Exception as e:
-            return {
-                "status": "error",
-                "message": str(e)
-            }
+            return {"error": str(e)}
