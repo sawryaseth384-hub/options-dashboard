@@ -11,10 +11,8 @@ def item(name, ltp, change):
     </span>
     """
 
-
 def show_header(data):
 
-    # 🔥 LINE 1 (Indian Market)
     line1 = (
         item("NIFTY", data["nifty"]["ltp"], data["nifty"]["change"]) +
         item("BANKNIFTY", data["banknifty"]["ltp"], data["banknifty"]["change"]) +
@@ -22,7 +20,6 @@ def show_header(data):
         item("VIX", data["vix"]["ltp"], data["vix"]["change"])
     )
 
-    # 🔥 LINE 2 (Global + Commodity)
     line2 = (
         item("DOW", data["dow"]["ltp"], data["dow"]["change"]) +
         item("NASDAQ", data["nasdaq"]["ltp"], data["nasdaq"]["change"]) +
@@ -34,7 +31,6 @@ def show_header(data):
         item("DXY", data["dxy"]["ltp"], data["dxy"]["change"])
     )
 
-    # 🔥 STYLE (Dhan जैसा top strip)
     st.markdown("""
         <style>
         .header-strip {
@@ -48,6 +44,5 @@ def show_header(data):
         </style>
     """, unsafe_allow_html=True)
 
-    # 🔥 OUTPUT
     st.markdown(f"<div class='header-strip'>{line1}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='header-strip'>{line2}</div>", unsafe_allow_html=True)
