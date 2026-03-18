@@ -24,15 +24,16 @@ class DhanLive:
         print("Closed")
 
     def on_open(self, ws):
-        print("Connected")
+        print("Connected to Dhan")
 
+        # ✅ FIXED PAYLOAD
         payload = {
             "RequestCode": 15,
             "InstrumentCount": 1,
             "InstrumentList": [
                 {
-                    "ExchangeSegment": "NSE_FNO",
-                    "SecurityId": "49081"
+                    "ExchangeSegment": 2,   # ✅ NSE_FNO
+                    "SecurityId": 49081    # ✅ INT
                 }
             ]
         }
