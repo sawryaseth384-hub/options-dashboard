@@ -11,20 +11,21 @@ class DhanLive:
         self.latest_data = {}
 
     def on_message(self, ws, message):
-        data = json.loads(message)
-        self.latest_data = data
-        print("LIVE:", data)
+        try:
+            data = json.loads(message)
+            self.latest_data = data
+        except:
+            pass
 
     def on_error(self, ws, error):
         print("ERROR:", error)
 
     def on_close(self, ws, close_status_code, close_msg):
-        print("Closed")
+        print("Connection Closed")
 
     def on_open(self, ws):
-        print("Connected")
+        print("Connected to Dhan Live")
 
-        # 🔥 subscription payload (IMPORTANT)
         payload = {
             "RequestCode": 15,
             "InstrumentCount": 1,
