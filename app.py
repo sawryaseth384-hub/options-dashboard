@@ -1,121 +1,57 @@
 import streamlit as st
-import requests
-
-st.set_page_config(page_title="Dhan API Test", layout="wide")
-
-st.title("🚀 Dhan Data API Test")
-
-# =========================
-# 🔐 CONFIG (SECRETS)
-# =========================
-
-try:
-    CLIENT_ID = st.secrets["CLIENT_ID"]
-    ACCESS_TOKEN = st.secrets["ACCESS_TOKEN"]
-
-    st.success("✅ Credentials Loaded")
-
-except Exception as e:
-    st.error("❌ Secrets missing")
-    st.stop()
-
-
-# =========================
-# 🔥 INPUT
-# =========================
-
-st.subheader("📊 Instrument Input")
-
-exchange = st.selectbox("Exchange", ["NSE_EQ", "NSE_FNO"])
-security_id = st.text_input("Security ID", "49081")
-
-# =========================
-# 🚀 API CALL
-# =========================
-
-if st.button("🚀 Fetch Data"):
-
-    url = "https://api.dhan.co/v2/marketfeed/quote"
-
-    headers = {
-        "access-token": ACCESS_TOKEN,
-        "client-id": CLIENT_ID,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-
-    try:
-        payload = {
-            exchange: [int(security_id)]
-        }
-
-        st.write("📤 Payload:", payload)
-
-        res = requests.post(url, headers=headers, json=payload)
-
-        st.write("📡 Status Code:", res.status_code)
-
-        data = res.json()
-
-        st.subheader("📥 Response")
-        st.json(data)
-
-        # =========================
-        # 🔥 SIMPLE DATA CHECK
-        # =========================
-
-        if data.get("status") == "success":
-            st.success("✅ API WORKING")
-
-            segment = list(data["data"].keys())[0]
-            instrument = list(data["data"][segment].keys())[0]
-
-            ltp = data["data"][segment][instrument].get("last_price")
-
-            st.metric("LTP", ltp)
-
-        else:
-            st.error("❌ API FAILED")
-            st.write(data)
-
-    except Exception as e:
-        st.error(f"❌ ERROR: {e}")
-        # 🔥 Extract data
-if data.get("status") == "success":
-
-    segment = list(data["data"].keys())[0]
-    instrument = list(data["data"][segment].keys())[0]
-
-    d = data["data"][segment][instrument]
-
-    st.subheader("📊 Extracted Data")
-
-    st.metric("LTP", d.get("last_price", 0))
-    st.metric("OI", d.get("oi", 0))
-    st.metric("Volume", d.get("volume", 0))
-    import streamlit as st
 from live_ws import DhanLive
 import time
 
-st.title("🚀 LIVE MARKET FEED")
+st.set_page_config(page_title="AI Trading Dashboard", layout="wide")
 
+st.title("🚀 LIVE DHAN MARKET FEED")
+
+# ✅ Secrets
 CLIENT_ID = st.secrets["CLIENT_ID"]
 ACCESS_TOKEN = st.secrets["ACCESS_TOKEN"]
 
-# 🔥 Start WebSocket
+st.success("✅ Credentials Loaded")
+
+# 🔥 Start WebSocket (only once)
 if "ws" not in st.session_state:
     st.session_state.ws = DhanLive(CLIENT_ID, ACCESS_TOKEN)
     st.session_state.ws.start()
 
-st.write("🟢 Live Connected")
+st.success("🟢 Live Connected")
 
-# 🔥 LIVE DATA DISPLAY
-placeholder = st.empty()
+# 🔥 UI placeholders
+col1, col2, col3 = st.columns(3)
 
+ltp_box = col1.empty()
+oi_box = col2.empty()
+vol_box = col3.empty()
+
+json_box = st.empty()
+
+# 🔥 LIVE LOOP
 while True:
     data = st.session_state.ws.latest_data
 
     if data:
-        placeholder.json(data)
+
+        try:
+            segment = list(data["data"].keys())[0]
+            instrument = list(data["data"][segment].keys())[0]
+            d = data["data"][segment][instrument]
+
+            ltp = d.get("last_price", 0)
+            oi = d.get("oi", 0)
+            vol = d.get("volume", 0)
+
+            # 🎯 Metrics
+            ltp_box.metric("📈 LTP", ltp)
+            oi_box.metric("📊 OI", oi)
+            vol_box.metric("📦 Volume", vol)
+
+            # 🔍 Raw Data
+            json_box.json(data)
+
+        except Exception as e:
+            st.error(f"Parsing Error: {e}")
 
     time.sleep(1)
