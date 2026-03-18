@@ -1,11 +1,7 @@
 import streamlit as st
 
-# CORE
 from core.api import fetch_data
-
-# UI (SAFE IMPORT)
-from dashboard.header import show_header
-from dashboard.header import check_alerts
+from dashboard.header import show_header, check_alerts
 from dashboard.navbar import show_navbar
 from dashboard.stocks import show_stocks
 from dashboard.options import show_options
@@ -13,21 +9,16 @@ from dashboard.futures import show_futures
 
 st.set_page_config(page_title="Dhan Pro Dashboard", layout="wide")
 
-# DATA
 data = fetch_data()
 
-# HEADER
 show_header(data)
 
-# ALERT
 alerts = check_alerts(data)
 for alert in alerts:
     st.warning(alert)
 
-# NAVBAR
 tab = show_navbar()
 
-# BODY
 if tab == "Stocks":
     show_stocks(data)
 
