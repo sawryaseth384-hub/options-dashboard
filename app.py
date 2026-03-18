@@ -80,3 +80,16 @@ if st.button("🚀 Fetch Data"):
 
     except Exception as e:
         st.error(f"❌ ERROR: {e}")
+        # 🔥 Extract data
+if data.get("status") == "success":
+
+    segment = list(data["data"].keys())[0]
+    instrument = list(data["data"][segment].keys())[0]
+
+    d = data["data"][segment][instrument]
+
+    st.subheader("📊 Extracted Data")
+
+    st.metric("LTP", d.get("last_price", 0))
+    st.metric("OI", d.get("oi", 0))
+    st.metric("Volume", d.get("volume", 0))
