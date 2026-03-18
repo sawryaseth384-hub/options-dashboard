@@ -12,21 +12,21 @@ from dashboard.futures import show_futures
 
 st.set_page_config(page_title="Dhan Pro Dashboard", layout="wide")
 
-# 🔥 DATA
+# DATA
 data = fetch_data()
 
-# 🔥 HEADER
+# HEADER
 show_header(data)
 
-# 🔥 ALERT
+# ALERT
 alerts = check_alerts(data)
 for alert in alerts:
     st.warning(alert)
 
-# 🔥 NAVBAR
+# NAVBAR
 tab = show_navbar()
 
-# 🔥 BODY
+# BODY
 if tab == "Stocks":
     show_stocks(data)
 
