@@ -3,8 +3,9 @@ import streamlit as st
 # CORE
 from core.api import fetch_data
 
-# UI
-from dashboard.header import show_header, check_alerts
+# UI (SAFE IMPORT)
+from dashboard.header import show_header
+from dashboard.header import check_alerts
 from dashboard.navbar import show_navbar
 from dashboard.stocks import show_stocks
 from dashboard.options import show_options
