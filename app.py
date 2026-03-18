@@ -1,23 +1,40 @@
-import requests
 import streamlit as st
+from dhanhq import DhanContext, dhanhq
 
-st.title("API TEST")
+# =============================
+# 🔐 LOAD SECRETS
+# =============================
+try:
+    client_id = st.secrets["DHAN_CLIENT_ID"]
+    access_token = st.secrets["DHAN_ACCESS_TOKEN"]
+except Exception as e:
+    st.error("❌ Secrets load नहीं हो रहे")
+    st.stop()
 
-headers = {
-    "access-token": st.secrets["ACCESS_TOKEN"],
-    "client-id": st.secrets["CLIENT_ID"],
-    "Content-Type": "application/json"
-}
+# =============================
+# 🚀 CONNECT DHAN
+# =============================
+try:
+    dhan_context = DhanContext(client_id, access_token)
+    dhan = dhanhq(dhan_context)
 
-payload = {
-    "NSE_EQ": [11536]
-}
+    st.success("✅ Dhan Connected Successfully")
 
-res = requests.post(
-    "https://api.dhan.co/v2/marketfeed/ltp",
-    headers=headers,
-    json=payload
-)
+    # Debug info
+    st.write("Client ID:", client_id)
+    st.write("Token Length:", len(access_token))
 
-st.write("STATUS:", res.status_code)
-st.write(res.text)
+except Exception as e:
+    st.error("❌ Dhan Connection Failed")
+    st.write(e)
+    st.stop()
+
+# =============================
+# 📊 API TEST BUTTON
+# =============================
+st.header("🔍 API Test")
+
+if st.button("Test Market Data"):
+
+    try:
+        # Sample instrument (N
