@@ -12,36 +12,37 @@ class DhanLive:
     def on_message(self, ws, message):
         try:
             data = json.loads(message)
+            print("LIVE DATA:", data)   # debug
             self.latest_data = data
-            print("LIVE:", data)  # debug
-        except:
-            pass
+        except Exception as e:
+            print("Parse Error:", e)
 
     def on_error(self, ws, error):
         print("ERROR:", error)
 
     def on_close(self, ws, close_status_code, close_msg):
-        print("Closed")
+        print("Connection Closed")
 
     def on_open(self, ws):
-        print("Connected to Dhan")
+        print("Connected to Dhan WebSocket")
 
-        # ✅ FIXED PAYLOAD
+        # 🔥 FULL CORRECT PAYLOAD
         payload = {
             "RequestCode": 15,
             "InstrumentCount": 1,
             "InstrumentList": [
                 {
-                    "ExchangeSegment": 2,   # ✅ NSE_FNO
-                    "SecurityId": 49081    # ✅ INT
+                    "ExchangeSegment": 2,   # NSE_FNO
+                    "SecurityId": 49081
                 }
             ]
         }
 
+        print("SENDING PAYLOAD:", payload)
         ws.send(json.dumps(payload))
 
     def start(self):
-        ws = websocket.WebSocketApp(
+        self.ws = websocket.WebSocketApp(
             "wss://api-feed.dhan.co",
             header=[
                 f"access-token: {self.access_token}",
@@ -53,6 +54,6 @@ class DhanLive:
             on_open=self.on_open
         )
 
-        thread = threading.Thread(target=ws.run_forever)
+        thread = threading.Thread(target=self.ws.run_forever)
         thread.daemon = True
         thread.start()
