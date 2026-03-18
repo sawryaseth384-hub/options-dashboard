@@ -10,9 +10,9 @@ from dashboard.stocks import show_stocks
 from dashboard.options import show_options
 from dashboard.futures import show_futures
 
-st.set_page_config(page_title="Pro Dashboard", layout="wide")
+st.set_page_config(page_title="Dhan Pro Dashboard", layout="wide")
 
-# 🔥 DATA FETCH
+# 🔥 DATA
 data = fetch_data()
 
 # 🔥 HEADER
