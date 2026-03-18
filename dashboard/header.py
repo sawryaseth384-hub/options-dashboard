@@ -1,55 +1,72 @@
+# dashboard/header.py
+
 import streamlit as st
+from core.sentiment import get_sentiment
 from streamlit_autorefresh import st_autorefresh
-import random
+import datetime
 
-def show_header():
+def show_header(data):
 
-    # 🔁 AUTO REFRESH (हर 5 सेकंड)
-    st_autorefresh(interval=5000, key="refresh")
+    st_autorefresh(interval=5000)
 
-    st.markdown("<h4 style='text-align:center;'>⚡ LIVE MARKET</h4>", unsafe_allow_html=True)
+    st.markdown("## ⚡ LIVE MARKET")
 
-    # ===== DUMMY LIVE DATA (later API) =====
-    def tick(name, base):
-        change = random.randint(-200, 200)
-        value = base + change
-        arrow = "▲" if change > 0 else "▼"
-        color = "green" if change > 0 else "red"
+    def show_row(items):
+        cols = st.columns(len(items))
 
-        return f"<span style='margin-right:15px;'><b>{name}</b> {value} <span style='color:{color}'>{arrow}{abs(change)}</span></span>"
+        for col, (name, val) in zip(cols, items.items()):
+            change = val["change"]
+            color = "green" if change > 0 else "red"
 
-    # ===== ROWS =====
+            col.markdown(f"""
+            <div style='text-align:center'>
+            <b>{name}</b><br>
+            {val['ltp']} <span style='color:{color}'>({change})</span>
+            </div>
+            """, unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div style='font-size:14px'>
-    {tick("NIFTY", 23700)}
-    {tick("BANKNIFTY", 55200)}
-    {tick("SENSEX", 78500)}
-    {tick("VIX", 18)}
-    </div>
-    """, unsafe_allow_html=True)
+    # 🇮🇳
+    st.markdown("### 🇮🇳 Market")
+    show_row({
+        "NIFTY": data["NIFTY"],
+        "BANKNIFTY": data["BANKNIFTY"],
+        "SENSEX": data["SENSEX"],
+        "VIX": data["VIX"]
+    })
 
-    st.markdown(f"""
-    <div style='font-size:14px'>
-    {tick("DOW", 38000)}
-    {tick("NASDAQ", 16500)}
-    {tick("GIFT", 23750)}
-    </div>
-    """, unsafe_allow_html=True)
+    # 🌍
+    st.markdown("### 🌍 Global")
+    show_row({
+        "DOW": data["DOW"],
+        "NASDAQ": data["NASDAQ"],
+        "GIFT": data["GIFT"]
+    })
 
-    st.markdown(f"""
-    <div style='font-size:14px'>
-    {tick("CRUDE", 6500)}
-    {tick("GOLD", 72000)}
-    {tick("SILVER", 85000)}
-    </div>
-    """, unsafe_allow_html=True)
+    # 🪙
+    st.markdown("### 🪙 Commodity")
+    show_row({
+        "CRUDE": data["CRUDE"],
+        "GOLD": data["GOLD"],
+        "SILVER": data["SILVER"]
+    })
 
-    st.markdown(f"""
-    <div style='font-size:14px'>
-    {tick("USDINR", 83)}
-    {tick("DXY", 104)}
-    </div>
-    """, unsafe_allow_html=True)
+    # 💱
+    st.markdown("### 💱 Currency")
+    show_row({
+        "USDINR": data["USDINR"],
+        "DXY": data["DXY"]
+    })
+
+    # 📊 Sentiment
+    sentiment = get_sentiment(data)
+    st.markdown(f"### 📊 Sentiment: {sentiment}")
+
+    # 🕒 Market Status
+    now = datetime.datetime.now().time()
+
+    if now.hour >= 9 and now.hour <= 15:
+        st.success("🟢 Market Open")
+    else:
+        st.error("🔴 Market Closed")
 
     st.divider()
