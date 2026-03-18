@@ -1,5 +1,3 @@
-# core/sentiment.py
-
 def get_sentiment(data):
 
     fii = data.get("FII", 0)
