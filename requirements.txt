@@ -1,9 +1,2 @@
 streamlit
-pandas
-numpy
-plotly
 requests
-google-generativeai
-dhanhq==2.0.0
-websocket-client
-streamlit-autorefresh
