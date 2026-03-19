@@ -17,23 +17,20 @@ refresh = st.selectbox("Auto Refresh", [0, 5, 10, 30])
 if refresh:
     st_autorefresh(interval=refresh * 1000)
 
-# 🔥 EXPIRY LIST
+# 🔥 EXPIRY LIST (NO STOP)
 expiry_list = get_expiry_list()
 
-if not expiry_list:
-    st.error("❌ Expiry data not loaded (Check API)")
-    st.stop()
-
+# 👉 always show (fallback included)
 selected_expiry = st.selectbox("Select Expiry", expiry_list)
 
 # 🔥 OPTION CHAIN
 raw_data = get_option_chain(selected_expiry)
 
 if not raw_data:
-    st.error("❌ Option chain data not received")
+    st.warning("⚠️ Live data not available, retrying...")
     st.stop()
 
-# ✅ FIXED (IMPORTANT)
+# 🔥 PROCESS DATA
 df, spot_price = process_option_data(raw_data)
 
 if df.empty:
