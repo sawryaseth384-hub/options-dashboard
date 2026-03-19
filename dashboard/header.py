@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 
 def show_header(data):
 
@@ -6,7 +7,6 @@ def show_header(data):
         st.warning("No Data")
         return
 
-    # 🔥 HTML build
     html = ""
 
     for d in data:
@@ -18,13 +18,12 @@ def show_header(data):
         arrow = "▲" if change >= 0 else "▼"
 
         html += f"""
-        <span style="margin-right:20px; font-size:13px;">
-            <b style="color:white;">{name}</b> {price}
-            <span style="color:{color};"> {arrow} {change}</span>
+        <span class="item">
+            <b>{name}</b> {price}
+            <span style="color:{color}"> {arrow} {change}</span>
         </span>
         """
 
-    # 🔥 IMPORTANT FIX (div wrap + no extra spacing)
     final_html = f"""
     <div style="
         background:#0b1220;
@@ -32,10 +31,12 @@ def show_header(data):
         border-radius:10px;
         overflow-x:auto;
         white-space:nowrap;
+        font-size:13px;
+        color:#bbb;
     ">
         {html}
     </div>
     """
 
-    # 🔥 MUST: unsafe_allow_html=True
-    st.markdown(final_html, unsafe_allow_html=True)
+    # 🔥 THIS FIXES EVERYTHING
+    components.html(final_html, height=60)
