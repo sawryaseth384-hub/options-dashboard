@@ -6,19 +6,16 @@ def fetch_data():
             "sensex": {"ltp": 78500, "change": 250},
             "vix": {"ltp": 18.2, "change": -0.5},
         },
-
         "global": {
             "dow": {"ltp": 38000, "change": 200},
             "nasdaq": {"ltp": 16500, "change": -50},
             "gift": {"ltp": 23750, "change": 80},
         },
-
         "commodities": {
             "crude": {"ltp": 6500, "change": 30},
             "gold": {"ltp": 72000, "change": 100},
             "silver": {"ltp": 85000, "change": 200},
         },
-
         "currency": {
             "usd": {"ltp": 83.1, "change": 0.1},
             "dxy": {"ltp": 104.2, "change": -0.2},
