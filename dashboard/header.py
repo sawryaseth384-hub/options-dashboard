@@ -1,26 +1,53 @@
-def fetch_data():
-    return {
-        "indices": {
-            "nifty": {"ltp": 23700, "change": 120},
-            "banknifty": {"ltp": 55200, "change": 300},
-            "sensex": {"ltp": 78500, "change": 250},
-            "vix": {"ltp": 18.2, "change": -0.5},
-        },
+import streamlit as st
 
-        "global": {
-            "dow": {"ltp": 38000, "change": 200},
-            "nasdaq": {"ltp": 16500, "change": -50},
-            "gift": {"ltp": 23750, "change": 80},
-        },
+def item(name, ltp, change):
+    color = "#00c853" if change >= 0 else "#ff1744"
+    arrow = "▲" if change >= 0 else "▼"
 
-        "commodities": {
-            "crude": {"ltp": 6500, "change": 30},
-            "gold": {"ltp": 72000, "change": 100},
-            "silver": {"ltp": 85000, "change": 200},
-        },
+    return f"""
+    <span style='margin-right:25px; font-size:13px; color:#ccc'>
+        <b style='color:white'>{name}</b> {ltp}
+        <span style='color:{color}'> {arrow} {change}</span>
+    </span>
+    """
 
-        "currency": {
-            "usd": {"ltp": 83.1, "change": 0.1},
-            "dxy": {"ltp": 104.2, "change": -0.2},
-        }
+def show_header(data):
+
+    idx = data["indices"]
+    glb = data["global"]
+    cmd = data["commodities"]
+    cur = data["currency"]
+
+    line1 = (
+        item("NIFTY", idx["nifty"]["ltp"], idx["nifty"]["change"]) +
+        item("BANKNIFTY", idx["banknifty"]["ltp"], idx["banknifty"]["change"]) +
+        item("SENSEX", idx["sensex"]["ltp"], idx["sensex"]["change"]) +
+        item("VIX", idx["vix"]["ltp"], idx["vix"]["change"])
+    )
+
+    line2 = (
+        item("DOW", glb["dow"]["ltp"], glb["dow"]["change"]) +
+        item("NASDAQ", glb["nasdaq"]["ltp"], glb["nasdaq"]["change"]) +
+        item("GIFT", glb["gift"]["ltp"], glb["gift"]["change"]) +
+        item("CRUDE", cmd["crude"]["ltp"], cmd["crude"]["change"]) +
+        item("GOLD", cmd["gold"]["ltp"], cmd["gold"]["change"]) +
+        item("SILVER", cmd["silver"]["ltp"], cmd["silver"]["change"]) +
+        item("USDINR", cur["usd"]["ltp"], cur["usd"]["change"]) +
+        item("DXY", cur["dxy"]["ltp"], cur["dxy"]["change"])
+    )
+
+    st.markdown("""
+    <style>
+    .strip {
+        background:#0E1117;
+        padding:8px 15px;
+        border-radius:8px;
+        margin-bottom:5px;
+        white-space:nowrap;
+        overflow-x:auto;
     }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"<div class='strip'>{line1}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='strip'>{line2}</div>", unsafe_allow_html=True)
