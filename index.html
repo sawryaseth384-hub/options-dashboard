@@ -2,10 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Dhan Style Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pro Trading Dashboard</title>
 
-<!-- Fonts & Icons -->
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
+<!-- Icons -->
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 
 <!-- Chart -->
@@ -15,50 +18,65 @@
 
 body{
     margin:0;
-    font-family: 'Inter', sans-serif;
-    background:#111;
+    font-family:'Inter';
+    background:#0B0E11;
     color:white;
 }
 
-/* HEADER */
+/* ===== TICKER ===== */
+.ticker{
+    background:#111;
+    padding:8px;
+    overflow:hidden;
+}
+
+.ticker-track{
+    white-space:nowrap;
+    display:inline-block;
+    animation:scroll 20s linear infinite;
+}
+
+.ticker-item{
+    margin-right:30px;
+    display:inline-block;
+    font-size:13px;
+}
+
+@keyframes scroll{
+    from{transform:translateX(0);}
+    to{transform:translateX(-100%);}
+}
+
+/* ===== HEADER ===== */
 .header{
     display:flex;
     justify-content:space-between;
-    padding:12px 20px;
-    background:#0b0b0f;
-    align-items:center;
+    padding:10px 20px;
+    background:#1C1F26;
 }
 
-.search{
-    background:#1e1e2e;
-    padding:6px 10px;
-    border-radius:6px;
-}
-
-/* LAYOUT */
+/* ===== LAYOUT ===== */
 .container{
     display:grid;
-    grid-template-columns:220px 1fr;
+    grid-template-columns:200px 1fr;
 }
 
-/* SIDEBAR */
 .sidebar{
-    background:#0b0b0f;
+    background:#1C1F26;
     height:100vh;
     padding:20px;
 }
 
 .sidebar div{
-    margin:15px 0;
+    margin:12px 0;
     cursor:pointer;
 }
 
-/* MAIN */
 .main{
-    padding:15px;
+    padding:20px;
 }
 
-/* TOP CARDS */
+/* ===== CARDS ===== */
 .cards{
     display:grid;
     grid-template-columns:repeat(4,1fr);
@@ -66,66 +84,59 @@ body{
 }
 
 .card{
-    background:#1e1e2e;
+    background:#1C1F26;
     padding:15px;
     border-radius:10px;
 }
 
-/* GRID */
-.grid{
-    display:grid;
-    grid-template-columns:2fr 1fr;
-    gap:10px;
+/* ===== CHART ===== */
+.chart-box{
+    background:#1C1F26;
+    margin-top:15px;
+    padding:15px;
+    border-radius:10px;
 }
 
-/* TABLE */
+/* ===== TABLE ===== */
 table{
     width:100%;
-    border-collapse:collapse;
+    margin-top:15px;
 }
 
-th,td{
+td,th{
     padding:8px;
     border-bottom:1px solid #333;
 }
 
-/* COLORS */
-.green{color:#00c853;}
-.red{color:#ff1744;}
-
-/* RESPONSIVE */
-@media(max-width:768px){
-    .container{grid-template-columns:1fr;}
-    .sidebar{display:none;}
-    .cards{grid-template-columns:1fr;}
-    .grid{grid-template-columns:1fr;}
-}
+.green{color:#00C076;}
+.red{color:#F6465D;}
 
 </style>
 </head>
 
 <body>
 
+<!-- 🔥 TICKER -->
+<div class="ticker">
+    <div class="ticker-track" id="tickerData"></div>
+</div>
+
 <!-- HEADER -->
 <div class="header">
-    <div>📊 Dhan Pro</div>
-    <div class="search">🔍 Search</div>
-    <div>
-        <i class="fa fa-bell"></i>
-        <i class="fa fa-user"></i>
-    </div>
+    <div>📊 Pro Dashboard</div>
+    <div>🔍 Search</div>
+    <div><i class="fa fa-bell"></i> <i class="fa fa-user"></i></div>
 </div>
 
 <div class="container">
 
 <!-- SIDEBAR -->
 <div class="sidebar">
-    <div>🏠 Home</div>
-    <div>📈 Markets</div>
-    <div>💼 Portfolio</div>
-    <div>📜 Orders</div>
-    <div>⭐ Watchlist</div>
-    <div>⚙ Settings</div>
+    <div>Home</div>
+    <div>Markets</div>
+    <div>Portfolio</div>
+    <div>Orders</div>
+    <div>Watchlist</div>
 </div>
 
 <!-- MAIN -->
@@ -133,58 +144,25 @@ th,td{
 
 <!-- CARDS -->
 <div class="cards">
-    <div class="card">Net Worth<br><b>₹5,20,000</b></div>
-    <div class="card">Today's P&L<br><b class="green">+₹8,500</b></div>
+    <div class="card">Net Worth<br><b>₹5,00,000</b></div>
+    <div class="card">P&L<br><b class="green">+₹8,000</b></div>
     <div class="card">Margin<br><b>₹1,20,000</b></div>
     <div class="card">Buying Power<br><b>₹3,00,000</b></div>
 </div>
 
-<br>
-
-<div class="grid">
-
 <!-- CHART -->
-<div class="card">
+<div class="chart-box">
     <div id="chart" style="height:300px;"></div>
-
-    <br>
-    <button onclick="changeTF('1D')">1D</button>
-    <button onclick="changeTF('1W')">1W</button>
-    <button onclick="changeTF('1M')">1M</button>
-    <button onclick="changeTF('1Y')">1Y</button>
 </div>
-
-<!-- MARKET OVERVIEW -->
-<div class="card">
-    <h4>Market</h4>
-    NIFTY: <span class="green">23700 ▲120</span><br>
-    SENSEX: <span class="green">78500 ▲250</span>
-</div>
-
-</div>
-
-<br>
 
 <!-- WATCHLIST -->
 <div class="card">
-<h4>Watchlist</h4>
+<h3>Watchlist</h3>
 <table>
-<tr><th>Stock</th><th>LTP</th><th>Change%</th><th>Volume</th></tr>
-<tr><td>NIFTY</td><td>23700</td><td class="green">+0.5%</td><td>1.2M</td></tr>
-<tr><td>BANKNIFTY</td><td>55200</td><td class="green">+0.8%</td><td>900K</td></tr>
-<tr><td>RELIANCE</td><td>2900</td><td class="red">-0.3%</td><td>500K</td></tr>
-</table>
-</div>
-
-<br>
-
-<!-- POSITIONS -->
-<div class="card">
-<h4>Positions</h4>
-<table>
-<tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&L</th></tr>
-<tr><td>NIFTY CE</td><td>50</td><td>100</td><td>150</td><td class="green">+2500</td></tr>
-<tr><td>BANKNIFTY PE</td><td>25</td><td>200</td><td>150</td><td class="red">-1250</td></tr>
+<tr><th>Stock</th><th>LTP</th><th>Change</th></tr>
+<tr><td>NIFTY</td><td>23700</td><td class="green">+120</td></tr>
+<tr><td>BANKNIFTY</td><td>55200</td><td class="green">+300</td></tr>
+<tr><td>RELIANCE</td><td>2900</td><td class="red">-20</td></tr>
 </table>
 </div>
 
@@ -193,9 +171,47 @@ th,td{
 
 <script>
 
-// CHART
+// 🔥 TICKER DATA
+const tickerData = [
+    {name:"NIFTY",price:23700,change:120},
+    {name:"BANKNIFTY",price:55200,change:300},
+    {name:"SENSEX",price:78500,change:250},
+    {name:"VIX",price:18.2,change:-0.5}
+];
+
+// 🔥 LOAD TICKER
+function loadTicker(){
+    let html="";
+    tickerData.forEach(d=>{
+        let color = d.change>=0?"#00C076":"#F6465D";
+        let arrow = d.change>=0?"▲":"▼";
+
+        html += `<span class="ticker-item">
+        ${d.name} ${d.price} 
+        <span style="color:${color}">
+        ${arrow} ${d.change}
+        </span>
+        </span>`;
+    });
+
+    document.getElementById("tickerData").innerHTML = html+html;
+}
+
+loadTicker();
+
+// 🔥 LIVE UPDATE
+setInterval(()=>{
+    tickerData.forEach(d=>{
+        let move=(Math.random()*20-10);
+        d.price+=move;
+        d.change=move;
+    });
+    loadTicker();
+},3000);
+
+// 🔥 CHART
 const chart = LightweightCharts.createChart(document.getElementById('chart'),{
-    layout:{background:{color:'#111'},textColor:'#fff'}
+    layout:{background:{color:'#0B0E11'},textColor:'#fff'}
 });
 
 const candle = chart.addCandlestickSeries();
@@ -203,12 +219,7 @@ const candle = chart.addCandlestickSeries();
 candle.setData([
  {time:'2024-01-01',open:100,high:110,low:90,close:105},
  {time:'2024-01-02',open:105,high:115,low:100,close:110},
- {time:'2024-01-03',open:110,high:120,low:108,close:118},
 ]);
-
-function changeTF(tf){
-    alert("Timeframe: "+tf);
-}
 
 </script>
 
