@@ -7,8 +7,8 @@ def show_header(data):
         st.warning("No Data")
         return
 
-    row1 = data[:4]
-    row2 = data[4:]
+    row1 = data[:4]   # Indian
+    row2 = data[4:]   # Global + Commodity
 
     def build_row(row):
         html = ""
@@ -21,10 +21,13 @@ def show_header(data):
             arrow = "▲" if change >= 0 else "▼"
 
             html += f"""
-            <span class="item">
-                <b>{name}</b> {price}
-                <span style="color:{color}"> {arrow} {change}</span>
-            </span>
+            <div class="item">
+                <span class="name">{name}</span>
+                <span class="price">{price}</span>
+                <span class="change" style="color:{color}">
+                    {arrow} {change}
+                </span>
+            </div>
             """
         return html
 
@@ -33,27 +36,42 @@ def show_header(data):
 
     html = f"""
     <style>
+    body {{
+        margin:0;
+    }}
+
     .box {{
         background:#0b1220;
-        padding:10px 15px;
-        border-radius:10px;
-        font-size:13px;
+        padding:12px 15px;
+        border-radius:12px;
+        font-family: Arial;
     }}
 
     .row {{
-        display:flex;
-        flex-wrap:wrap;
-        gap:15px;
-        margin-bottom:3px;
+        display:grid;
+        grid-template-columns: repeat(6, auto);
+        gap:20px;
+        margin-bottom:6px;
     }}
 
     .item {{
         color:#bbb;
+        font-size:13px;
+        white-space:nowrap;
     }}
 
-    b {{
+    .name {{
         color:white;
-        margin-right:5px;
+        font-weight:600;
+        margin-right:6px;
+    }}
+
+    .price {{
+        margin-right:6px;
+    }}
+
+    .change {{
+        font-weight:500;
     }}
     </style>
 
