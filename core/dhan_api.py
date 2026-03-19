@@ -1,41 +1,86 @@
 import os
-from dhanhq import dhanhq
-from dotenv import load_dotenv
 import streamlit as st
+from dhanhq import dhanhq
+from datetime import datetime
 
-load_dotenv()
+# 🔥 FALLBACK DATA (important)
+SAMPLE_EXPIRIES = [
+    "2026-03-26",
+    "2026-04-02",
+    "2026-04-09",
+    "2026-04-16"
+]
 
-CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
-ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
+# ✅ DHAN CLIENT
+@st.cache_resource
+def get_dhan_client():
+    client_id = os.getenv("DHAN_CLIENT_ID")
+    access_token = os.getenv("DHAN_ACCESS_TOKEN")
 
-dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
+    if not client_id or not access_token:
+        st.error("❌ API credentials missing")
+        return None
+
+    return dhanhq(client_id, access_token)
 
 
-@st.cache_data(ttl=300)
+# ✅ EXPIRY LIST
+@st.cache_data(ttl=60)
 def get_expiry_list():
+    dhan = get_dhan_client()
+
+    if not dhan:
+        return SAMPLE_EXPIRIES  # fallback
+
     try:
         res = dhan.expiry_list(
             under_security_id=13,
             under_exchange_segment="IDX_I"
         )
 
-        if res and "data" in res:
-            return [x["expiry"] for x in res["data"] if "expiry" in x]
+        # 🔥 DEBUG (important)
+        st.write("DEBUG EXPIRY:", res)
 
-        return []
+        if not res or "data" not in res:
+            return SAMPLE_EXPIRIES
+
+        data = res["data"]
+
+        expiries = []
+
+        # 🔥 HANDLE ALL CASES
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict) and "expiry" in item:
+                    expiries.append(item["expiry"])
+                elif isinstance(item, str):
+                    expiries.append(item)
+
+        elif isinstance(data, dict):
+            if "expiry" in data:
+                expiries.append(data["expiry"])
+
+        # ✅ FINAL RETURN
+        return expiries if expiries else SAMPLE_EXPIRIES
 
     except Exception as e:
         st.error(f"Expiry Error: {e}")
-        return []
+        return SAMPLE_EXPIRIES
 
 
+# ✅ OPTION CHAIN
 @st.cache_data(ttl=5)
 def get_option_chain(expiry):
+    dhan = get_dhan_client()
+
+    if not dhan:
+        return None
+
     try:
         return dhan.option_chain(
             under_security_id=13,
             under_exchange_segment="IDX_I",
-            expiry=str(expiry)
+            expiry=expiry
         )
     except Exception as e:
         st.error(f"Option Chain Error: {e}")
