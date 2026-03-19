@@ -67,4 +67,4 @@ def show_header(data):
     </div>
     """
 
-    components.html(final_html, height=80)
+    components.html(final_html, height=110, scrolling=False))
