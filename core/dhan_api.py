@@ -1,35 +1,26 @@
 import streamlit as st
 from dhanhq import dhanhq
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# 🔥 CORRECT FALLBACK DATA (valid expiry)
-SAMPLE_EXPIRIES = [
-    "2026-03-24",
-    "2026-03-30",
-    "2026-04-07",
-]
-
-# ✅ DHAN CLIENT (STREAMLIT SECRETS)
+# 🔥 CLIENT
 @st.cache_resource
 def get_dhan_client():
     try:
         client_id = st.secrets["CLIENT_ID"]
         access_token = st.secrets["ACCESS_TOKEN"]
-
         return dhanhq(client_id, access_token)
-
-    except Exception as e:
-        st.error("❌ Secrets not set properly (CLIENT_ID / ACCESS_TOKEN)")
+    except:
+        st.error("❌ CLIENT_ID / ACCESS_TOKEN missing")
         return None
 
 
-# ✅ EXPIRY LIST
+# 🔥 EXPIRY LIST
 @st.cache_data(ttl=60)
 def get_expiry_list():
     dhan = get_dhan_client()
 
     if not dhan:
-        return SAMPLE_EXPIRIES
+        return []
 
     try:
         res = dhan.expiry_list(
@@ -37,36 +28,26 @@ def get_expiry_list():
             under_exchange_segment="IDX_I"
         )
 
-        # 🔍 DEBUG
-        st.write("📊 EXPIRY API RESPONSE:", res)
-
-        if not res or "data" not in res:
-            return SAMPLE_EXPIRIES
-
-        data = res["data"]
         expiries = []
 
-        # 🔥 HANDLE ALL CASES
-        if isinstance(data, list):
-            for item in data:
+        if res and "data" in res:
+            for item in res["data"]:
                 if isinstance(item, dict) and "expiry" in item:
-                    expiries.append(item["expiry"])
-                elif isinstance(item, str):
-                    expiries.append(item)
+                    exp = item["expiry"]
 
-        elif isinstance(data, dict):
-            if "expiry" in data:
-                expiries.append(data["expiry"])
+                    # 🔥 FILTER (Tue + Thu)
+                    dt = datetime.strptime(exp, "%Y-%m-%d")
+                    if dt.weekday() in [1, 3]:
+                        expiries.append(exp)
 
-        # ✅ FINAL RETURN
-        return sorted(expiries) if expiries else SAMPLE_EXPIRIES
+        return sorted(expiries)
 
     except Exception as e:
         st.error(f"❌ Expiry Error: {e}")
-        return SAMPLE_EXPIRIES
+        return []
 
 
-# ✅ OPTION CHAIN (FINAL FIXED)
+# 🔥 OPTION CHAIN (AUTO FIX SYSTEM)
 @st.cache_data(ttl=5)
 def get_option_chain(expiry):
     dhan = get_dhan_client()
@@ -75,24 +56,32 @@ def get_option_chain(expiry):
         return None
 
     try:
-        # 🔥 MAIN FIX: DATE FORMAT CONVERT
-        expiry_api = datetime.strptime(expiry, "%Y-%m-%d").strftime("%d-%m-%Y")
-
+        # ✅ TRY ORIGINAL
         res = dhan.option_chain(
             under_security_id=13,
             under_exchange_segment="IDX_I",
-            expiry=expiry_api
+            expiry=expiry
         )
 
-        # 🔍 DEBUG
-        st.write(f"📊 OPTION CHAIN RESPONSE ({expiry_api}):", res)
+        if res.get("status") == "success":
+            return res
 
-        # 🔥 ERROR HANDLE
-        if res.get("status") == "failure":
-            st.error(f"❌ Invalid expiry: {expiry_api}")
-            return None
+        # 🔥 TRY THURSDAY AUTO
+        dt = datetime.strptime(expiry, "%Y-%m-%d")
+        thursday = dt + timedelta((3 - dt.weekday()) % 7)
+        expiry_thu = thursday.strftime("%Y-%m-%d")
 
-        return res
+        res2 = dhan.option_chain(
+            under_security_id=13,
+            under_exchange_segment="IDX_I",
+            expiry=expiry_thu
+        )
+
+        if res2.get("status") == "success":
+            return res2
+
+        st.error("❌ Invalid Expiry (Both failed)")
+        return None
 
     except Exception as e:
         st.error(f"❌ Option Chain Error: {e}")
