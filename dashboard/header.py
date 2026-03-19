@@ -1,48 +1,26 @@
-import streamlit as st
+def fetch_data():
+    return {
+        "indices": {
+            "nifty": {"ltp": 23700, "change": 120},
+            "banknifty": {"ltp": 55200, "change": 300},
+            "sensex": {"ltp": 78500, "change": 250},
+            "vix": {"ltp": 18.2, "change": -0.5},
+        },
 
-def item(name, ltp, change):
-    color = "#00c853" if change >= 0 else "#ff1744"
-    arrow = "▲" if change >= 0 else "▼"
+        "global": {
+            "dow": {"ltp": 38000, "change": 200},
+            "nasdaq": {"ltp": 16500, "change": -50},
+            "gift": {"ltp": 23750, "change": 80},
+        },
 
-    return f"""
-    <span style='margin-right:25px; font-size:13px; color:#ccc'>
-        <b style='color:white'>{name}</b> {ltp}
-        <span style='color:{color}'> {arrow} {change}</span>
-    </span>
-    """
+        "commodities": {
+            "crude": {"ltp": 6500, "change": 30},
+            "gold": {"ltp": 72000, "change": 100},
+            "silver": {"ltp": 85000, "change": 200},
+        },
 
-def show_header(data):
-
-    line1 = (
-        item("NIFTY", data["nifty"]["ltp"], data["nifty"]["change"]) +
-        item("BANKNIFTY", data["banknifty"]["ltp"], data["banknifty"]["change"]) +
-        item("SENSEX", data["sensex"]["ltp"], data["sensex"]["change"]) +
-        item("VIX", data["vix"]["ltp"], data["vix"]["change"])
-    )
-
-    line2 = (
-        item("DOW", data["dow"]["ltp"], data["dow"]["change"]) +
-        item("NASDAQ", data["nasdaq"]["ltp"], data["nasdaq"]["change"]) +
-        item("GIFT", data["gift"]["ltp"], data["gift"]["change"]) +
-        item("CRUDE", data["crude"]["ltp"], data["crude"]["change"]) +
-        item("GOLD", data["gold"]["ltp"], data["gold"]["change"]) +
-        item("SILVER", data["silver"]["ltp"], data["silver"]["change"]) +
-        item("USDINR", data["usd"]["ltp"], data["usd"]["change"]) +
-        item("DXY", data["dxy"]["ltp"], data["dxy"]["change"])
-    )
-
-    st.markdown("""
-        <style>
-        .header-strip {
-            background-color: #0E1117;
-            padding: 8px 15px;
-            border-radius: 8px;
-            margin-bottom: 5px;
-            overflow-x: auto;
-            white-space: nowrap;
+        "currency": {
+            "usd": {"ltp": 83.1, "change": 0.1},
+            "dxy": {"ltp": 104.2, "change": -0.2},
         }
-        </style>
-    """, unsafe_allow_html=True)
-
-    st.markdown(f"<div class='header-strip'>{line1}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='header-strip'>{line2}</div>", unsafe_allow_html=True)
+    }
