@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dhan Style Dashboard</title>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial;
+    background: #0f172a;
+    color: white;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: #020617;
+}
+
+.sidebar {
+    width: 200px;
+    background: #020617;
+    height: 100vh;
+    position: fixed;
+    padding: 20px;
+}
+
+.sidebar div {
+    margin: 15px 0;
+    cursor: pointer;
+}
+
+.main {
+    margin-left: 220px;
+    padding: 20px;
+}
+
+.cards {
+    display: flex;
+    gap: 15px;
+}
+
+.card {
+    background: #1e293b;
+    padding: 15px;
+    border-radius: 10px;
+    flex: 1;
+}
+
+.green { color: #00c853; }
+.red { color: #ff1744; }
+
+.watchlist, table {
+    width: 100%;
+    margin-top: 20px;
+}
+
+table {
+    border-collapse: collapse;
+}
+
+td, th {
+    padding: 10px;
+    border-bottom: 1px solid #334155;
+}
+
+</style>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<div class="header">
+    <div>📊 Dhan Pro</div>
+    <div>🔍 Search | 🔔 | 👤</div>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+    <div>🏠 Home</div>
+    <div>📈 Markets</div>
+    <div>💼 Portfolio</div>
+    <div>📜 Orders</div>
+    <div>⭐ Watchlist</div>
+    <div>⚙ Settings</div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+    <!-- CARDS -->
+    <div class="cards">
+        <div class="card">Net Worth<br><b>₹5,00,000</b></div>
+        <div class="card">Today's P&L<br><b class="green">+₹5,200</b></div>
+        <div class="card">Margin<br><b>₹1,20,000</b></div>
+        <div class="card">Buying Power<br><b>₹3,50,000</b></div>
+    </div>
+
+    <!-- CHART -->
+    <canvas id="chart" height="100"></canvas>
+
+    <!-- WATCHLIST -->
+    <h3>Watchlist</h3>
+    <table>
+        <tr><th>Stock</th><th>LTP</th><th>Change</th></tr>
+        <tr><td>NIFTY</td><td>23700</td><td class="green">+120</td></tr>
+        <tr><td>BANKNIFTY</td><td>55200</td><td class="green">+300</td></tr>
+        <tr><td>RELIANCE</td><td>2900</td><td class="red">-20</td></tr>
+    </table>
+
+    <!-- POSITIONS -->
+    <h3>Positions</h3>
+    <table>
+        <tr><th>Stock</th><th>Qty</th><th>P&L</th></tr>
+        <tr><td>NIFTY CE</td><td>50</td><td class="green">+2500</td></tr>
+        <tr><td>BANKNIFTY PE</td><td>25</td><td class="red">-1200</td></tr>
+    </table>
+
+</div>
+
+<script>
+
+// 🔥 CHART
+const ctx = document.getElementById('chart').getContext('2d');
+
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: ["9:15","10:00","11:00","12:00","1:00","2:00","3:00"],
+        datasets: [{
+            label: 'NIFTY',
+            data: [23500,23600,23700,23650,23800,23750,23700],
+            borderColor: '#00c853',
+            fill: false
+        }]
+    }
+});
+
+</script>
+
+</body>
+</html>
