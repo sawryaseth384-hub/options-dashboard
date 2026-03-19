@@ -2,32 +2,65 @@ import streamlit as st
 
 def show_header(data):
 
-    def item(d):
-        try:
-            change = float(d.get("change", 0))
-        except:
-            change = 0
+    if not data:
+        st.warning("No Data")
+        return
 
-        value = d.get("ltp", "-")
-        name = d.get("name", "-")
+    def format_item(d):
+        name = d.get("name", "")
+        price = d.get("price", 0)
+        change = float(d.get("change", 0))
 
         color = "#00c853" if change >= 0 else "#ff1744"
         arrow = "▲" if change >= 0 else "▼"
 
-        return f"<b>{name}</b> {value} <span style='color:{color}'> {arrow} {change}</span>"
+        return f"""
+        <div class="item">
+            <span class="name">{name}</span>
+            <span class="price">{price}</span>
+            <span class="change" style="color:{color}">
+                {arrow} {change}
+            </span>
+        </div>
+        """
 
-    # 🔥 SAFE LOOP
-    try:
-        line = " | ".join([item(d) for d in data])
-    except:
-        line = "No Data"
+    html = "".join([format_item(d) for d in data])
 
-    html = f"""
-    <div style="background:#0f172a; padding:8px; border-radius:8px; overflow:hidden; color:white;">
-        <marquee scrollamount="5">
-            {line}
-        </marquee>
+    st.markdown(f"""
+    <style>
+
+    .header-box {{
+        background: #0b1220;
+        padding: 10px 15px;
+        border-radius: 12px;
+        overflow-x: auto;
+        white-space: nowrap;
+    }}
+
+    .item {{
+        display: inline-block;
+        margin-right: 25px;
+        font-size: 13px;
+    }}
+
+    .name {{
+        color: #aaa;
+        margin-right: 5px;
+    }}
+
+    .price {{
+        color: white;
+        font-weight: 600;
+        margin-right: 5px;
+    }}
+
+    .change {{
+        font-weight: 500;
+    }}
+
+    </style>
+
+    <div class="header-box">
+        {html}
     </div>
-    """
-
-    st.markdown(html, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
