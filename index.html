@@ -2,100 +2,116 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Dhan Pro Dashboard</title>
+<title>Pro Trading Dashboard</title>
 
-<!-- Lightweight Charts -->
+<!-- Fonts & Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+
+<!-- Charts -->
 <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body {
-    margin: 0;
-    font-family: Arial;
-    background: #1e1e2f;
-    color: white;
+
+/* ===== THEME ===== */
+:root {
+    --bg:#0B0E11;
+    --card:#1C1F26;
+    --border:#2B3139;
+    --green:#00C076;
+    --red:#F6465D;
+    --yellow:#FFB119;
 }
 
-.header {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px 20px;
-    background: #111827;
+body{
+    margin:0;
+    font-family:'Inter',sans-serif;
+    background:var(--bg);
+    color:white;
 }
 
-.search {
-    background: #374151;
-    padding: 5px 10px;
-    border-radius: 5px;
+/* ===== HEADER ===== */
+.header{
+    display:flex;
+    justify-content:space-between;
+    padding:10px 20px;
+    background:#111;
+    align-items:center;
 }
 
-.container {
-    display: flex;
+.search{
+    background:#222;
+    padding:6px 10px;
+    border-radius:6px;
 }
 
-.sidebar {
-    width: 200px;
-    background: #111827;
-    height: 100vh;
-    padding: 20px;
+/* ===== LAYOUT ===== */
+.container{
+    display:grid;
+    grid-template-columns:200px 1fr;
 }
 
-.sidebar div {
-    margin: 15px 0;
-    cursor: pointer;
+.sidebar{
+    background:#111;
+    height:100vh;
+    padding:20px;
+    transition:0.3s;
 }
 
-.main {
-    flex: 1;
-    padding: 20px;
+.sidebar div{
+    margin:15px 0;
+    cursor:pointer;
 }
 
-.cards {
-    display: flex;
-    gap: 15px;
-    flex-wrap: wrap;
+.main{
+    padding:15px;
 }
 
-.card {
-    background: #2a2a3d;
-    padding: 15px;
-    border-radius: 10px;
-    flex: 1;
-    min-width: 150px;
+/* ===== GRID ===== */
+.grid{
+    display:grid;
+    grid-template-columns:2fr 1fr;
+    gap:10px;
 }
 
-.green { color: #00c853; }
-.red { color: #ff1744; }
-
-.watchlist {
-    overflow-x: auto;
-    white-space: nowrap;
-    margin-top: 20px;
+.card{
+    background:var(--card);
+    padding:10px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    backdrop-filter: blur(10px);
 }
 
-.watch-item {
-    display: inline-block;
-    margin-right: 20px;
+/* ===== WATCHLIST ===== */
+.watch-item{
+    display:flex;
+    justify-content:space-between;
+    padding:5px;
+    cursor:grab;
 }
 
-table {
-    width: 100%;
-    margin-top: 20px;
-    border-collapse: collapse;
+/* ===== TABLE ===== */
+table{
+    width:100%;
+    border-collapse:collapse;
 }
 
-td, th {
-    padding: 10px;
-    border-bottom: 1px solid #444;
+td,th{
+    padding:8px;
+    border-bottom:1px solid #333;
 }
 
-.sparkline {
-    width: 100px;
-    height: 30px;
-}
+/* ===== COLORS ===== */
+.green{color:var(--green)}
+.red{color:var(--red)}
 
+/* ===== RESPONSIVE ===== */
 @media(max-width:768px){
-    .sidebar { display:none; }
+    .container{grid-template-columns:1fr}
+    .sidebar{display:none}
 }
+
 </style>
 </head>
 
@@ -103,9 +119,9 @@ td, th {
 
 <!-- HEADER -->
 <div class="header">
-    <div>📊 Dhan Pro</div>
-    <div class="search">🔍 Search</div>
-    <div>🔔 👤</div>
+    <div>📊 Pro Trader</div>
+    <div class="search">🔍 Search (⌘K)</div>
+    <div><i class="fa fa-bell"></i> <i class="fa fa-user"></i></div>
 </div>
 
 <div class="container">
@@ -117,41 +133,52 @@ td, th {
     <div>💼 Portfolio</div>
     <div>📜 Orders</div>
     <div>⭐ Watchlist</div>
-    <div>⚙ Settings</div>
 </div>
 
 <!-- MAIN -->
 <div class="main">
 
-<!-- CARDS -->
-<div class="cards">
-    <div class="card">Net Worth<br><b>₹5,00,000</b></div>
-    <div class="card">Today's P&L<br><b class="green">+₹5,200</b></div>
-    <div class="card">Margin<br><b>₹1,20,000</b></div>
-    <div class="card">Buying Power<br><b>₹3,50,000</b></div>
+<!-- GRID -->
+<div class="grid">
+
+<!-- LEFT: CHART -->
+<div class="card">
+    <div id="chart" style="height:300px;"></div>
+
+    <div>
+        <button onclick="changeTF('1D')">1D</button>
+        <button onclick="changeTF('1W')">1W</button>
+        <button onclick="changeTF('1M')">1M</button>
+    </div>
 </div>
 
-<!-- CHART -->
-<h3>Market Chart</h3>
-<div id="chart" style="height:300px;"></div>
+<!-- RIGHT: WATCHLIST -->
+<div class="card">
+    <h4>Watchlist</h4>
+    <div id="watchlist"></div>
+</div>
 
-<!-- WATCHLIST -->
-<h3>Watchlist</h3>
-<div class="watchlist" id="watchlist"></div>
+</div>
 
 <!-- POSITIONS -->
-<h3>Positions</h3>
+<div class="card">
+<h4>Positions</h4>
 <table>
-<tr><th>Stock</th><th>Qty</th><th>P&L</th></tr>
+<tr><th>Symbol</th><th>Qty</th><th>P&L</th></tr>
 <tr><td>NIFTY CE</td><td>50</td><td class="green">+2500</td></tr>
 <tr><td>BANKNIFTY PE</td><td>25</td><td class="red">-1200</td></tr>
 </table>
+</div>
 
-<!-- MARKET OVERVIEW -->
-<h3>Market Overview</h3>
-<div style="display:flex; gap:20px;">
-    <canvas id="niftyChart" class="sparkline"></canvas>
-    <canvas id="sensexChart" class="sparkline"></canvas>
+<!-- MARKET DEPTH -->
+<div class="card">
+<h4>Market Depth</h4>
+<div id="depth"></div>
+</div>
+
+<!-- MINI CHART -->
+<div class="card">
+<canvas id="miniChart"></canvas>
 </div>
 
 </div>
@@ -159,57 +186,81 @@ td, th {
 
 <script>
 
-// 🔥 WATCHLIST DATA
-const stocks = [
-    {name:"NIFTY", price:23700, change:120},
-    {name:"BANKNIFTY", price:55200, change:300},
-    {name:"RELIANCE", price:2900, change:-20},
-    {name:"TCS", price:3800, change:50}
+// ===== WATCHLIST =====
+let stocks = [
+ {name:"NIFTY",price:23700,change:120},
+ {name:"BANKNIFTY",price:55200,change:300},
+ {name:"RELIANCE",price:2900,change:-20}
 ];
 
-const wl = document.getElementById("watchlist");
+function renderWL(){
+    let wl=document.getElementById("watchlist");
+    wl.innerHTML="";
+    stocks.forEach((s,i)=>{
+        let d=document.createElement("div");
+        d.className="watch-item";
+        d.draggable=true;
 
-stocks.forEach(s=>{
-    let div = document.createElement("div");
-    div.className="watch-item";
-    div.innerHTML = `${s.name} ${s.price} <span style="color:${s.change>0?"#00c853":"#ff1744"}">${s.change}</span>`;
-    wl.appendChild(div);
-});
+        d.innerHTML=`${s.name} ${s.price} 
+        <span class="${s.change>0?'green':'red'}">${s.change}</span>`;
 
-// 🔥 CANDLESTICK CHART
-const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-    width: 800,
-    height: 300,
-    layout: { background: { color: '#1e1e2f' }, textColor: 'white' },
-});
-
-const candleSeries = chart.addCandlestickSeries();
-
-candleSeries.setData([
-    { time: '2024-01-01', open: 220, high: 230, low: 210, close: 225 },
-    { time: '2024-01-02', open: 225, high: 235, low: 220, close: 230 },
-    { time: '2024-01-03', open: 230, high: 240, low: 225, close: 235 },
-]);
-
-// 🔥 SPARKLINE
-function spark(id){
-    let ctx=document.getElementById(id).getContext("2d");
-    new Chart(ctx,{
-        type:"line",
-        data:{
-            labels:[1,2,3,4,5],
-            datasets:[{
-                data:[10,20,15,25,30],
-                borderColor:"#00c853",
-                fill:false
-            }]
-        },
-        options:{plugins:{legend:false},scales:{x:{display:false},y:{display:false}}}
+        wl.appendChild(d);
     });
 }
+renderWL();
 
-spark("niftyChart");
-spark("sensexChart");
+// ===== LIVE UPDATE =====
+setInterval(()=>{
+    stocks.forEach(s=>{
+        let move=(Math.random()*20-10);
+        s.price+=move;
+        s.change=move;
+    });
+    renderWL();
+},3000);
+
+// ===== CHART =====
+const chart = LightweightCharts.createChart(document.getElementById('chart'),{
+    layout:{background:{color:'#0B0E11'},textColor:'#fff'}
+});
+
+const candle = chart.addCandlestickSeries();
+
+candle.setData([
+ {time:'2024-01-01',open:100,high:110,low:90,close:105},
+ {time:'2024-01-02',open:105,high:115,low:100,close:110},
+]);
+
+function changeTF(tf){
+    alert("Timeframe: "+tf);
+}
+
+// ===== MINI CHART =====
+new Chart(document.getElementById("miniChart"),{
+ type:'line',
+ data:{
+  labels:[1,2,3,4,5],
+  datasets:[{data:[10,20,15,25,30],borderColor:'#00C076'}]
+ },
+ options:{plugins:{legend:false}}
+});
+
+// ===== MARKET DEPTH =====
+function renderDepth(){
+ let d=document.getElementById("depth");
+ d.innerHTML="";
+ for(let i=0;i<5;i++){
+  let bid=Math.random()*100;
+  let ask=Math.random()*100;
+
+  d.innerHTML+=`
+   <div style="display:flex">
+    <div style="background:green;width:${bid}px">${bid.toFixed(0)}</div>
+    <div style="background:red;width:${ask}px">${ask.toFixed(0)}</div>
+   </div>`;
+ }
+}
+renderDepth();
 
 </script>
 
