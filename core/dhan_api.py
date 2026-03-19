@@ -1,26 +1,35 @@
 import streamlit as st
 from dhanhq import dhanhq
+from datetime import datetime
 
-# 🔥 TEMP HARDCODE (test ke liye)
-CLIENT_ID = "1106299230"
-ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczOTkxNDkzLCJpYXQiOjE3NzM5MDUwOTMsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0.ncZAsyuAXxOIfT_6O9j_51FKeTo2lL46RzaHnHgWhnfeeb5jIMP0qGxAeK3F7bEyY7FQg8yPKuHJYQ04YV3r5w"
+# 🔥 FALLBACK
+FALLBACK_EXPIRIES = [
+    "2026-03-24",
+    "2026-03-31",
+    "2026-04-07",
+    "2026-04-14"
+]
 
+# ✅ CLIENT
 @st.cache_resource
 def get_dhan_client():
     try:
-        return dhanhq(CLIENT_ID, ACCESS_TOKEN)
+        return dhanhq(
+            st.secrets["CLIENT_ID"],
+            st.secrets["ACCESS_TOKEN"]
+        )
     except Exception as e:
-        st.error(f"Client Error: {e}")
+        st.error(f"❌ Secret Error: {e}")
         return None
 
 
+# ✅ EXPIRY LIST (FINAL CORRECT)
 @st.cache_data(ttl=60)
 def get_expiry_list():
     dhan = get_dhan_client()
 
     if not dhan:
-        st.error("❌ Client not created")
-        return []
+        return FALLBACK_EXPIRIES
 
     try:
         res = dhan.expiry_list(
@@ -28,17 +37,52 @@ def get_expiry_list():
             under_exchange_segment="IDX_I"
         )
 
-        st.write("📦 API RESPONSE:", res)  # 👈 IMPORTANT
+        st.write("📦 EXPIRY RAW:", res)
+
+        if not res or res.get("status") != "success":
+            return FALLBACK_EXPIRIES
 
         expiries = []
 
-        if res and "data" in res:
-            for item in res["data"]:
-                if isinstance(item, dict) and "expiry" in item:
-                    expiries.append(item["expiry"])
+        # ✅ CORRECT (array of strings)
+        for exp in res["data"]:
+            if isinstance(exp, str):
+                expiries.append(exp)
 
-        return expiries
+        # 🔥 IMPORTANT: empty fallback
+        if not expiries:
+            return FALLBACK_EXPIRIES
+
+        return sorted(expiries)
 
     except Exception as e:
-        st.error(f"Expiry Error: {e}")
-        return []
+        st.error(f"❌ Expiry Error: {e}")
+        return FALLBACK_EXPIRIES
+
+
+# ✅ OPTION CHAIN (FINAL FIX)
+@st.cache_data(ttl=5)
+def get_option_chain(expiry):
+    dhan = get_dhan_client()
+
+    if not dhan:
+        return None
+
+    try:
+        res = dhan.option_chain(
+            under_security_id=13,
+            under_exchange_segment="IDX_I",
+            expiry=expiry   # ✅ KEEP SAME FORMAT (YYYY-MM-DD)
+        )
+
+        st.write("📊 OPTION RAW:", res)
+
+        if not res or res.get("status") != "success":
+            st.error("❌ Option API Failed")
+            return None
+
+        return res
+
+    except Exception as e:
+        st.error(f"❌ Option Chain Error: {e}")
+        return None
