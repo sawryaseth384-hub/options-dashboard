@@ -7,41 +7,54 @@ def show_header(data):
         st.warning("No Data")
         return
 
-    items_html = ""
+    # 🔹 Split data into 2 rows
+    row1 = data[:4]    # Indian
+    row2 = data[4:]    # Global + Commodity
 
-    for d in data:
-        name = d.get("name", "")
-        price = d.get("price") or d.get("ltp") or 0
-        change = float(d.get("change", 0))
+    def build_row(row):
+        html = ""
+        for d in row:
+            name = d.get("name", "")
+            price = d.get("price") or d.get("ltp") or 0
+            change = float(d.get("change", 0))
 
-        color = "#00c853" if change >= 0 else "#ff1744"
-        arrow = "▲" if change >= 0 else "▼"
+            color = "#00c853" if change >= 0 else "#ff1744"
+            arrow = "▲" if change >= 0 else "▼"
 
-        items_html += f"""
-        <span class="item">
-            <b>{name}</b> {price}
-            <span style="color:{color}"> {arrow} {change}</span>
-        </span>
-        """
+            html += f"""
+            <span class="item">
+                <b>{name}</b> {price}
+                <span style="color:{color}"> {arrow} {change}</span>
+            </span>
+            """
+        return html
+
+    row1_html = build_row(row1)
+    row2_html = build_row(row2)
 
     final_html = f"""
     <style>
-    .ticker-container {{
+    .box {{
         background:#0b1220;
         padding:10px;
         border-radius:10px;
         overflow:hidden;
-        white-space:nowrap;
+        font-size:13px;
     }}
 
     .ticker {{
+        white-space:nowrap;
+        overflow:hidden;
+        margin-bottom:5px;
+    }}
+
+    .scroll {{
         display:inline-block;
         animation: scroll 25s linear infinite;
     }}
 
     .item {{
         margin-right:25px;
-        font-size:13px;
         color:#bbb;
     }}
 
@@ -51,12 +64,14 @@ def show_header(data):
     }}
     </style>
 
-    <div class="ticker-container">
+    <div class="box">
         <div class="ticker">
-            {items_html}
-            {items_html}  <!-- duplicate for smooth loop -->
+            <div class="scroll">{row1_html}{row1_html}</div>
+        </div>
+        <div class="ticker">
+            <div class="scroll">{row2_html}{row2_html}</div>
         </div>
     </div>
     """
 
-    components.html(final_html, height=60)
+    components.html(final_html, height=80)
