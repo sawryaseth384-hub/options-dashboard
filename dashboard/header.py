@@ -7,7 +7,7 @@ def show_header(data):
         st.warning("No Data")
         return
 
-    html = ""
+    items_html = ""
 
     for d in data:
         name = d.get("name", "")
@@ -17,7 +17,7 @@ def show_header(data):
         color = "#00c853" if change >= 0 else "#ff1744"
         arrow = "▲" if change >= 0 else "▼"
 
-        html += f"""
+        items_html += f"""
         <span class="item">
             <b>{name}</b> {price}
             <span style="color:{color}"> {arrow} {change}</span>
@@ -25,18 +25,38 @@ def show_header(data):
         """
 
     final_html = f"""
-    <div style="
+    <style>
+    .ticker-container {{
         background:#0b1220;
         padding:10px;
         border-radius:10px;
-        overflow-x:auto;
+        overflow:hidden;
         white-space:nowrap;
+    }}
+
+    .ticker {{
+        display:inline-block;
+        animation: scroll 25s linear infinite;
+    }}
+
+    .item {{
+        margin-right:25px;
         font-size:13px;
         color:#bbb;
-    ">
-        {html}
+    }}
+
+    @keyframes scroll {{
+        0% {{ transform: translateX(100%); }}
+        100% {{ transform: translateX(-100%); }}
+    }}
+    </style>
+
+    <div class="ticker-container">
+        <div class="ticker">
+            {items_html}
+            {items_html}  <!-- duplicate for smooth loop -->
+        </div>
     </div>
     """
 
-    # 🔥 THIS FIXES EVERYTHING
     components.html(final_html, height=60)
