@@ -16,6 +16,8 @@ if refresh:
 # 🔥 EXPIRY
 expiry_list = get_expiry_list()
 
+st.write("📆 EXPIRIES:", expiry_list)  # debug
+
 if not expiry_list:
     st.error("❌ Expiry load failed")
     st.stop()
@@ -23,21 +25,20 @@ if not expiry_list:
 selected_expiry = st.selectbox("Select Expiry", expiry_list)
 
 # 🔥 OPTION CHAIN
-raw = get_option_chain(selected_expiry)
+raw_data = get_option_chain(selected_expiry)
 
-if not raw:
-    st.error("❌ Option chain failed")
+if not raw_data:
+    st.error("❌ Option chain not received")
     st.stop()
 
 # 🔥 PROCESS
-df, spot = process_option_data(raw)
+df, spot = process_option_data(raw_data)
 
 if df.empty:
-    st.warning("No data")
+    st.warning("⚠️ No data")
     st.stop()
 
-# 🔥 SPOT
-st.metric("📊 Spot Price", f"{spot}")
+# 🔥 DISPLAY
+st.metric("📊 Spot Price", f"₹{spot:,.2f}")
 
-# 🔥 SIMPLE VIEW
-st.dataframe(df, use_container_width=True)
+st.dataframe(df)
