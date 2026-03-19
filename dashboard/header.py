@@ -3,13 +3,24 @@ import streamlit as st
 def show_header(data):
 
     def item(d):
-        change = float(d["change"])
+        try:
+            change = float(d.get("change", 0))
+        except:
+            change = 0
+
+        value = d.get("ltp", "-")
+        name = d.get("name", "-")
+
         color = "#00c853" if change >= 0 else "#ff1744"
         arrow = "▲" if change >= 0 else "▼"
 
-        return f"<b>{d['name']}</b> {d['ltp']} <span style='color:{color}'> {arrow} {change}</span>"
+        return f"<b>{name}</b> {value} <span style='color:{color}'> {arrow} {change}</span>"
 
-    line = " | ".join([item(d) for d in data])
+    # 🔥 SAFE LOOP
+    try:
+        line = " | ".join([item(d) for d in data])
+    except:
+        line = "No Data"
 
     html = f"""
     <div style="background:#0f172a; padding:8px; border-radius:8px; overflow:hidden; color:white;">
