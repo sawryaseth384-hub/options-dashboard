@@ -8,8 +8,14 @@ def show_header(data):
     cur = data["currency"]
 
     def item(name, value, change):
+        try:
+            change = float(change)
+        except:
+            change = 0
+
         color = "#00c853" if change >= 0 else "#ff1744"
         arrow = "▲" if change >= 0 else "▼"
+
         return f"<b style='color:white'>{name}</b> {value} <span style='color:{color}'> {arrow} {change}</span>"
 
     line1 = " | ".join([
@@ -30,10 +36,9 @@ def show_header(data):
         item("DXY", cur["dxy"]["ltp"], cur["dxy"]["change"]),
     ])
 
-    # 🔥 Slim UI
     st.markdown(f"""
     <div style="background:#0f172a; padding:6px 10px; border-radius:6px; font-size:13px;">
-        <marquee behavior="scroll" direction="left">{line1}</marquee>
-        <marquee behavior="scroll" direction="left">{line2}</marquee>
+        <marquee scrollamount="5">{line1}</marquee>
+        <marquee scrollamount="5">{line2}</marquee>
     </div>
     """, unsafe_allow_html=True)
