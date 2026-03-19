@@ -1,26 +1,34 @@
 import streamlit as st
 from dhanhq import dhanhq
-from datetime import datetime, timedelta
 
-# 🔥 CLIENT
+# 🔥 FALLBACK (ALWAYS WORKING)
+FALLBACK_EXPIRIES = [
+    "2026-03-24",
+    "2026-03-31",
+    "2026-04-07",
+    "2026-04-14"
+]
+
+# ✅ CLIENT
 @st.cache_resource
 def get_dhan_client():
     try:
-        client_id = st.secrets["CLIENT_ID"]
-        access_token = st.secrets["ACCESS_TOKEN"]
-        return dhanhq(client_id, access_token)
+        return dhanhq(
+            st.secrets["CLIENT_ID"],
+            st.secrets["ACCESS_TOKEN"]
+        )
     except:
         st.error("❌ CLIENT_ID / ACCESS_TOKEN missing")
         return None
 
 
-# 🔥 EXPIRY LIST
+# ✅ EXPIRY LIST (FINAL SAFE VERSION)
 @st.cache_data(ttl=60)
 def get_expiry_list():
     dhan = get_dhan_client()
 
     if not dhan:
-        return []
+        return FALLBACK_EXPIRIES
 
     try:
         res = dhan.expiry_list(
@@ -28,26 +36,28 @@ def get_expiry_list():
             under_exchange_segment="IDX_I"
         )
 
+        st.write("📦 EXPIRY API:", res)  # debug
+
         expiries = []
 
         if res and "data" in res:
             for item in res["data"]:
                 if isinstance(item, dict) and "expiry" in item:
-                    exp = item["expiry"]
+                    expiries.append(item["expiry"])
 
-                    # 🔥 FILTER (Tue + Thu)
-                    dt = datetime.strptime(exp, "%Y-%m-%d")
-                    if dt.weekday() in [1, 3]:
-                        expiries.append(exp)
+        # 🔥 IMPORTANT: fallback if empty
+        if not expiries:
+            st.warning("⚠️ Using fallback expiry")
+            return FALLBACK_EXPIRIES
 
         return sorted(expiries)
 
     except Exception as e:
         st.error(f"❌ Expiry Error: {e}")
-        return []
+        return FALLBACK_EXPIRIES
 
 
-# 🔥 OPTION CHAIN (AUTO FIX SYSTEM)
+# ✅ OPTION CHAIN (NO FORMAT CHANGE)
 @st.cache_data(ttl=5)
 def get_option_chain(expiry):
     dhan = get_dhan_client()
@@ -56,32 +66,19 @@ def get_option_chain(expiry):
         return None
 
     try:
-        # ✅ TRY ORIGINAL
         res = dhan.option_chain(
             under_security_id=13,
             under_exchange_segment="IDX_I",
             expiry=expiry
         )
 
-        if res.get("status") == "success":
-            return res
+        st.write("📊 OPTION RESPONSE:", res)
 
-        # 🔥 TRY THURSDAY AUTO
-        dt = datetime.strptime(expiry, "%Y-%m-%d")
-        thursday = dt + timedelta((3 - dt.weekday()) % 7)
-        expiry_thu = thursday.strftime("%Y-%m-%d")
+        if res.get("status") == "failure":
+            st.error("❌ Invalid expiry")
+            return None
 
-        res2 = dhan.option_chain(
-            under_security_id=13,
-            under_exchange_segment="IDX_I",
-            expiry=expiry_thu
-        )
-
-        if res2.get("status") == "success":
-            return res2
-
-        st.error("❌ Invalid Expiry (Both failed)")
-        return None
+        return res
 
     except Exception as e:
         st.error(f"❌ Option Chain Error: {e}")
