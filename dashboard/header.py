@@ -1,16 +1,5 @@
 import streamlit as st
 
-def item(name, ltp, change):
-    color = "#00c853" if change >= 0 else "#ff1744"
-    arrow = "▲" if change >= 0 else "▼"
-
-    return f"""
-    <span style='margin-right:25px; font-size:13px; color:#ccc'>
-        <b style='color:white'>{name}</b> {ltp}
-        <span style='color:{color}'> {arrow} {change}</span>
-    </span>
-    """
-
 def show_header(data):
 
     idx = data["indices"]
@@ -18,36 +7,26 @@ def show_header(data):
     cmd = data["commodities"]
     cur = data["currency"]
 
-    line1 = (
-        item("NIFTY", idx["nifty"]["ltp"], idx["nifty"]["change"]) +
-        item("BANKNIFTY", idx["banknifty"]["ltp"], idx["banknifty"]["change"]) +
-        item("SENSEX", idx["sensex"]["ltp"], idx["sensex"]["change"]) +
-        item("VIX", idx["vix"]["ltp"], idx["vix"]["change"])
-    )
+    # 🔥 LINE 1
+    col1, col2, col3, col4 = st.columns(4)
 
-    line2 = (
-        item("DOW", glb["dow"]["ltp"], glb["dow"]["change"]) +
-        item("NASDAQ", glb["nasdaq"]["ltp"], glb["nasdaq"]["change"]) +
-        item("GIFT", glb["gift"]["ltp"], glb["gift"]["change"]) +
-        item("CRUDE", cmd["crude"]["ltp"], cmd["crude"]["change"]) +
-        item("GOLD", cmd["gold"]["ltp"], cmd["gold"]["change"]) +
-        item("SILVER", cmd["silver"]["ltp"], cmd["silver"]["change"]) +
-        item("USDINR", cur["usd"]["ltp"], cur["usd"]["change"]) +
-        item("DXY", cur["dxy"]["ltp"], cur["dxy"]["change"])
-    )
+    col1.metric("NIFTY", idx["nifty"]["ltp"], idx["nifty"]["change"])
+    col2.metric("BANKNIFTY", idx["banknifty"]["ltp"], idx["banknifty"]["change"])
+    col3.metric("SENSEX", idx["sensex"]["ltp"], idx["sensex"]["change"])
+    col4.metric("VIX", idx["vix"]["ltp"], idx["vix"]["change"])
 
-    st.markdown("""
-    <style>
-    .strip {
-        background:#0E1117;
-        padding:8px 15px;
-        border-radius:8px;
-        margin-bottom:5px;
-        white-space:nowrap;
-        overflow-x:auto;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # 🔥 LINE 2
+    col5, col6, col7, col8 = st.columns(4)
 
-    st.markdown(f"<div class='strip'>{line1}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='strip'>{line2}</div>", unsafe_allow_html=True)
+    col5.metric("DOW", glb["dow"]["ltp"], glb["dow"]["change"])
+    col6.metric("NASDAQ", glb["nasdaq"]["ltp"], glb["nasdaq"]["change"])
+    col7.metric("GIFT", glb["gift"]["ltp"], glb["gift"]["change"])
+    col8.metric("CRUDE", cmd["crude"]["ltp"], cmd["crude"]["change"])
+
+    # 🔥 LINE 3
+    col9, col10, col11, col12 = st.columns(4)
+
+    col9.metric("GOLD", cmd["gold"]["ltp"], cmd["gold"]["change"])
+    col10.metric("SILVER", cmd["silver"]["ltp"], cmd["silver"]["change"])
+    col11.metric("USDINR", cur["usd"]["ltp"], cur["usd"]["change"])
+    col12.metric("DXY", cur["dxy"]["ltp"], cur["dxy"]["change"])
