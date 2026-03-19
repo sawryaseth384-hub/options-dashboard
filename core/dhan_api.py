@@ -6,7 +6,7 @@ def get_expiry_list():
     dhan = get_dhan_client()
 
     if not dhan:
-        st.warning("⚠️ Dhan client not available")
+        st.error("❌ Dhan client not initialized")
         return []
 
     try:
@@ -29,16 +29,16 @@ def get_expiry_list():
                     try:
                         dt = datetime.strptime(item, "%Y-%m-%d")
 
-                        # 🔥 NIFTY = Tuesday expiry only
+                        # 🔥 NIFTY expiry = Tuesday only
                         if dt.weekday() == 1:
                             expiries.append(item)
 
                     except Exception:
                         continue
 
-        # 🔥 अगर filter से empty हो जाए → fallback
+        # 🔥 अगर filter के बाद कुछ नहीं बचा
         if not expiries:
-            st.warning("⚠️ No Tuesday expiry found, showing all expiries")
+            st.warning("⚠️ No Tuesday expiry found → showing all expiries")
             expiries = res.get("data", []) if res else []
 
         return sorted(expiries)
