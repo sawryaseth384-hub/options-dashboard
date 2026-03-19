@@ -1,12 +1,12 @@
 import streamlit as st
 from dhanhq import dhanhq
+from datetime import datetime
 
-# 🔥 FALLBACK DATA (जब API fail हो)
+# 🔥 CORRECT FALLBACK DATA (valid expiry)
 SAMPLE_EXPIRIES = [
-    "2026-03-26",
-    "2026-04-02",
-    "2026-04-09",
-    "2026-04-16"
+    "2026-03-24",
+    "2026-03-30",
+    "2026-04-07",
 ]
 
 # ✅ DHAN CLIENT (STREAMLIT SECRETS)
@@ -37,7 +37,7 @@ def get_expiry_list():
             under_exchange_segment="IDX_I"
         )
 
-        # 🔍 DEBUG (screen pe dikhega)
+        # 🔍 DEBUG
         st.write("📊 EXPIRY API RESPONSE:", res)
 
         if not res or "data" not in res:
@@ -58,7 +58,7 @@ def get_expiry_list():
             if "expiry" in data:
                 expiries.append(data["expiry"])
 
-        # ✅ fallback safety
+        # ✅ FINAL RETURN
         return sorted(expiries) if expiries else SAMPLE_EXPIRIES
 
     except Exception as e:
@@ -66,7 +66,7 @@ def get_expiry_list():
         return SAMPLE_EXPIRIES
 
 
-# ✅ OPTION CHAIN
+# ✅ OPTION CHAIN (FINAL FIXED)
 @st.cache_data(ttl=5)
 def get_option_chain(expiry):
     dhan = get_dhan_client()
@@ -75,14 +75,22 @@ def get_option_chain(expiry):
         return None
 
     try:
+        # 🔥 MAIN FIX: DATE FORMAT CONVERT
+        expiry_api = datetime.strptime(expiry, "%Y-%m-%d").strftime("%d-%m-%Y")
+
         res = dhan.option_chain(
             under_security_id=13,
             under_exchange_segment="IDX_I",
-            expiry=expiry
+            expiry=expiry_api
         )
 
         # 🔍 DEBUG
-        st.write("📊 OPTION CHAIN RESPONSE:", res)
+        st.write(f"📊 OPTION CHAIN RESPONSE ({expiry_api}):", res)
+
+        # 🔥 ERROR HANDLE
+        if res.get("status") == "failure":
+            st.error(f"❌ Invalid expiry: {expiry_api}")
+            return None
 
         return res
 
