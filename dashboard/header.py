@@ -18,6 +18,7 @@ def show_header(data):
 
         return f"<b style='color:white'>{name}</b> {value} <span style='color:{color}'> {arrow} {change}</span>"
 
+    # 🔥 LINE 1 (India)
     line1 = " | ".join([
         item("NIFTY", idx["nifty"]["ltp"], idx["nifty"]["change"]),
         item("BANKNIFTY", idx["banknifty"]["ltp"], idx["banknifty"]["change"]),
@@ -25,6 +26,7 @@ def show_header(data):
         item("VIX", idx["vix"]["ltp"], idx["vix"]["change"]),
     ])
 
+    # 🔥 LINE 2 (Global + Commodity + Currency)
     line2 = " | ".join([
         item("DOW", glb["dow"]["ltp"], glb["dow"]["change"]),
         item("NASDAQ", glb["nasdaq"]["ltp"], glb["nasdaq"]["change"]),
@@ -36,9 +38,29 @@ def show_header(data):
         item("DXY", cur["dxy"]["ltp"], cur["dxy"]["change"]),
     ])
 
+    # 🔥 FINAL UI (SMOOTH SCROLL)
     st.markdown(f"""
-    <div style="background:#0f172a; padding:6px 10px; border-radius:6px; font-size:13px;">
-        <marquee scrollamount="5">{line1}</marquee>
-        <marquee scrollamount="5">{line2}</marquee>
+    <div style="background:#0f172a; padding:6px 10px; border-radius:8px; font-size:13px; overflow:hidden;">
+
+        <div style="white-space:nowrap; display:inline-block; animation: scroll1 20s linear infinite;">
+            {line1} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {line1}
+        </div>
+
+        <div style="white-space:nowrap; display:inline-block; animation: scroll2 25s linear infinite;">
+            {line2} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {line2}
+        </div>
+
     </div>
+
+    <style>
+    @keyframes scroll1 {{
+        0% {{ transform: translateX(100%); }}
+        100% {{ transform: translateX(-100%); }}
+    }}
+
+    @keyframes scroll2 {{
+        0% {{ transform: translateX(100%); }}
+        100% {{ transform: translateX(-100%); }}
+    }}
+    </style>
     """, unsafe_allow_html=True)
