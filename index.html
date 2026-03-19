@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Dhan Style Dashboard</title>
+<title>Dhan Pro Dashboard</title>
 
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Lightweight Charts -->
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 
 <style>
 body {
     margin: 0;
     font-family: Arial;
-    background: #0f172a;
+    background: #1e1e2f;
     color: white;
 }
 
@@ -19,14 +19,23 @@ body {
     display: flex;
     justify-content: space-between;
     padding: 10px 20px;
-    background: #020617;
+    background: #111827;
+}
+
+.search {
+    background: #374151;
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+
+.container {
+    display: flex;
 }
 
 .sidebar {
     width: 200px;
-    background: #020617;
+    background: #111827;
     height: 100vh;
-    position: fixed;
     padding: 20px;
 }
 
@@ -36,39 +45,57 @@ body {
 }
 
 .main {
-    margin-left: 220px;
+    flex: 1;
     padding: 20px;
 }
 
 .cards {
     display: flex;
     gap: 15px;
+    flex-wrap: wrap;
 }
 
 .card {
-    background: #1e293b;
+    background: #2a2a3d;
     padding: 15px;
     border-radius: 10px;
     flex: 1;
+    min-width: 150px;
 }
 
 .green { color: #00c853; }
 .red { color: #ff1744; }
 
-.watchlist, table {
-    width: 100%;
+.watchlist {
+    overflow-x: auto;
+    white-space: nowrap;
     margin-top: 20px;
 }
 
+.watch-item {
+    display: inline-block;
+    margin-right: 20px;
+}
+
 table {
+    width: 100%;
+    margin-top: 20px;
     border-collapse: collapse;
 }
 
 td, th {
     padding: 10px;
-    border-bottom: 1px solid #334155;
+    border-bottom: 1px solid #444;
 }
 
+.sparkline {
+    width: 100px;
+    height: 30px;
+}
+
+@media(max-width:768px){
+    .sidebar { display:none; }
+}
 </style>
 </head>
 
@@ -77,8 +104,11 @@ td, th {
 <!-- HEADER -->
 <div class="header">
     <div>📊 Dhan Pro</div>
-    <div>🔍 Search | 🔔 | 👤</div>
+    <div class="search">🔍 Search</div>
+    <div>🔔 👤</div>
 </div>
+
+<div class="container">
 
 <!-- SIDEBAR -->
 <div class="sidebar">
@@ -93,53 +123,93 @@ td, th {
 <!-- MAIN -->
 <div class="main">
 
-    <!-- CARDS -->
-    <div class="cards">
-        <div class="card">Net Worth<br><b>₹5,00,000</b></div>
-        <div class="card">Today's P&L<br><b class="green">+₹5,200</b></div>
-        <div class="card">Margin<br><b>₹1,20,000</b></div>
-        <div class="card">Buying Power<br><b>₹3,50,000</b></div>
-    </div>
+<!-- CARDS -->
+<div class="cards">
+    <div class="card">Net Worth<br><b>₹5,00,000</b></div>
+    <div class="card">Today's P&L<br><b class="green">+₹5,200</b></div>
+    <div class="card">Margin<br><b>₹1,20,000</b></div>
+    <div class="card">Buying Power<br><b>₹3,50,000</b></div>
+</div>
 
-    <!-- CHART -->
-    <canvas id="chart" height="100"></canvas>
+<!-- CHART -->
+<h3>Market Chart</h3>
+<div id="chart" style="height:300px;"></div>
 
-    <!-- WATCHLIST -->
-    <h3>Watchlist</h3>
-    <table>
-        <tr><th>Stock</th><th>LTP</th><th>Change</th></tr>
-        <tr><td>NIFTY</td><td>23700</td><td class="green">+120</td></tr>
-        <tr><td>BANKNIFTY</td><td>55200</td><td class="green">+300</td></tr>
-        <tr><td>RELIANCE</td><td>2900</td><td class="red">-20</td></tr>
-    </table>
+<!-- WATCHLIST -->
+<h3>Watchlist</h3>
+<div class="watchlist" id="watchlist"></div>
 
-    <!-- POSITIONS -->
-    <h3>Positions</h3>
-    <table>
-        <tr><th>Stock</th><th>Qty</th><th>P&L</th></tr>
-        <tr><td>NIFTY CE</td><td>50</td><td class="green">+2500</td></tr>
-        <tr><td>BANKNIFTY PE</td><td>25</td><td class="red">-1200</td></tr>
-    </table>
+<!-- POSITIONS -->
+<h3>Positions</h3>
+<table>
+<tr><th>Stock</th><th>Qty</th><th>P&L</th></tr>
+<tr><td>NIFTY CE</td><td>50</td><td class="green">+2500</td></tr>
+<tr><td>BANKNIFTY PE</td><td>25</td><td class="red">-1200</td></tr>
+</table>
 
+<!-- MARKET OVERVIEW -->
+<h3>Market Overview</h3>
+<div style="display:flex; gap:20px;">
+    <canvas id="niftyChart" class="sparkline"></canvas>
+    <canvas id="sensexChart" class="sparkline"></canvas>
+</div>
+
+</div>
 </div>
 
 <script>
 
-// 🔥 CHART
-const ctx = document.getElementById('chart').getContext('2d');
+// 🔥 WATCHLIST DATA
+const stocks = [
+    {name:"NIFTY", price:23700, change:120},
+    {name:"BANKNIFTY", price:55200, change:300},
+    {name:"RELIANCE", price:2900, change:-20},
+    {name:"TCS", price:3800, change:50}
+];
 
-new Chart(ctx, {
-    type: 'line',
-    data: {
-        labels: ["9:15","10:00","11:00","12:00","1:00","2:00","3:00"],
-        datasets: [{
-            label: 'NIFTY',
-            data: [23500,23600,23700,23650,23800,23750,23700],
-            borderColor: '#00c853',
-            fill: false
-        }]
-    }
+const wl = document.getElementById("watchlist");
+
+stocks.forEach(s=>{
+    let div = document.createElement("div");
+    div.className="watch-item";
+    div.innerHTML = `${s.name} ${s.price} <span style="color:${s.change>0?"#00c853":"#ff1744"}">${s.change}</span>`;
+    wl.appendChild(div);
 });
+
+// 🔥 CANDLESTICK CHART
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    width: 800,
+    height: 300,
+    layout: { background: { color: '#1e1e2f' }, textColor: 'white' },
+});
+
+const candleSeries = chart.addCandlestickSeries();
+
+candleSeries.setData([
+    { time: '2024-01-01', open: 220, high: 230, low: 210, close: 225 },
+    { time: '2024-01-02', open: 225, high: 235, low: 220, close: 230 },
+    { time: '2024-01-03', open: 230, high: 240, low: 225, close: 235 },
+]);
+
+// 🔥 SPARKLINE
+function spark(id){
+    let ctx=document.getElementById(id).getContext("2d");
+    new Chart(ctx,{
+        type:"line",
+        data:{
+            labels:[1,2,3,4,5],
+            datasets:[{
+                data:[10,20,15,25,30],
+                borderColor:"#00c853",
+                fill:false
+            }]
+        },
+        options:{plugins:{legend:false},scales:{x:{display:false},y:{display:false}}}
+    });
+}
+
+spark("niftyChart");
+spark("sensexChart");
 
 </script>
 
