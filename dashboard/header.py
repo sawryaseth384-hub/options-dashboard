@@ -7,9 +7,8 @@ def show_header(data):
         st.warning("No Data")
         return
 
-    # 🔹 Split data into 2 rows
-    row1 = data[:4]    # Indian
-    row2 = data[4:]    # Global + Commodity
+    row1 = data[:4]   # Indian
+    row2 = data[4:]   # Global + Commodity
 
     def build_row(row):
         html = ""
@@ -36,40 +35,34 @@ def show_header(data):
     <style>
     .box {{
         background:#0b1220;
-        padding:10px;
+        padding:10px 15px;
         border-radius:10px;
-        overflow:hidden;
         font-size:13px;
     }}
 
-    .ticker {{
-        white-space:nowrap;
-        overflow:hidden;
+    .row {{
+        display:flex;
+        flex-wrap:wrap;
+        gap:20px;
         margin-bottom:5px;
     }}
 
-    .scroll {{
-        display:inline-block;
-        animation: scroll 25s linear infinite;
-    }}
-
     .item {{
-        margin-right:25px;
         color:#bbb;
     }}
 
-    @keyframes scroll {{
-        0% {{ transform: translateX(100%); }}
-        100% {{ transform: translateX(-100%); }}
+    b {{
+        color:white;
+        margin-right:5px;
     }}
     </style>
 
     <div class="box">
-        <div class="ticker">
-            <div class="scroll">{row1_html}{row1_html}</div>
+        <div class="row">
+            {row1_html}
         </div>
-        <div class="ticker">
-            <div class="scroll">{row2_html}{row2_html}</div>
+        <div class="row">
+            {row2_html}
         </div>
     </div>
     """
