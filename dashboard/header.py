@@ -7,14 +7,14 @@ def show_header(data):
         st.warning("No Data")
         return
 
-    row1 = data[:4]   # Indian
-    row2 = data[4:]   # Global + Commodity
+    row1 = data[:4]
+    row2 = data[4:]
 
     def build_row(row):
         html = ""
         for d in row:
             name = d.get("name", "")
-            price = d.get("price") or d.get("ltp") or 0
+            price = d.get("price", 0)
             change = float(d.get("change", 0))
 
             color = "#00c853" if change >= 0 else "#ff1744"
@@ -31,7 +31,7 @@ def show_header(data):
     row1_html = build_row(row1)
     row2_html = build_row(row2)
 
-    final_html = f"""
+    html = f"""
     <style>
     .box {{
         background:#0b1220;
@@ -43,8 +43,8 @@ def show_header(data):
     .row {{
         display:flex;
         flex-wrap:wrap;
-        gap:20px;
-        margin-bottom:5px;
+        gap:15px;
+        margin-bottom:3px;
     }}
 
     .item {{
@@ -67,4 +67,4 @@ def show_header(data):
     </div>
     """
 
-    components.html(final_html, height=110, scrolling=False))
+    components.html(html, height=110)
