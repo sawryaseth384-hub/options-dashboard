@@ -1,13 +1,16 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-# 🔥 IMPORT FIX (IMPORTANT)
+# 🔥 IMPORT FIX (FINAL)
 import sys
 import os
-sys.path.append(os.path.dirname(__file__))
 
-from core.dhan_api import get_expiry_list, get_option_chain
-from utils.helpers import process_option_data
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
+
+# ✅ SAFE IMPORT
+from core import dhan_api
+from utils import helpers
 
 
 # 🔥 PAGE CONFIG
@@ -24,7 +27,7 @@ if refresh > 0:
 
 
 # 🔥 EXPIRY FETCH
-expiry_list = get_expiry_list()
+expiry_list = dhan_api.get_expiry_list()
 
 # DEBUG
 st.write("📆 EXPIRIES:", expiry_list)
@@ -41,7 +44,7 @@ selected_expiry = st.selectbox("Select Expiry", expiry_list)
 
 
 # 🔥 OPTION CHAIN FETCH
-raw_data = get_option_chain(selected_expiry)
+raw_data = dhan_api.get_option_chain(selected_expiry)
 
 # DEBUG
 st.write("📊 RAW OPTION DATA:", raw_data)
@@ -53,7 +56,7 @@ if not raw_data or raw_data.get("status") != "success":
 
 
 # 🔥 PROCESS DATA
-df, spot = process_option_data(raw_data)
+df, spot = helpers.process_option_data(raw_data)
 
 
 if df.empty:
