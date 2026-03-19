@@ -18,7 +18,6 @@ def show_header(data):
 
         return f"<b style='color:white'>{name}</b> {value} <span style='color:{color}'> {arrow} {change}</span>"
 
-    # 🔥 LINE 1 (India)
     line1 = " | ".join([
         item("NIFTY", idx["nifty"]["ltp"], idx["nifty"]["change"]),
         item("BANKNIFTY", idx["banknifty"]["ltp"], idx["banknifty"]["change"]),
@@ -26,7 +25,6 @@ def show_header(data):
         item("VIX", idx["vix"]["ltp"], idx["vix"]["change"]),
     ])
 
-    # 🔥 LINE 2 (Global + Commodity + Currency)
     line2 = " | ".join([
         item("DOW", glb["dow"]["ltp"], glb["dow"]["change"]),
         item("NASDAQ", glb["nasdaq"]["ltp"], glb["nasdaq"]["change"]),
@@ -38,7 +36,6 @@ def show_header(data):
         item("DXY", cur["dxy"]["ltp"], cur["dxy"]["change"]),
     ])
 
-    # 🔥 FINAL UI (SMOOTH SCROLL)
     st.markdown(f"""
     <div style="background:#0f172a; padding:6px 10px; border-radius:8px; font-size:13px; overflow:hidden;">
 
