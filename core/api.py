@@ -8,11 +8,9 @@ def fetch_data():
         {"name": "DOW", "price": 38000, "change": 200},
         {"name": "NASDAQ", "price": 16500, "change": -50},
         {"name": "GIFT", "price": 23750, "change": 80},
-
         {"name": "CRUDE", "price": 6500, "change": 30},
         {"name": "GOLD", "price": 72000, "change": 100},
         {"name": "SILVER", "price": 85000, "change": 200},
-
         {"name": "USDINR", "price": 83.1, "change": 0.1},
         {"name": "DXY", "price": 104.2, "change": -0.2},
     ]
