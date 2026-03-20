@@ -1,6 +1,7 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 import sys, os, time
+import pandas as pd
 
 # =========================
 # 🔧 PATH SETUP
@@ -9,20 +10,62 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
 # =========================
-# 📦 IMPORTS
+# 📦 IMPORTS (with fallbacks)
 # =========================
-from core import dhan_api
-from utils import helpers
-from utils.debug import render_debug_panel
-from dhan_data import instruments, chart
-from dhan_data.market_quote import get_ltp
-from dhan_data.live_market_feed import (
-    start_live_feed,
-    get_live_ltp,
-    subscribe_instrument
-)
-from dhan_data.depth_feed import start_depth_feed, get_depth
+try:
+    from core import dhan_api
+except ImportError as e:
+    st.error(f"❌ Failed to import core.dhan_api: {e}")
+    st.stop()
 
+try:
+    from utils import helpers
+except ImportError as e:
+    st.error(f"❌ Failed to import utils.helpers: {e}")
+    st.stop()
+
+# Optional imports – if missing, we disable those features
+optional_modules = {}
+
+try:
+    from utils.debug import render_debug_panel
+    optional_modules['debug'] = render_debug_panel
+except ImportError:
+    optional_modules['debug'] = None
+
+try:
+    from dhan_data import instruments
+    optional_modules['instruments'] = instruments
+except ImportError:
+    optional_modules['instruments'] = None
+
+try:
+    from dhan_data import chart
+    optional_modules['chart'] = chart
+except ImportError:
+    optional_modules['chart'] = None
+
+try:
+    from dhan_data.market_quote import get_ltp as market_quote_ltp
+    optional_modules['market_quote'] = market_quote_ltp
+except ImportError:
+    optional_modules['market_quote'] = None
+
+try:
+    from dhan_data.live_market_feed import (
+        start_live_feed,
+        get_live_ltp,
+        subscribe_instrument
+    )
+    optional_modules['live_feed'] = (start_live_feed, get_live_ltp, subscribe_instrument)
+except ImportError:
+    optional_modules['live_feed'] = None
+
+try:
+    from dhan_data.depth_feed import start_depth_feed, get_depth
+    optional_modules['depth'] = (start_depth_feed, get_depth)
+except ImportError:
+    optional_modules['depth'] = None
 
 # =========================
 # 🔥 PAGE CONFIG
@@ -30,114 +73,125 @@ from dhan_data.depth_feed import start_depth_feed, get_depth
 st.set_page_config(page_title="Dhan AI Options Dashboard", layout="wide")
 st.title("📈 Dhan AI Options Dashboard")
 
-
 # =========================
-# 🚀 START WEBSOCKET
+# 🚀 WEBSOCKET START (if available)
 # =========================
 if "init_done" not in st.session_state:
-    start_live_feed()
-    start_depth_feed()
+    if optional_modules['live_feed']:
+        start_live_feed, _, _ = optional_modules['live_feed']
+        start_live_feed()
+    if optional_modules['depth']:
+        start_depth_feed, _ = optional_modules['depth']
+        start_depth_feed()
     st.session_state.init_done = True
     st.session_state.ws_start_time = time.time()
-
+else:
+    # if modules not available, just set dummy values to avoid errors
+    if 'ws_start_time' not in st.session_state:
+        st.session_state.ws_start_time = time.time()
 
 # =========================
 # 🔁 AUTO REFRESH
 # =========================
 st_autorefresh(interval=15000, key="live")
 
+# =========================
+# 📊 SELECT INSTRUMENT (with fallback)
+# =========================
+if optional_modules['instruments']:
+    df_instr = optional_modules['instruments'].get_instrument_df()
+    if df_instr is not None and not df_instr.empty:
+        selected_symbol = st.selectbox(
+            "Select Instrument",
+            sorted(df_instr["SEM_TRADING_SYMBOL"].unique())
+        )
+        row = df_instr[df_instr["SEM_TRADING_SYMBOL"] == selected_symbol].iloc[0]
+        security_id = int(row["SEM_SMST_SECURITY_ID"])
+        segment = row["SEM_SEGMENT"]
+        st.success(f"✅ {selected_symbol}")
+        st.caption(f"Security ID: {security_id} | Segment: {segment}")
+    else:
+        st.warning("⚠️ Instrument list empty or unavailable. Using default NIFTY.")
+        selected_symbol = "NIFTY 50"
+        security_id = 13
+        segment = "IDX_I"
+else:
+    st.warning("⚠️ dhan_data/instruments not available. Using default NIFTY.")
+    selected_symbol = "NIFTY 50"
+    security_id = 13
+    segment = "IDX_I"
 
 # =========================
-# 📊 SELECT INSTRUMENT
-# =========================
-df_instr = instruments.get_instrument_df()
-
-selected_symbol = st.selectbox(
-    "Select Instrument",
-    sorted(df_instr["SEM_TRADING_SYMBOL"].unique())
-)
-
-row = df_instr[df_instr["SEM_TRADING_SYMBOL"] == selected_symbol].iloc[0]
-
-security_id = int(row["SEM_SMST_SECURITY_ID"])
-segment = row["SEM_SEGMENT"]
-
-st.success(f"✅ {selected_symbol}")
-st.caption(f"Security ID: {security_id} | Segment: {segment}")
-
-
-# =========================
-# 🔄 SEGMENT MAP (FIXED)
+# 🔄 SEGMENT MAP (for live subscription)
 # =========================
 def map_segment(symbol):
     symbol = symbol.upper()
-
-    if "NIFTY" in symbol:
+    if "NIFTY" in symbol or "BANKNIFTY" in symbol:
         return "IDX_I"
-
-    elif "BANKNIFTY" in symbol:
-        return "IDX_I"
-
     return "NSE_EQ"
-
 
 mapped_segment = map_segment(selected_symbol)
 
-
 # =========================
-# 📡 SUBSCRIBE LIVE (SAFE)
+# 📡 SUBSCRIBE LIVE (if available)
 # =========================
 if "last_symbol" not in st.session_state:
     st.session_state.last_symbol = None
 
-ws_ready = time.time() - st.session_state.ws_start_time > 2
+ws_ready = (time.time() - st.session_state.ws_start_time) > 2
 
-if ws_ready and st.session_state.last_symbol != security_id:
+if ws_ready and st.session_state.last_symbol != security_id and optional_modules['live_feed']:
+    _, _, subscribe = optional_modules['live_feed']
     subscribe_instrument(security_id, mapped_segment)
     st.session_state.last_symbol = security_id
-
 
 # =========================
 # 💰 GET LIVE SPOT
 # =========================
 def get_spot():
-    price = get_live_ltp()
+    # Try WebSocket first
+    if optional_modules['live_feed']:
+        _, get_live, _ = optional_modules['live_feed']
+        price = get_live()
+        if price and price != 0:
+            return round(price, 2)
 
-    if price and price != 0:
-        return round(price, 2)
+    # Fallback to market quote
+    if optional_modules['market_quote']:
+        symbol = selected_symbol.upper()
+        if "BANKNIFTY" in symbol:
+            return optional_modules['market_quote'](25, "IDX_I")
+        elif "NIFTY" in symbol:
+            return optional_modules['market_quote'](13, "IDX_I")
+        else:
+            return optional_modules['market_quote'](security_id, segment)
 
-    symbol = selected_symbol.upper()
-
-    if "BANKNIFTY" in symbol:
-        return get_ltp(25, "IDX_I")
-
-    elif "NIFTY" in symbol:
-        return get_ltp(13, "IDX_I")
-
-    return get_ltp(security_id, segment)
-
+    # Ultimate fallback: try our own get_ltp from core.dhan_api
+    try:
+        return dhan_api.get_ltp(security_id, segment)  # we added this in core
+    except:
+        return None
 
 spot = get_spot()
-
+if spot is None:
+    spot = 0
 
 # =========================
-# 📅 EXPIRY LIST (FIXED)
+# 📅 EXPIRY LIST (using our core function)
 # =========================
-expiry_list = dhan_api.get_valid_expiries(security_id, mapped_segment)
+expiry_list = dhan_api.get_valid_expiries(security_id)   # signature: get_valid_expiries(security_id)
 
 selected_expiry = None
 if expiry_list:
     selected_expiry = st.selectbox("Select Expiry", expiry_list)
 
-
 # =========================
-# 📊 OPTION CHAIN (FINAL FIX)
+# 📊 OPTION CHAIN
 # =========================
 df = None
 
 if selected_expiry:
-
-    # 🔥 IMPORTANT: INDEX vs STOCK handling
+    # Determine correct segment for options
     if mapped_segment == "IDX_I":
         option_segment = "IDX_I"
     else:
@@ -152,277 +206,147 @@ if selected_expiry:
     if raw and raw.get("status") == "success" and "data" in raw:
         df, _ = helpers.process_option_data(raw)
     else:
-        st.warning("⚠️ Option Chain not available (Rate limit / Wrong segment)")
-
+        st.warning("⚠️ Option Chain not available (Rate limit / Wrong segment / Expiry invalid)")
 
 # =========================
 # 📊 METRICS
 # =========================
 col1, col2, col3, col4, col5 = st.columns(5)
 
-if df is not None:
+if df is not None and not df.empty:
     pcr = helpers.calculate_pcr(df)
     support, resistance = helpers.get_support_resistance(df)
     atm = helpers.get_atm_strike(df, spot)
 else:
     pcr = support = resistance = atm = 0
 
-col1.metric("Spot", spot)
-col2.metric("PCR", round(pcr, 2))
-col3.metric("Support", support)
-col4.metric("Resistance", resistance)
-col5.metric("ATM", atm)
-
+col1.metric("Spot", spot if spot else "N/A")
+col2.metric("PCR", round(pcr, 2) if pcr else "N/A")
+col3.metric("Support", support if support else "N/A")
+col4.metric("Resistance", resistance if resistance else "N/A")
+col5.metric("ATM", atm if atm else "N/A")
 
 # =========================
 # 🚀 SIGNAL
 # =========================
-st.subheader(f"Signal: {helpers.get_signal(pcr)}")
-
+if df is not None and not df.empty:
+    signal = helpers.get_signal(pcr)
+else:
+    signal = "🟡 Neutral – No data"
+st.subheader(f"Signal: {signal}")
 
 # =========================
 # 📋 OPTION TABLE
 # =========================
-if df is not None:
-    st.dataframe(df, width="stretch")
-
-
-# =========================
-# 📊 CHARTS
-# =========================
-if df is not None:
-    st.plotly_chart(helpers.plot_oi_heatmap(df), width="stretch")
-    st.plotly_chart(helpers.plot_payoff(atm), width="stretch")
-
+if df is not None and not df.empty:
+    st.dataframe(df, use_container_width=True)
 
 # =========================
-# 📈 PRICE CHART
+# 📊 CHARTS (optional helpers)
+# =========================
+if df is not None and not df.empty:
+    try:
+        # These functions may not exist; we wrap in try/except
+        if hasattr(helpers, 'plot_oi_heatmap'):
+            st.plotly_chart(helpers.plot_oi_heatmap(df), use_container_width=True)
+        if hasattr(helpers, 'plot_payoff'):
+            st.plotly_chart(helpers.plot_payoff(atm), use_container_width=True)
+    except Exception as e:
+        st.info(f"Chart rendering skipped: {e}")
+
+# =========================
+# 📈 PRICE CHART (optional)
 # =========================
 st.markdown("## Price Chart")
-
-chart_df = chart.get_candle_data(security_id, mapped_segment)
-
-if chart_df is not None and not chart_df.empty:
-    fig, trend = chart.plot_candle(chart_df)
-    st.plotly_chart(fig, width="stretch")
-    st.success(f"Trend: {trend}")
+if optional_modules['chart']:
+    chart_df = optional_modules['chart'].get_candle_data(security_id, mapped_segment)
+    if chart_df is not None and not chart_df.empty:
+        fig, trend = optional_modules['chart'].plot_candle(chart_df)
+        st.plotly_chart(fig, use_container_width=True)
+        st.success(f"Trend: {trend}")
+    else:
+        st.warning("No chart data")
 else:
-    st.warning("No chart data")
-
+    st.info("Chart module not available. Install dhan_data.chart to see price charts.")
 
 # =========================
-# 📊 MARKET DEPTH
+# 📊 MARKET DEPTH (optional)
 # =========================
 st.markdown("## Market Depth")
-
-depth = get_depth()
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("Bids")
-    st.dataframe(depth.get("bids", []), width="stretch")
-
-with col2:
-    st.subheader("Asks")
-    st.dataframe(depth.get("asks", []), width="stretch")
-
+if optional_modules['depth']:
+    _, get_depth = optional_modules['depth']
+    depth = get_depth()
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Bids")
+        st.dataframe(depth.get("bids", []), use_container_width=True)
+    with col2:
+        st.subheader("Asks")
+        st.dataframe(depth.get("asks", []), use_container_width=True)
+else:
+    st.info("Depth feed module not available.")
 
 # =========================
-# 📁 FILE / MODULE HEALTH CHECK
+# 📁 FILE / MODULE HEALTH CHECK (simple version)
 # =========================
 st.markdown("## 📁 FILE HEALTH CHECK")
-
-with st.expander("🔍 Check All Modules", expanded=True):
-
-    results = {}
-
-    # -------------------------
-    # core.dhan_api
-    # -------------------------
+with st.expander("🔍 Check Core Modules", expanded=False):
+    core_status = {}
     try:
         from core import dhan_api
-        results["core/dhan_api.py"] = "✅ Imported"
+        core_status["core/dhan_api.py"] = "✅ Imported"
     except Exception as e:
-        results["core/dhan_api.py"] = f"❌ {e}"
+        core_status["core/dhan_api.py"] = f"❌ {e}"
 
-    # -------------------------
-    # utils.helpers
-    # -------------------------
     try:
         from utils import helpers
-        results["utils/helpers.py"] = "✅ Imported"
+        core_status["utils/helpers.py"] = "✅ Imported"
     except Exception as e:
-        results["utils/helpers.py"] = f"❌ {e}"
+        core_status["utils/helpers.py"] = f"❌ {e}"
 
-    # -------------------------
-    # instruments
-    # -------------------------
-    try:
-        from dhan_data import instruments
-        df_test = instruments.get_instrument_df()
-        if df_test is not None and not df_test.empty:
-            results["dhan_data/instruments.py"] = "✅ Working"
-        else:
-            results["dhan_data/instruments.py"] = "❌ Empty Data"
-    except Exception as e:
-        results["dhan_data/instruments.py"] = f"❌ {e}"
+    for name, status in core_status.items():
+        st.write(f"{name} → {status}")
 
-    # -------------------------
-    # market_quote
-    # -------------------------
-    try:
-        from dhan_data.market_quote import get_ltp
-        test_price = get_ltp(13, "IDX_I")
-        if test_price:
-            results["dhan_data/market_quote.py"] = "✅ Working"
-        else:
-            results["dhan_data/market_quote.py"] = "❌ No Data"
-    except Exception as e:
-        results["dhan_data/market_quote.py"] = f"❌ {e}"
-
-    # -------------------------
-    # live_market_feed
-    # -------------------------
-    try:
-        from dhan_data.live_market_feed import get_live_ltp
-        live = get_live_ltp()
-        if live:
-            results["dhan_data/live_market_feed.py"] = "✅ Working"
-        else:
-            results["dhan_data/live_market_feed.py"] = "⚠️ No Live Data"
-    except Exception as e:
-        results["dhan_data/live_market_feed.py"] = f"❌ {e}"
-
-    # -------------------------
-    # depth_feed
-    # -------------------------
-    try:
-        from dhan_data.depth_feed import get_depth
-        depth = get_depth()
-        if depth:
-            results["dhan_data/depth_feed.py"] = "✅ Working"
-        else:
-            results["dhan_data/depth_feed.py"] = "⚠️ No Data"
-    except Exception as e:
-        results["dhan_data/depth_feed.py"] = f"❌ {e}"
-
-    # -------------------------
-    # chart
-    # -------------------------
-    try:
-        from dhan_data import chart
-        cdf = chart.get_candle_data(13, "IDX_I")
-        if cdf is not None and not cdf.empty:
-            results["dhan_data/chart.py"] = "✅ Working"
-        else:
-            results["dhan_data/chart.py"] = "❌ No Data"
-    except Exception as e:
-        results["dhan_data/chart.py"] = f"❌ {e}"
-
-    # -------------------------
-    # helpers processing
-    # -------------------------
-    try:
-        if df is not None:
-            _ = helpers.calculate_pcr(df)
-            results["utils/helpers (logic)"] = "✅ Working"
-        else:
-            results["utils/helpers (logic)"] = "⚠️ No Data"
-    except Exception as e:
-        results["utils/helpers (logic)"] = f"❌ {e}"
-
-    # -------------------------
-    # SHOW RESULTS
-    # -------------------------
-    for file, status in results.items():
-        st.write(f"{file} → {status}")
 # =========================
-# 🤖 PURE SYSTEM DIAGNOSIS (NO CHANGE MODE)
+# 🤖 SYSTEM SELF DIAGNOSIS (simplified)
 # =========================
 st.markdown("## 🤖 SYSTEM SELF DIAGNOSIS")
-
-def safe_check(name, func):
-    try:
-        result = func()
-
-        if result is None:
-            return f"{name} → ⚠️ No Data"
-        elif result is False:
-            return f"{name} → ❌ Failed"
-        else:
-            return f"{name} → ✅ Working"
-
-    except Exception as e:
-        return f"{name} → ❌ Error: {str(e)}"
-
-
-with st.expander("🔍 Run Full Diagnosis", expanded=True):
+with st.expander("🔍 Run Full Diagnosis", expanded=False):
+    def safe_check(name, func):
+        try:
+            result = func()
+            if result is None:
+                return f"{name} → ⚠️ No Data"
+            elif result is False:
+                return f"{name} → ❌ Failed"
+            else:
+                return f"{name} → ✅ Working"
+        except Exception as e:
+            return f"{name} → ❌ Error: {str(e)}"
 
     results = []
-
-    # 1️⃣ Instruments
-    results.append(safe_check(
-        "dhan_data/instruments.py",
-        lambda: instruments.get_instrument_df()
-    ))
-
-    # 2️⃣ Market Quote
-    results.append(safe_check(
-        "dhan_data/market_quote.py",
-        lambda: get_ltp(13, "IDX_I")
-    ))
-
-    # 3️⃣ Live Feed
-    results.append(safe_check(
-        "dhan_data/live_market_feed.py",
-        lambda: get_live_ltp()
-    ))
-
-    # 4️⃣ Depth Feed
-    results.append(safe_check(
-        "dhan_data/depth_feed.py",
-        lambda: get_depth()
-    ))
-
-    # 5️⃣ Expiry API
+    # Check expiry API
     results.append(safe_check(
         "expiry API",
-        lambda: dhan_api.get_valid_expiries(security_id, mapped_segment)
+        lambda: dhan_api.get_valid_expiries(security_id)
     ))
-
-    # 6️⃣ Option Chain API
-    def test_option():
-        if selected_expiry:
-            return dhan_api.get_option_chain(
-                security_id,
-                mapped_segment,
-                selected_expiry
-            )
-        return None
-
-    results.append(safe_check("option_chain API", test_option))
-
-    # 7️⃣ Chart Data
-    results.append(safe_check(
-        "dhan_data/chart.py",
-        lambda: chart.get_candle_data(security_id, mapped_segment)
-    ))
-
-    # 8️⃣ Helpers
-    def test_helpers():
-        if df is not None:
-            return helpers.calculate_pcr(df)
-        return None
-
-    results.append(safe_check("utils/helpers.py", test_helpers))
-
-    # -------------------------
-    # 📊 SHOW RESULT
-    # -------------------------
+    # Check option chain API (if expiry selected)
+    if selected_expiry:
+        results.append(safe_check(
+            "option_chain API",
+            lambda: dhan_api.get_option_chain(security_id, option_segment, selected_expiry)
+        ))
+    # Check helpers (if df exists)
+    if df is not None:
+        results.append(safe_check(
+            "helpers processing",
+            lambda: helpers.calculate_pcr(df)
+        ))
     for r in results:
         st.write(r)
+
 # =========================
-# 🛠 DEBUG
+# 🛠 DEBUG (if available)
 # =========================
-render_debug_panel()
+if optional_modules['debug']:
+    optional_modules['debug']()
