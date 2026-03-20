@@ -10,33 +10,29 @@ from utils import helpers
 from utils.debug import render_debug_panel
 from dhan_data import instruments
 
+
 st.set_page_config(page_title="Dhan AI Options Dashboard", layout="wide")
 st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 TYPE + INSTRUMENT SELECT
+# 🔥 INSTRUMENT SELECT (FIXED)
 # =========================
-instrument_type = st.selectbox("Select Type", ["Index", "Stock"])
+df_instr = instruments.get_instrument_df()
 
-selected_instrument = None
+selected_symbol = st.selectbox(
+    "Select Instrument",
+    df_instr["SEM_TRADING_SYMBOL"].unique()
+)
 
-try:
-    if instrument_type == "Index":
-        selected_instrument = st.selectbox(
-            "Select Index",
-            instruments.get_index_list()
-        )
-    else:
-        selected_instrument = st.selectbox(
-            "Select Stock",
-            instruments.get_stock_list()
-        )
+# 👉 security id + segment निकालो
+selected_row = df_instr[df_instr["SEM_TRADING_SYMBOL"] == selected_symbol].iloc[0]
 
-    st.success(f"✅ Selected: {selected_instrument}")
+security_id = int(selected_row["SEM_SMST_SECURITY_ID"])
+segment = selected_row["SEM_SEGMENT"]
 
-except Exception as e:
-    st.error(f"❌ Instrument Error: {e}")
+st.success(f"✅ Selected: {selected_symbol}")
+st.caption(f"Security ID: {security_id} | Segment: {segment}")
 
 
 # =========================
@@ -48,17 +44,32 @@ if refresh > 0:
 
 
 # =========================
-# 🔥 EXPIRY (NEXT STEP CONNECT)
+# 🔥 SEGMENT MAPPING
+# =========================
+def get_segment(seg):
+    if seg == "E":
+        return "NSE_EQ"
+    elif seg == "D":
+        return "NSE_FNO"
+    else:
+        return "IDX_I"
+
+
+# =========================
+# 🔥 EXPIRY FETCH (FIXED)
 # =========================
 expiry_list = []
 
 try:
-    if selected_instrument:
-        expiry_list = dhan_api.get_valid_expiries()  # next step में instrument pass करेंगे
+    expiry_list = dhan_api.get_valid_expiries(
+        security_id,
+        get_segment(segment)
+    )
 except Exception as e:
     st.error(f"❌ Expiry Error: {e}")
 
 selected_expiry = None
+
 if expiry_list:
     selected_expiry = st.selectbox("Select Expiry", expiry_list)
 else:
@@ -66,13 +77,17 @@ else:
 
 
 # =========================
-# 🔥 DATA FETCH (TEMP)
+# 🔥 OPTION CHAIN FETCH (FIXED)
 # =========================
 raw_data = None
 
 try:
     if selected_expiry:
-        raw_data = dhan_api.get_option_chain(selected_expiry)  # next step में fix करेंगे
+        raw_data = dhan_api.get_option_chain(
+            security_id,
+            get_segment(segment),
+            selected_expiry
+        )
 except Exception as e:
     st.error(f"❌ Option Chain Error: {e}")
 
