@@ -44,7 +44,7 @@ if "init_done" not in st.session_state:
 # =========================
 # 🔁 AUTO REFRESH
 # =========================
-st_autorefresh(interval=3000, key="live")
+st_autorefresh(interval=15000, key="live")
 
 
 # =========================
