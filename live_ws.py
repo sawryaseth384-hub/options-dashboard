@@ -1,59 +1,68 @@
 import websocket
 import json
 import threading
+import struct
+import streamlit as st
 
-class DhanLive:
+# 👉 global store
+live_data = {
+    "ltp": 0
+}
 
-    def __init__(self, client_id, access_token):
-        self.client_id = client_id
-        self.access_token = access_token
-        self.latest_data = {}
 
-    def on_message(self, ws, message):
-        try:
-            data = json.loads(message)
-            print("LIVE DATA:", data)   # debug
-            self.latest_data = data
-        except Exception as e:
-            print("Parse Error:", e)
+def decode_ltp(message):
+    try:
+        # byte 9–12 = LTP (float32 little endian)
+        ltp = struct.unpack('<f', message[8:12])[0]
+        return ltp
+    except:
+        return None
 
-    def on_error(self, ws, error):
-        print("ERROR:", error)
 
-    def on_close(self, ws, close_status_code, close_msg):
-        print("Connection Closed")
+def start_ws():
 
-    def on_open(self, ws):
-        print("Connected to Dhan WebSocket")
+    url = f"wss://api-feed.dhan.co?version=2&token={st.secrets['ACCESS_TOKEN']}&clientId={st.secrets['CLIENT_ID']}&authType=2"
 
-        # 🔥 FULL CORRECT PAYLOAD
+    def on_open(ws):
+        print("✅ Connected")
+
         payload = {
             "RequestCode": 15,
             "InstrumentCount": 1,
             "InstrumentList": [
                 {
-                    "ExchangeSegment": 2,   # NSE_FNO
-                    "SecurityId": 49081
+                    "ExchangeSegment": "NSE_EQ",
+                    "SecurityId": "13"   # BANKNIFTY
                 }
             ]
         }
 
-        print("SENDING PAYLOAD:", payload)
         ws.send(json.dumps(payload))
 
-    def start(self):
-        self.ws = websocket.WebSocketApp(
-            "wss://api-feed.dhan.co",
-            header=[
-                f"access-token: {self.access_token}",
-                f"client-id: {self.client_id}"
-            ],
-            on_message=self.on_message,
-            on_error=self.on_error,
-            on_close=self.on_close,
-            on_open=self.on_open
-        )
+    def on_message(ws, message):
+        ltp = decode_ltp(message)
+        if ltp:
+            live_data["ltp"] = ltp
+            print("LIVE LTP:", ltp)
 
-        thread = threading.Thread(target=self.ws.run_forever)
-        thread.daemon = True
-        thread.start()
+    def on_error(ws, error):
+        print("❌ Error:", error)
+
+    def on_close(ws):
+        print("🔴 Closed")
+
+    ws = websocket.WebSocketApp(
+        url,
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close
+    )
+
+    ws.run_forever()
+
+
+def run_live():
+    thread = threading.Thread(target=start_ws)
+    thread.daemon = True
+    thread.start()
