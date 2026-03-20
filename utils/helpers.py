@@ -9,12 +9,13 @@ def process_option_data(raw_data):
 
         rows = []
 
-        for strike, values in oc.items():
-            ce = values.get("ce", {})
-            pe = values.get("pe", {})
+        for strike, value in oc.items():
+
+            ce = value.get("ce", {})
+            pe = value.get("pe", {})
 
             rows.append({
-                "Strike": float(strike),
+                "Strike": int(float(strike)),
 
                 "CE OI": ce.get("oi", 0),
                 "CE LTP": ce.get("last_price", 0),
@@ -29,5 +30,6 @@ def process_option_data(raw_data):
 
         return df.sort_values("Strike"), spot
 
-    except Exception:
+    except Exception as e:
+        print("Error:", e)
         return pd.DataFrame(), 0
