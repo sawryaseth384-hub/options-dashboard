@@ -14,22 +14,18 @@ def get_headers():
     }
 
 
-# =========================
-# 📊 GET HISTORICAL DATA (FIXED)
-# =========================
 def get_historical_data(security_id, segment):
 
     try:
         url = f"{BASE_URL}/charts/intraday"
 
-        # ✅ LAST 1 DAY DATA
         to_date = datetime.now()
         from_date = to_date - timedelta(days=1)
 
         payload = {
             "securityId": str(security_id),
             "exchangeSegment": segment,
-            "instrument": "INDEX",   # 🔥 IMPORTANT
+            "instrument": "INDEX",   # 🔥 NIFTY/BANKNIFTY
             "interval": "5",
             "oi": False,
             "fromDate": from_date.strftime("%Y-%m-%d %H:%M:%S"),
@@ -39,11 +35,12 @@ def get_historical_data(security_id, segment):
         res = requests.post(url, headers=get_headers(), json=payload)
         data = res.json()
 
-        # 🔍 DEBUG
-        st.write("RAW CHART API:", data)
+        # 🔥 DEBUG PRINT
+        st.write("RAW DATA:", data)
 
+        # ✅ CHECK सही key
         if "open" not in data:
-            st.warning("⚠️ No chart data")
+            st.error("❌ API data not received properly")
             return None
 
         df = pd.DataFrame({
@@ -58,5 +55,5 @@ def get_historical_data(security_id, segment):
         return df
 
     except Exception as e:
-        st.error(f"Historical Error: {e}")
+        st.error(f"Error: {e}")
         return None
