@@ -4,27 +4,28 @@ import streamlit as st
 URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 
 
-# =========================
-# 🔥 LOAD CSV
-# =========================
 @st.cache_data(ttl=3600)
 def load_instruments():
-    df = pd.read_csv(URL)
+    df = pd.read_csv(URL, low_memory=False)
 
-    # Only NSE
+    # ✅ Only NSE
     df = df[df["SEM_EXM_EXCH_ID"] == "NSE"]
 
     return df
 
 
 # =========================
-# 🔥 STOCK (F&O ONLY)
+# 🔥 STOCK (UNDERLYING ONLY)
 # =========================
 def get_stock_df():
     df = load_instruments()
 
-    # Only derivatives (F&O)
+    # Only derivatives
     df = df[df["SEM_SEGMENT"] == "D"]
+
+    # ❌ remove FUT / TEST
+    df = df[~df["SEM_TRADING_SYMBOL"].str.contains("FUT", na=False)]
+    df = df[~df["SEM_TRADING_SYMBOL"].str.contains("TEST", na=False)]
 
     df = df[[
         "SEM_TRADING_SYMBOL",
@@ -32,9 +33,7 @@ def get_stock_df():
         "SEM_SEGMENT"
     ]]
 
-    df = df.dropna()
-
-    return df
+    return df.dropna()
 
 
 # =========================
@@ -51,7 +50,7 @@ def get_index_df():
 
 
 # =========================
-# 🔥 MASTER DF
+# 🔥 MASTER
 # =========================
 def get_instrument_df():
     return pd.concat(
