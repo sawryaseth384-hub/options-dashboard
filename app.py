@@ -12,8 +12,18 @@ from dhan_data import instruments
 from dhan_data import chart
 from dhan_data.market_quote import get_ltp
 
+
+# =========================
+# 🔥 PAGE CONFIG
+# =========================
 st.set_page_config(page_title="Dhan AI Options Dashboard", layout="wide")
 st.title("📈 Dhan AI Options Dashboard")
+
+
+# =========================
+# 🔥 AUTO LIVE REFRESH (BEST)
+# =========================
+st_autorefresh(interval=3000, key="live")   # हर 3 sec refresh
 
 
 # =========================
@@ -36,15 +46,7 @@ st.caption(f"Security ID: {security_id} | Segment: {segment}")
 
 
 # =========================
-# 🔁 AUTO REFRESH
-# =========================
-refresh = st.selectbox("Auto Refresh (seconds)", [0, 5, 10, 30])
-if refresh > 0:
-    st_autorefresh(interval=refresh * 1000, key="refresh")
-
-
-# =========================
-# 🔥 SEGMENT MAP (OPTION CHAIN ONLY)
+# 🔥 SEGMENT MAP (OPTION CHAIN)
 # =========================
 def get_segment(seg):
     if seg == "D":
@@ -116,11 +118,11 @@ if df is not None:
 else:
     pcr = support = resistance = atm = 0
 
-col1.metric("Spot", spot)
-col2.metric("PCR", pcr)
-col3.metric("Support", support)
-col4.metric("Resistance", resistance)
-col5.metric("ATM", atm)
+col1.metric("📊 Spot", spot)
+col2.metric("📊 PCR", pcr)
+col3.metric("🟢 Support", support)
+col4.metric("🔴 Resistance", resistance)
+col5.metric("🎯 ATM", atm)
 
 
 # =========================
@@ -131,18 +133,18 @@ st.subheader(f"🚀 Signal: {signal}")
 
 
 # =========================
-# 📊 TABLE
+# 📊 OPTION TABLE
 # =========================
 if df is not None:
-    st.dataframe(df, width="stretch")
+    st.dataframe(df, use_container_width=True)
 
 
 # =========================
 # 📊 OPTION CHARTS
 # =========================
 if df is not None:
-    st.plotly_chart(helpers.plot_oi_heatmap(df), width="stretch")
-    st.plotly_chart(helpers.plot_payoff(atm), width="stretch")
+    st.plotly_chart(helpers.plot_oi_heatmap(df), use_container_width=True)
+    st.plotly_chart(helpers.plot_payoff(atm), use_container_width=True)
 
 
 # =========================
@@ -150,17 +152,19 @@ if df is not None:
 # =========================
 st.markdown("## 📈 Live Chart")
 
-# ❗ IMPORTANT FIX
 chart_df = chart.get_candle_data(security_id, segment)
 
 if chart_df is not None and not chart_df.empty:
     fig, trend = chart.plot_candle(chart_df)
     st.plotly_chart(fig, use_container_width=True)
 
-    st.success(f"Trend: {trend}")
+    st.success(f"📈 Trend: {trend}")
 
 else:
-    st.warning("⚠️ No chart data")# =========================
-# DEBUG
+    st.warning("⚠️ No chart data")
+
+
+# =========================
+# DEBUG PANEL
 # =========================
 render_debug_panel()
