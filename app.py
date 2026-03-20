@@ -11,11 +11,14 @@ from utils import helpers
 from utils.debug import render_debug_panel
 from dhan_data import instruments, chart
 from dhan_data.market_quote import get_ltp
-from dhan_data.live_feed import (
+
+# 🔥 FIXED IMPORT
+from dhan_data.live_market_feed import (
     start_live_feed,
     get_live_ltp,
     subscribe_instrument
 )
+
 from dhan_data.depth_feed import start_depth_feed, get_depth
 
 
@@ -27,13 +30,13 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 START WEBSOCKETS (FIXED)
+# 🔥 START WEBSOCKETS (SAFE)
 # =========================
 if "init_done" not in st.session_state:
     start_live_feed()
     start_depth_feed()
-    time.sleep(2)  # 🔥 IMPORTANT: WS ready hone do
     st.session_state.init_done = True
+    st.session_state.ws_ready_time = time.time()
 
 
 # =========================
@@ -79,13 +82,15 @@ mapped_segment = map_segment(selected_symbol)
 
 
 # =========================
-# 🔥 SUBSCRIBE (FIXED)
+# 🔥 SUBSCRIBE (SAFE)
 # =========================
 if "last_symbol" not in st.session_state:
     st.session_state.last_symbol = None
 
-if st.session_state.last_symbol != security_id:
-    time.sleep(1)  # 🔥 ensure WS ready
+# 👉 wait for websocket ready (no sleep freeze)
+ws_ready = time.time() - st.session_state.get("ws_ready_time", 0) > 2
+
+if ws_ready and st.session_state.last_symbol != security_id:
     subscribe_instrument(security_id, mapped_segment)
     st.session_state.last_symbol = security_id
 
