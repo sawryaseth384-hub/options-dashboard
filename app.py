@@ -229,10 +229,6 @@ with col2:
 
 
 # =========================
-# 🛠 DEBUG
-# =========================
-render_debug_panel()
-# =========================
 # 📁 FILE / MODULE HEALTH CHECK
 # =========================
 st.markdown("## 📁 FILE HEALTH CHECK")
@@ -341,3 +337,8 @@ with st.expander("🔍 Check All Modules", expanded=True):
     # -------------------------
     for file, status in results.items():
         st.write(f"{file} → {status}")
+
+# =========================
+# 🛠 DEBUG
+# =========================
+render_debug_panel()
