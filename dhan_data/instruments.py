@@ -14,47 +14,61 @@ def load_instruments():
     # ✅ Only NSE
     df = df[df["SEM_EXM_EXCH_ID"] == "NSE"]
 
-    # ✅ Only Equity segment
-    df = df[df["SEM_SEGMENT"] == "E"]
-
-    # ✅ Clean symbols (only A-Z)
-    df = df[df["SEM_TRADING_SYMBOL"].str.match(r'^[A-Z]+$', na=False)]
-
     # ❌ Remove TEST
     df = df[~df["SEM_TRADING_SYMBOL"].str.contains("TEST", na=False)]
+
+    # Drop null
+    df = df.dropna(subset=["SEM_TRADING_SYMBOL", "SEM_SMST_SECURITY_ID"])
 
     return df
 
 
 # =========================
-# 📈 STOCK LIST
+# 📈 STOCK DF (IMPORTANT)
 # =========================
-def get_stock_list():
+def get_stock_df():
     df = load_instruments()
 
-    stocks = df["SEM_TRADING_SYMBOL"].dropna().unique().tolist()
+    # Equity only
+    df = df[df["SEM_SEGMENT"] == "E"]
 
-    return sorted(stocks)
+    df = df[[
+        "SEM_TRADING_SYMBOL",
+        "SEM_SMST_SECURITY_ID",
+        "SEM_SEGMENT"
+    ]]
+
+    return df
 
 
 # =========================
-# 📊 INDEX LIST
+# 📊 INDEX DF (MANUAL)
 # =========================
-def get_index_list():
-    return ["NIFTY", "BANKNIFTY", "FINNIFTY"]
+def get_index_df():
+    data = [
+        {"SEM_TRADING_SYMBOL": "NIFTY", "SEM_SMST_SECURITY_ID": 13, "SEM_SEGMENT": "I"},
+        {"SEM_TRADING_SYMBOL": "BANKNIFTY", "SEM_SMST_SECURITY_ID": 25, "SEM_SEGMENT": "I"},
+        {"SEM_TRADING_SYMBOL": "FINNIFTY", "SEM_SMST_SECURITY_ID": 27, "SEM_SEGMENT": "I"},
+    ]
+
+    return pd.DataFrame(data)
 
 
 # =========================
-# 🔥 MASTER (OPTIONAL)
+# 🔥 MASTER DF (MOST IMPORTANT)
 # =========================
-def get_all_instruments():
-    """
-    Optional combined list (future use)
-    """
-    stocks = get_stock_list()
-    index = get_index_list()
+def get_instrument_df():
+    stock_df = get_stock_df()
+    index_df = get_index_df()
 
-    return {
-        "index": index,
-        "stocks": stocks
-    }
+    df = pd.concat([stock_df, index_df], ignore_index=True)
+
+    return df
+
+
+# =========================
+# 📋 LIST (UI USE)
+# =========================
+def get_symbol_list():
+    df = get_instrument_df()
+    return sorted(df["SEM_TRADING_SYMBOL"].unique().tolist())
