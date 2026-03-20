@@ -8,44 +8,53 @@ sys.path.insert(0, BASE_DIR)
 from core import dhan_api
 from utils import helpers
 from utils.debug import render_debug_panel
-
-# 🔥 NEW IMPORT (STEP 1)
 from dhan_data import instruments
-
 
 st.set_page_config(page_title="Dhan AI Options Dashboard", layout="wide")
 st.title("📈 Dhan AI Options Dashboard")
 
+
 # =========================
-# 🔥 INSTRUMENT SELECT (NEW)
+# 🔥 TYPE + INSTRUMENT SELECT
 # =========================
-instrument_list = []
+instrument_type = st.selectbox("Select Type", ["Index", "Stock"])
+
+selected_instrument = None
 
 try:
-    instrument_list = instruments.get_instrument_list()
+    if instrument_type == "Index":
+        selected_instrument = st.selectbox(
+            "Select Index",
+            instruments.get_index_list()
+        )
+    else:
+        selected_instrument = st.selectbox(
+            "Select Stock",
+            instruments.get_stock_list()
+        )
+
+    st.success(f"✅ Selected: {selected_instrument}")
+
 except Exception as e:
     st.error(f"❌ Instrument Error: {e}")
 
-selected_instrument = None
-if instrument_list:
-    selected_instrument = st.selectbox("Select Instrument", instrument_list)
-    st.write("Selected:", selected_instrument)
-else:
-    st.warning("⚠️ No instruments loaded")
 
-
-# 🔁 Auto Refresh
+# =========================
+# 🔁 AUTO REFRESH
+# =========================
 refresh = st.selectbox("Auto Refresh (seconds)", [0, 5, 10, 30])
 if refresh > 0:
     st_autorefresh(interval=refresh * 1000, key="refresh")
 
 
 # =========================
-# 🔥 EXPIRY
+# 🔥 EXPIRY (NEXT STEP CONNECT)
 # =========================
 expiry_list = []
+
 try:
-    expiry_list = dhan_api.get_valid_expiries()
+    if selected_instrument:
+        expiry_list = dhan_api.get_valid_expiries()  # next step में instrument pass करेंगे
 except Exception as e:
     st.error(f"❌ Expiry Error: {e}")
 
@@ -57,12 +66,13 @@ else:
 
 
 # =========================
-# 🔥 DATA FETCH
+# 🔥 DATA FETCH (TEMP)
 # =========================
 raw_data = None
+
 try:
     if selected_expiry:
-        raw_data = dhan_api.get_option_chain(selected_expiry)
+        raw_data = dhan_api.get_option_chain(selected_expiry)  # next step में fix करेंगे
 except Exception as e:
     st.error(f"❌ Option Chain Error: {e}")
 
@@ -87,9 +97,7 @@ except Exception as e:
 # =========================
 col1, col2, col3, col4, col5 = st.columns(5)
 
-pcr = 0
-support, resistance = 0, 0
-atm = 0
+pcr, support, resistance, atm = 0, 0, 0, 0
 
 try:
     if df is not None:
@@ -110,12 +118,13 @@ col5.metric("🎯 ATM", atm)
 # 🚀 SIGNAL
 # =========================
 signal = "N/A"
+
 try:
     signal = helpers.get_signal(pcr)
 except Exception as e:
     st.error(f"❌ Signal Error: {e}")
 
-st.subheader(f"🚀 Signal: {signal}")
+st.subheader(f"🚀 Market Signal: {signal}")
 
 
 # =========================
@@ -128,7 +137,7 @@ if df is not None:
     except Exception as e:
         st.error(f"❌ Table Error: {e}")
 else:
-    st.warning("⚠️ No data")
+    st.warning("⚠️ No data available")
 
 
 # =========================
@@ -138,30 +147,42 @@ st.markdown("## 🚀 Advanced Panel")
 
 try:
     prev_df = st.session_state.get("prev_df", None)
-    df = helpers.calculate_oi_change(df, prev_df)
-    st.session_state["prev_df"] = df.copy() if df is not None else None
+
+    if df is not None:
+        df = helpers.calculate_oi_change(df, prev_df)
+        st.session_state["prev_df"] = df.copy()
+
     st.success("✅ OI Change Working")
+
 except Exception as e:
     st.error(f"❌ OI Change Error: {e}")
 
+
+# DOMINANCE
 try:
     dominance = helpers.get_dominance(pcr)
     st.info(f"📊 Dominance: {dominance}")
 except Exception as e:
     st.error(f"❌ Dominance Error: {e}")
 
+
+# TREND
 try:
     trend = helpers.get_trend(df)
     st.info(f"📈 Trend: {trend}")
 except Exception as e:
     st.error(f"❌ Trend Error: {e}")
 
+
+# AI SIGNAL
 try:
     ai = helpers.ai_signal(pcr, trend)
     st.success(f"🤖 AI Signal: {ai}")
 except Exception as e:
     st.error(f"❌ AI Error: {e}")
 
+
+# STRATEGY
 try:
     strategy = helpers.build_strategy(signal, atm)
     st.info(f"💰 Strategy: {strategy}")
@@ -173,7 +194,8 @@ except Exception as e:
 # 📊 CHARTS
 # =========================
 try:
-    st.plotly_chart(helpers.plot_oi_heatmap(df), use_container_width=True)
+    if df is not None:
+        st.plotly_chart(helpers.plot_oi_heatmap(df), use_container_width=True)
 except Exception as e:
     st.error(f"❌ Heatmap Error: {e}")
 
