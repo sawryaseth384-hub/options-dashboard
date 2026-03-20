@@ -11,10 +11,8 @@ from utils.debug import render_debug_panel
 from dhan_data import instruments
 from dhan_data import chart
 from dhan_data.market_quote import get_ltp
-from dhan_data.depth_feed import start_depth_feed, get_depth
-
-# ✅ NEW IMPORT
 from dhan_data.live_feed import start_live_feed, get_live_ltp
+from dhan_data.depth_feed import start_depth_feed, get_depth
 
 
 # =========================
@@ -25,7 +23,7 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 START LIVE FEED (ONCE)
+# 🔥 START LIVE FEED
 # =========================
 if "ws_started" not in st.session_state:
     start_live_feed()
@@ -33,9 +31,17 @@ if "ws_started" not in st.session_state:
 
 
 # =========================
+# 🔥 START DEPTH FEED
+# =========================
+if "depth_started" not in st.session_state:
+    start_depth_feed()
+    st.session_state.depth_started = True
+
+
+# =========================
 # 🔁 AUTO REFRESH
 # =========================
-st_autorefresh(interval=2000, key="live")   # fast refresh
+st_autorefresh(interval=2000, key="live")
 
 
 # =========================
@@ -71,22 +77,19 @@ mapped_segment = map_segment(segment)
 
 
 # =========================
-# 🔥 🚀 LIVE SPOT PRICE (FINAL)
+# 🔥 LIVE SPOT PRICE
 # =========================
 live_price = get_live_ltp()
 
 if live_price and live_price != 0:
     spot = live_price
 else:
-    # fallback (if websocket not ready)
     symbol = selected_symbol.upper()
 
     if "BANKNIFTY" in symbol:
         spot = get_ltp(25, "IDX_I")
-
     elif "NIFTY" in symbol:
         spot = get_ltp(13, "IDX_I")
-
     else:
         spot = get_ltp(security_id, segment)
 
@@ -187,6 +190,30 @@ if chart_df is not None and not chart_df.empty:
     st.success(f"📈 Trend: {trend}")
 else:
     st.warning("⚠️ No chart data")
+
+
+# =========================
+# 📊 MARKET DEPTH
+# =========================
+st.markdown("## 📊 Market Depth (20 Level)")
+
+depth = get_depth()
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("🟢 Bids")
+    if depth["bids"]:
+        st.dataframe(depth["bids"], use_container_width=True)
+    else:
+        st.warning("No Bid Data")
+
+with col2:
+    st.subheader("🔴 Asks")
+    if depth["asks"]:
+        st.dataframe(depth["asks"], use_container_width=True)
+    else:
+        st.warning("No Ask Data")
 
 
 # =========================
