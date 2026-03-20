@@ -4,6 +4,9 @@ import streamlit as st
 URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 
 
+# =========================
+# 🔥 LOAD DATA
+# =========================
 @st.cache_data(ttl=3600)
 def load_instruments():
     df = pd.read_csv(URL)
@@ -14,7 +17,7 @@ def load_instruments():
     # ✅ Only Equity segment
     df = df[df["SEM_SEGMENT"] == "E"]
 
-    # ✅ Only real stock symbols (no numbers start)
+    # ✅ Clean symbols (only A-Z)
     df = df[df["SEM_TRADING_SYMBOL"].str.match(r'^[A-Z]+$', na=False)]
 
     # ❌ Remove TEST
@@ -23,14 +26,35 @@ def load_instruments():
     return df
 
 
-def get_instrument_list():
+# =========================
+# 📈 STOCK LIST
+# =========================
+def get_stock_list():
     df = load_instruments()
 
-    symbols = df["SEM_TRADING_SYMBOL"].dropna().unique().tolist()
+    stocks = df["SEM_TRADING_SYMBOL"].dropna().unique().tolist()
 
-    # ✅ Add index manually
-    extra = ["NIFTY", "BANKNIFTY", "FINNIFTY"]
+    return sorted(stocks)
 
-    final = list(set(symbols + extra))
 
-    return sorted(final)
+# =========================
+# 📊 INDEX LIST
+# =========================
+def get_index_list():
+    return ["NIFTY", "BANKNIFTY", "FINNIFTY"]
+
+
+# =========================
+# 🔥 MASTER (OPTIONAL)
+# =========================
+def get_all_instruments():
+    """
+    Optional combined list (future use)
+    """
+    stocks = get_stock_list()
+    index = get_index_list()
+
+    return {
+        "index": index,
+        "stocks": stocks
+    }
