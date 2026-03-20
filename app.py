@@ -1,153 +1,87 @@
-import streamlit as st
-from streamlit_autorefresh import st_autorefresh
-
-# 🔥 IMPORT FIX
-import sys
-import os
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, BASE_DIR)
-
-from core import dhan_api
-from utils import helpers
-from utils.debug import render_debug_panel
+import pandas as pd
 
 
-# 🔥 PAGE CONFIG
-st.set_page_config(page_title="Dhan AI Options Dashboard", layout="wide")
-
-st.title("📈 Dhan AI Options Dashboard")
-
-
-# 🔁 AUTO REFRESH
-refresh = st.selectbox("Auto Refresh (seconds)", [0, 5, 10, 30])
-
-if refresh > 0:
-    st_autorefresh(interval=refresh * 1000, key="refresh")
-
-
-# =========================
-# 🔥 EXPIRY FETCH
-# =========================
-expiry_list = []
-
-try:
-    expiry_list = dhan_api.get_valid_expiries()
-except Exception as e:
-    st.error(f"❌ Expiry Error: {e}")
-
-if not expiry_list:
-    st.warning("⚠️ No expiry data")
-
-
-# 🔥 SELECT EXPIRY
-selected_expiry = None
-if expiry_list:
-    selected_expiry = st.selectbox("Select Expiry", expiry_list)
-
-
-# =========================
-# 🔥 OPTION CHAIN FETCH
-# =========================
-raw_data = None
-
-if selected_expiry:
+def process_option_data(raw_data):
     try:
-        raw_data = dhan_api.get_option_chain(selected_expiry)
+        data = raw_data.get("data", {})
+        spot = data.get("last_price", 0)
+        oc = data.get("oc", {})
+
+        rows = []
+
+        for strike, value in oc.items():
+            strike_val = float(strike)
+
+            if abs(strike_val - spot) > 1000:
+                continue
+
+            ce = value.get("ce")
+            pe = value.get("pe")
+
+            if not ce and not pe:
+                continue
+
+            rows.append({
+                "Strike": int(strike_val),
+                "CE OI": ce["oi"] if ce else 0,
+                "CE LTP": ce["last_price"] if ce else 0,
+                "CE Delta": ce.get("greeks", {}).get("delta", 0) if ce else 0,
+                "PE OI": pe["oi"] if pe else 0,
+                "PE LTP": pe["last_price"] if pe else 0,
+                "PE Delta": pe.get("greeks", {}).get("delta", 0) if pe else 0,
+            })
+
+        df = pd.DataFrame(rows)
+
+        if df.empty:
+            return df, spot
+
+        return df.sort_values("Strike").reset_index(drop=True), spot
+
     except Exception as e:
-        st.error(f"❌ Option Chain Error: {e}")
-
-if raw_data and raw_data.get("status") != "success":
-    st.error("❌ Option chain failed")
-
-
-# =========================
-# 🔥 PROCESS DATA
-# =========================
-df = None
-spot = 0
-
-if raw_data and raw_data.get("status") == "success":
-    try:
-        df, spot = helpers.process_option_data(raw_data)
-    except Exception as e:
-        st.error(f"❌ Data Processing Error: {e}")
-
-
-# =========================
-# 📊 MAIN METRICS
-# =========================
-col1, col2, col3, col4, col5 = st.columns(5)
-
-# Spot
-with col1:
-    st.metric("📊 Spot", f"₹{spot:,.2f}")
+        print("PROCESS ERROR:", e)
+        return pd.DataFrame(), 0
 
 
 # PCR
-pcr = 0
-try:
-    if df is not None:
-        pcr = helpers.calculate_pcr(df)
-except Exception as e:
-    st.error(f"❌ PCR Error: {e}")
-
-with col2:
-    st.metric("📊 PCR", pcr)
+def calculate_pcr(df):
+    try:
+        ce = df["CE OI"].sum()
+        pe = df["PE OI"].sum()
+        return round(pe / ce, 2) if ce != 0 else 0
+    except:
+        return 0
 
 
 # Support / Resistance
-support, resistance = 0, 0
-try:
-    if df is not None:
-        support, resistance = helpers.get_support_resistance(df)
-except Exception as e:
-    st.error(f"❌ SR Error: {e}")
-
-with col3:
-    st.metric("🟢 Support", support)
-
-with col4:
-    st.metric("🔴 Resistance", resistance)
-
-
-# 🎯 ATM
-atm = 0
-try:
-    if df is not None:
-        atm = helpers.get_atm_strike(df, spot)
-except Exception as e:
-    st.error(f"❌ ATM Error: {e}")
-
-with col5:
-    st.metric("🎯 ATM", atm)
-
-
-# =========================
-# 🚀 SIGNAL
-# =========================
-signal = "N/A"
-try:
-    signal = helpers.get_signal(pcr)
-except Exception as e:
-    st.error(f"❌ Signal Error: {e}")
-
-st.subheader(f"🚀 Market Signal: {signal}")
-
-
-# =========================
-# 📊 OPTION CHAIN TABLE
-# =========================
-if df is not None:
+def get_support_resistance(df):
     try:
-        st.dataframe(df, use_container_width=True)
-    except Exception as e:
-        st.error(f"❌ Table Error: {e}")
-else:
-    st.warning("⚠️ No data to display")
+        support = df.loc[df["PE OI"].idxmax(), "Strike"]
+        resistance = df.loc[df["CE OI"].idxmax(), "Strike"]
+        return int(support), int(resistance)
+    except:
+        return 0, 0
 
 
-# =========================
-# 🔧 DEBUG PANEL
-# =========================
-render_debug_panel()
+# Signal
+def get_signal(pcr):
+    if pcr > 1.2:
+        return "📈 Bullish"
+    elif pcr < 0.8:
+        return "📉 Bearish"
+    return "⚖️ Sideways"
+
+
+# ATM
+def get_atm_strike(df, spot):
+    try:
+        return int(df.iloc[(df["Strike"] - spot).abs().argsort()[:1]]["Strike"].values[0])
+    except:
+        return 0
+
+
+# Highlight
+def highlight_atm(row, atm):
+    if row["Strike"] == atm:
+        return ["background-color: #00FFAA"] * len(row)
+    return [""] * len(row)
