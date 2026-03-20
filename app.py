@@ -337,7 +337,91 @@ with st.expander("🔍 Check All Modules", expanded=True):
     # -------------------------
     for file, status in results.items():
         st.write(f"{file} → {status}")
+# =========================
+# 🤖 PURE SYSTEM DIAGNOSIS (NO CHANGE MODE)
+# =========================
+st.markdown("## 🤖 SYSTEM SELF DIAGNOSIS")
 
+def safe_check(name, func):
+    try:
+        result = func()
+
+        if result is None:
+            return f"{name} → ⚠️ No Data"
+        elif result is False:
+            return f"{name} → ❌ Failed"
+        else:
+            return f"{name} → ✅ Working"
+
+    except Exception as e:
+        return f"{name} → ❌ Error: {str(e)}"
+
+
+with st.expander("🔍 Run Full Diagnosis", expanded=True):
+
+    results = []
+
+    # 1️⃣ Instruments
+    results.append(safe_check(
+        "dhan_data/instruments.py",
+        lambda: instruments.get_instrument_df()
+    ))
+
+    # 2️⃣ Market Quote
+    results.append(safe_check(
+        "dhan_data/market_quote.py",
+        lambda: get_ltp(13, "IDX_I")
+    ))
+
+    # 3️⃣ Live Feed
+    results.append(safe_check(
+        "dhan_data/live_market_feed.py",
+        lambda: get_live_ltp()
+    ))
+
+    # 4️⃣ Depth Feed
+    results.append(safe_check(
+        "dhan_data/depth_feed.py",
+        lambda: get_depth()
+    ))
+
+    # 5️⃣ Expiry API
+    results.append(safe_check(
+        "expiry API",
+        lambda: dhan_api.get_valid_expiries(security_id, mapped_segment)
+    ))
+
+    # 6️⃣ Option Chain API
+    def test_option():
+        if selected_expiry:
+            return dhan_api.get_option_chain(
+                security_id,
+                mapped_segment,
+                selected_expiry
+            )
+        return None
+
+    results.append(safe_check("option_chain API", test_option))
+
+    # 7️⃣ Chart Data
+    results.append(safe_check(
+        "dhan_data/chart.py",
+        lambda: chart.get_candle_data(security_id, mapped_segment)
+    ))
+
+    # 8️⃣ Helpers
+    def test_helpers():
+        if df is not None:
+            return helpers.calculate_pcr(df)
+        return None
+
+    results.append(safe_check("utils/helpers.py", test_helpers))
+
+    # -------------------------
+    # 📊 SHOW RESULT
+    # -------------------------
+    for r in results:
+        st.write(r)
 # =========================
 # 🛠 DEBUG
 # =========================
