@@ -18,10 +18,10 @@ def get_headers():
 
 
 # =========================
-# 🔁 SEGMENT MAP (FINAL)
+# 🔁 SEGMENT MAP (FIXED ✅)
 # =========================
 def map_segment(segment):
-    if segment == "IDX_I":
+    if segment in ["IDX_I", "I"]:   # 🔥 MAIN FIX
         return "NSE_FNO"
     elif segment == "D":
         return "NSE_FNO"
@@ -32,10 +32,10 @@ def map_segment(segment):
 
 
 # =========================
-# 📦 INSTRUMENT TYPE (FINAL)
+# 📦 INSTRUMENT TYPE (FIXED ✅)
 # =========================
 def get_instrument_type(segment):
-    if segment == "IDX_I":
+    if segment in ["IDX_I", "I"]:   # 🔥 MAIN FIX
         return "FUTIDX"
     elif segment == "D":
         return "FUTSTK"
@@ -46,18 +46,20 @@ def get_instrument_type(segment):
 
 
 # =========================
-# 🔥 SAFE FLATTEN (NO ERROR)
+# 🔥 SAFE FLATTEN (ULTRA SAFE)
 # =========================
 def flatten(arr):
+    flat = []
+
     if not isinstance(arr, list):
         return [arr]
 
-    flat = []
     for sub in arr:
         if isinstance(sub, list):
             flat.extend(sub)
         else:
             flat.append(sub)
+
     return flat
 
 
@@ -72,7 +74,7 @@ def get_candle_data(security_id, segment):
         mapped_segment = map_segment(segment)
         instrument = get_instrument_type(segment)
 
-        # 🔍 DEBUG (remove later)
+        # 🔍 DEBUG
         st.write("SECURITY:", security_id)
         st.write("SEGMENT:", segment)
         st.write("MAPPED:", mapped_segment)
@@ -94,22 +96,22 @@ def get_candle_data(security_id, segment):
         res = requests.post(url, headers=get_headers(), json=payload)
         data = res.json()
 
-        # 🔍 DEBUG RAW
         st.write("RAW DATA:", data)
 
         if not data or "open" not in data:
             return None
 
+        # 🔥 SAFE EXTRACTION
         open_ = flatten(data.get("open", []))
         high_ = flatten(data.get("high", []))
         low_ = flatten(data.get("low", []))
         close_ = flatten(data.get("close", []))
         time_ = flatten(data.get("timestamp", []))
 
-        if len(time_) == 0:
+        if not time_:
             return None
 
-        # 🔥 LENGTH FIX
+        # 🔥 LENGTH MATCH FIX
         min_len = min(len(open_), len(high_), len(low_), len(close_), len(time_))
 
         open_ = open_[:min_len]
@@ -118,8 +120,8 @@ def get_candle_data(security_id, segment):
         close_ = close_[:min_len]
         time_ = time_[:min_len]
 
-        # 🔥 TIME FIX
-        time_ = pd.to_datetime(time_, errors="coerce", unit="s")
+        # 🔥 TIME FIX (IMPORTANT)
+        time_ = pd.to_datetime(time_, unit="s", errors="coerce")
 
         df = pd.DataFrame({
             "time": time_,
@@ -129,8 +131,12 @@ def get_candle_data(security_id, segment):
             "close": close_,
         })
 
+        # साफ data
         df = df.dropna()
         df = df.sort_values("time")
+
+        if df.empty:
+            return None
 
         return df
 
@@ -143,6 +149,7 @@ def get_candle_data(security_id, segment):
 # 📊 INDICATORS
 # =========================
 def add_indicators(df):
+
     df["EMA21"] = df["close"].ewm(span=21).mean()
     df["EMA50"] = df["close"].ewm(span=50).mean()
 
@@ -152,7 +159,7 @@ def add_indicators(df):
 
 
 # =========================
-# 📊 PLOT CANDLE (TRADINGVIEW STYLE)
+# 📊 PLOT (TRADINGVIEW STYLE 🔥)
 # =========================
 def plot_candle(df):
     import plotly.graph_objects as go
@@ -169,29 +176,38 @@ def plot_candle(df):
         low=df["low"],
         close=df["close"],
         increasing_line_color='#00ff88',
-        decreasing_line_color='#ff4d4d'
+        decreasing_line_color='#ff4d4d',
+        name="Price"
     ))
 
     # EMA 21
     fig.add_trace(go.Scatter(
         x=df["time"],
         y=df["EMA21"],
-        name="EMA 21"
+        name="EMA 21",
+        line=dict(width=2)
     ))
 
     # EMA 50
     fig.add_trace(go.Scatter(
         x=df["time"],
         y=df["EMA50"],
-        name="EMA 50"
+        name="EMA 50",
+        line=dict(width=2)
     ))
 
     fig.update_layout(
         template="plotly_dark",
         height=600,
         margin=dict(l=5, r=5, t=30, b=5),
-        xaxis=dict(showgrid=False, rangeslider=dict(visible=False)),
-        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.03)"),
+        xaxis=dict(
+            showgrid=False,
+            rangeslider=dict(visible=False)
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor="rgba(255,255,255,0.05)"
+        ),
         hovermode="x unified"
     )
 
