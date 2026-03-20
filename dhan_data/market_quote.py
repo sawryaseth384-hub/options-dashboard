@@ -1,33 +1,54 @@
 import requests
-from utils.config import ACCESS_TOKEN, CLIENT_ID
+import streamlit as st
+
+BASE_URL = "https://api.dhan.co/v2"
 
 
-class MarketQuote:
+def get_headers():
+    return {
+        "access-token": st.secrets["ACCESS_TOKEN"],
+        "client-id": st.secrets["CLIENT_ID"],
+        "Content-Type": "application/json"
+    }
 
-    def __init__(self):
-        self.url = "https://api.dhan.co/v2/marketfeed/quote"
 
-    def get_data(self, instruments):
+# =========================
+# 🔥 SEGMENT MAP (IMPORTANT)
+# =========================
+def map_segment(segment):
+    if segment == "IDX_I":
+        return "NSE_FNO"   # INDEX LTP also comes via FNO
+    elif segment == "D":
+        return "NSE_FNO"
+    else:
+        return "NSE_EQ"
 
-        headers = {
-            "access-token": ACCESS_TOKEN,
-            "client-id": CLIENT_ID,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
+
+# =========================
+# 📊 GET LTP (MAIN FUNCTION)
+# =========================
+def get_ltp(security_id, segment):
+
+    try:
+        url = f"{BASE_URL}/marketfeed/ltp"
+
+        mapped_segment = map_segment(segment)
+
+        payload = {
+            mapped_segment: [security_id]
         }
 
-        try:
-            res = requests.post(self.url, headers=headers, json=instruments)
+        res = requests.post(url, headers=get_headers(), json=payload)
+        data = res.json()
 
-            if res.status_code != 200:
-                return {"error": f"HTTP {res.status_code}", "msg": res.text}
+        # 🔍 DEBUG
+        st.write("LTP RAW:", data)
 
-            data = res.json()
+        if data.get("status") != "success":
+            return 0
 
-            if data.get("status") != "success":
-                return {"error": "API Failed", "msg": data}
+        return data["data"][mapped_segment][str(security_id)]["last_price"]
 
-            return data
-
-        except Exception as e:
-            return {"error": str(e)}
+    except Exception as e:
+        st.error(f"LTP Error: {e}")
+        return 0
