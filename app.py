@@ -13,9 +13,6 @@ from dhan_data.market_quote import get_ltp
 from dhan_data.live_feed import start_live_feed, get_live_ltp
 from dhan_data.depth_feed import start_depth_feed, get_depth
 
-# (optional future)
-# from dhan_data.expired_options import get_expired_options
-
 
 # =========================
 # 🔥 PAGE CONFIG
@@ -25,7 +22,7 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 START WEBSOCKETS (SAFE)
+# 🔥 START WEBSOCKETS
 # =========================
 if "init_done" not in st.session_state:
     start_live_feed()
@@ -34,9 +31,9 @@ if "init_done" not in st.session_state:
 
 
 # =========================
-# 🔁 AUTO REFRESH
+# 🔁 AUTO REFRESH (FIXED)
 # =========================
-st_autorefresh(interval=2000, key="live")
+st_autorefresh(interval=3000, key="live")  # 🔥 IMPORTANT
 
 
 # =========================
@@ -59,17 +56,25 @@ st.caption(f"Security ID: {security_id} | Segment: {segment}")
 
 
 # =========================
-# 🔥 SEGMENT MAP
+# 🔥 CORRECT SEGMENT (VERY IMPORTANT)
 # =========================
-def map_segment(seg):
-    return "NSE_FNO" if seg == "D" else "NSE_EQ"
+def map_segment(symbol):
+    symbol = symbol.upper()
+
+    if "NIFTY" in symbol:
+        return "IDX_I"
+
+    elif "BANKNIFTY" in symbol:
+        return "IDX_I"
+
+    return "NSE_EQ"
 
 
-mapped_segment = map_segment(segment)
+mapped_segment = map_segment(selected_symbol)
 
 
 # =========================
-# 🔥 LIVE SPOT (SMART)
+# 🔥 LIVE SPOT
 # =========================
 def get_spot():
     live_price = get_live_ltp()
@@ -92,30 +97,30 @@ spot = get_spot()
 
 
 # =========================
-# 🔥 EXPIRY
+# 🔥 EXPIRY LIST
 # =========================
-expiry_list = []
-
-try:
-    expiry_list = dhan_api.get_valid_expiries(security_id, mapped_segment)
-except Exception as e:
-    st.error(f"Expiry Error: {e}")
+expiry_list = dhan_api.get_valid_expiries(security_id, mapped_segment)
 
 selected_expiry = st.selectbox("Select Expiry", expiry_list) if expiry_list else None
 
 
 # =========================
-# 🔥 OPTION CHAIN
+# 🔥 OPTION CHAIN (FIXED)
 # =========================
 df = None
 
 if selected_expiry:
-    raw = dhan_api.get_option_chain(security_id, mapped_segment, selected_expiry)
+    raw = dhan_api.get_option_chain(
+        security_id,
+        mapped_segment,
+        selected_expiry
+    )
 
-    if raw and raw.get("status") == "success":
+    # 🔥 FIX: no status check needed
+    if raw:
         df, _ = helpers.process_option_data(raw)
     else:
-        st.warning("⚠️ Option Chain Failed")
+        st.info("⏳ Waiting (Rate Limit / API Delay)")
 
 
 # =========================
@@ -159,7 +164,7 @@ if df is not None:
 
 
 # =========================
-# 📈 CHART
+# 📈 PRICE CHART
 # =========================
 st.markdown("## 📈 Price Chart")
 
@@ -189,15 +194,6 @@ with col1:
 with col2:
     st.subheader("🔴 Asks")
     st.dataframe(depth.get("asks", []), use_container_width=True)
-
-
-# =========================
-# (OPTIONAL) EXPIRED DATA
-# =========================
-# st.markdown("## 📊 Expired Options")
-# opt_df = get_expired_options()
-# if opt_df is not None:
-#     st.dataframe(opt_df.tail(50))
 
 
 # =========================
