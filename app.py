@@ -67,24 +67,29 @@ st.caption(f"Security ID: {security_id} | Segment: {segment}")
 
 
 # =========================
-# 🔄 SEGMENT MAP
+# 🔄 SEGMENT MAP (FIXED)
 # =========================
 def map_segment(symbol):
     symbol = symbol.upper()
-    if "NIFTY" in symbol or "BANKNIFTY" in symbol:
+
+    if "NIFTY" in symbol:
         return "IDX_I"
+
+    elif "BANKNIFTY" in symbol:
+        return "IDX_I"
+
     return "NSE_EQ"
+
 
 mapped_segment = map_segment(selected_symbol)
 
 
 # =========================
-# 📡 SUBSCRIBE LIVE
+# 📡 SUBSCRIBE LIVE (SAFE)
 # =========================
 if "last_symbol" not in st.session_state:
     st.session_state.last_symbol = None
 
-# wait websocket ready
 ws_ready = time.time() - st.session_state.ws_start_time > 2
 
 if ws_ready and st.session_state.last_symbol != security_id:
@@ -101,10 +106,12 @@ def get_spot():
     if price and price != 0:
         return round(price, 2)
 
-    # fallback API
-    if "BANKNIFTY" in selected_symbol.upper():
+    symbol = selected_symbol.upper()
+
+    if "BANKNIFTY" in symbol:
         return get_ltp(25, "IDX_I")
-    elif "NIFTY" in selected_symbol.upper():
+
+    elif "NIFTY" in symbol:
         return get_ltp(13, "IDX_I")
 
     return get_ltp(security_id, segment)
@@ -114,7 +121,7 @@ spot = get_spot()
 
 
 # =========================
-# 📅 EXPIRY LIST
+# 📅 EXPIRY LIST (FIXED)
 # =========================
 expiry_list = dhan_api.get_valid_expiries(security_id, mapped_segment)
 
@@ -124,21 +131,28 @@ if expiry_list:
 
 
 # =========================
-# 📊 OPTION CHAIN
+# 📊 OPTION CHAIN (FINAL FIX)
 # =========================
 df = None
 
 if selected_expiry:
+
+    # 🔥 IMPORTANT: INDEX vs STOCK handling
+    if mapped_segment == "IDX_I":
+        option_segment = "IDX_I"
+    else:
+        option_segment = "NSE_FNO"
+
     raw = dhan_api.get_option_chain(
         security_id,
-        "NSE_FNO",   # 🔥 IMPORTANT FIX
+        option_segment,
         selected_expiry
     )
 
-    if raw and raw.get("status") == "success":
+    if raw and raw.get("status") == "success" and "data" in raw:
         df, _ = helpers.process_option_data(raw)
     else:
-        st.warning("⚠️ Option Chain not available")
+        st.warning("⚠️ Option Chain not available (Rate limit / Wrong segment)")
 
 
 # =========================
