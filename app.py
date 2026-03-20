@@ -18,71 +18,162 @@ if refresh > 0:
     st_autorefresh(interval=refresh * 1000, key="refresh")
 
 # =========================
-# EXPIRY
+# 🔥 EXPIRY
 # =========================
-expiry_list = dhan_api.get_valid_expiries()
-selected_expiry = st.selectbox("Select Expiry", expiry_list) if expiry_list else None
+expiry_list = []
+try:
+    expiry_list = dhan_api.get_valid_expiries()
+except Exception as e:
+    st.error(f"❌ Expiry Error: {e}")
+
+selected_expiry = None
+if expiry_list:
+    selected_expiry = st.selectbox("Select Expiry", expiry_list)
+else:
+    st.warning("⚠️ No expiry available")
 
 # =========================
-# DATA FETCH
+# 🔥 DATA FETCH
 # =========================
 raw_data = None
-if selected_expiry:
-    raw_data = dhan_api.get_option_chain(selected_expiry)
-
-df, spot = helpers.process_option_data(raw_data) if raw_data else (None, 0)
+try:
+    if selected_expiry:
+        raw_data = dhan_api.get_option_chain(selected_expiry)
+except Exception as e:
+    st.error(f"❌ Option Chain Error: {e}")
 
 # =========================
-# METRICS
+# 🔥 PROCESS DATA
+# =========================
+df = None
+spot = 0
+
+try:
+    if raw_data and raw_data.get("status") == "success":
+        df, spot = helpers.process_option_data(raw_data)
+    else:
+        st.warning("⚠️ Invalid API data")
+except Exception as e:
+    st.error(f"❌ Processing Error: {e}")
+
+# =========================
+# 📊 METRICS
 # =========================
 col1, col2, col3, col4, col5 = st.columns(5)
 
-pcr = helpers.calculate_pcr(df) if df is not None else 0
-support, resistance = helpers.get_support_resistance(df) if df is not None else (0, 0)
-atm = helpers.get_atm_strike(df, spot) if df is not None else 0
+# PCR
+pcr = 0
+try:
+    if df is not None:
+        pcr = helpers.calculate_pcr(df)
+except Exception as e:
+    st.error(f"❌ PCR Error: {e}")
 
-col1.metric("Spot", spot)
-col2.metric("PCR", pcr)
-col3.metric("Support", support)
-col4.metric("Resistance", resistance)
-col5.metric("ATM", atm)
+# Support / Resistance
+support, resistance = 0, 0
+try:
+    if df is not None:
+        support, resistance = helpers.get_support_resistance(df)
+except Exception as e:
+    st.error(f"❌ SR Error: {e}")
 
-signal = helpers.get_signal(pcr)
+# ATM
+atm = 0
+try:
+    if df is not None:
+        atm = helpers.get_atm_strike(df, spot)
+except Exception as e:
+    st.error(f"❌ ATM Error: {e}")
+
+col1.metric("📊 Spot", spot)
+col2.metric("📊 PCR", pcr)
+col3.metric("🟢 Support", support)
+col4.metric("🔴 Resistance", resistance)
+col5.metric("🎯 ATM", atm)
+
+# =========================
+# 🚀 SIGNAL
+# =========================
+signal = "N/A"
+try:
+    signal = helpers.get_signal(pcr)
+except Exception as e:
+    st.error(f"❌ Signal Error: {e}")
+
 st.subheader(f"🚀 Signal: {signal}")
 
 # =========================
-# TABLE
+# 📊 TABLE
 # =========================
 if df is not None:
-    styled_df = df.style.apply(lambda row: helpers.highlight_atm(row, atm), axis=1)
-    st.dataframe(styled_df, use_container_width=True)
+    try:
+        styled_df = df.style.apply(lambda row: helpers.highlight_atm(row, atm), axis=1)
+        st.dataframe(styled_df, use_container_width=True)
+    except Exception as e:
+        st.error(f"❌ Table Error: {e}")
+else:
+    st.warning("⚠️ No data")
 
 # =========================
-# ADVANCED PANEL
+# 🚀 ADVANCED PANEL
 # =========================
 st.markdown("## 🚀 Advanced Panel")
 
-if "prev_df" not in st.session_state:
-    st.session_state["prev_df"] = None
+# OI CHANGE SAFE
+try:
+    prev_df = st.session_state.get("prev_df", None)
+    df = helpers.calculate_oi_change(df, prev_df)
+    st.session_state["prev_df"] = df.copy() if df is not None else None
+    st.success("✅ OI Change Working")
+except Exception as e:
+    st.error(f"❌ OI Change Error: {e}")
 
-df = helpers.calculate_oi_change(df, st.session_state["prev_df"])
-st.session_state["prev_df"] = df.copy()
+# DOMINANCE
+dominance = "N/A"
+try:
+    dominance = helpers.get_dominance(df)
+    st.info(f"📊 Dominance: {dominance}")
+except Exception as e:
+    st.error(f"❌ Dominance Error: {e}")
 
-dominance = helpers.get_dominance(pcr)
-trend = helpers.get_trend(df)
-ai = helpers.ai_signal(pcr, trend)
-strategy = helpers.build_strategy(signal, atm)
+# TREND
+trend = "N/A"
+try:
+    trend = helpers.get_trend(df)
+    st.info(f"📈 Trend: {trend}")
+except Exception as e:
+    st.error(f"❌ Trend Error: {e}")
 
-st.info(f"📊 Dominance: {dominance}")
-st.info(f"📈 Trend: {trend}")
-st.success(f"🤖 AI Signal: {ai}")
-st.info(f"💰 Strategy: {strategy}")
+# AI SIGNAL
+ai = "N/A"
+try:
+    ai = helpers.ai_signal(pcr, dominance)
+    st.success(f"🤖 AI Signal: {ai}")
+except Exception as e:
+    st.error(f"❌ AI Error: {e}")
 
-# Charts
-st.plotly_chart(helpers.plot_oi_heatmap(df))
-st.plotly_chart(helpers.plot_payoff(atm))
+# STRATEGY
+strategy = "N/A"
+try:
+    strategy = helpers.build_strategy(signal, atm)
+    st.info(f"💰 Strategy: {strategy}")
+except Exception as e:
+    st.error(f"❌ Strategy Error: {e}")
 
 # =========================
-# DEBUG
+# 📊 CHARTS
+# =========================
+try:
+    st.plotly_chart(helpers.plot_oi_heatmap(df), use_container_width=True)
+except Exception as e:
+    st.error(f"❌ Heatmap Error: {e}")
+
+try:
+    st.plotly_chart(helpers.plot_payoff(atm), use_container_width=True)
+except Exception as e:
+    st.error(f"❌ Payoff Error: {e}")
+
+# =========================
+# 🔧 DEBUG PANEL
 # =========================
 render_debug_panel()
