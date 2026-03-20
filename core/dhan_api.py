@@ -31,12 +31,17 @@ def safe_post(url, payload, retry=2):
 
             data = res.json()
 
-            # 🔥 TOKEN ERROR
+            # 🔥 DEBUG PRINT
+            print("API URL:", url)
+            print("PAYLOAD:", payload)
+            print("RESPONSE:", data)
+
+            # 🔴 TOKEN ERROR
             if "808" in str(data):
                 st.error("❌ Token Expired / Invalid")
                 return None
 
-            # 🔥 INVALID SECURITY
+            # 🔴 INVALID SECURITY
             if "813" in str(data):
                 st.error("❌ Invalid Security ID")
                 return None
@@ -87,12 +92,12 @@ _last_call_time = 0
 def get_option_chain(security_id, segment, expiry):
     global _last_call_time
 
-    # 🔥 RATE LIMIT (3 sec)
+    # 🔥 RATE LIMIT HANDLE (NO SKIP, ONLY WAIT)
     now = time.time()
     if now - _last_call_time < 3:
-        return None  # skip call to avoid block
+        time.sleep(3 - (now - _last_call_time))
 
-    _last_call_time = now
+    _last_call_time = time.time()
 
     url = f"{BASE_URL}/optionchain"
 
@@ -104,6 +109,10 @@ def get_option_chain(security_id, segment, expiry):
 
     data = safe_post(url, payload)
 
+    # 🔥 DEBUG OUTPUT UI + TERMINAL
+    print("OPTION CHAIN FINAL:", data)
+    st.write("📊 Option Chain Debug:", data)
+
     if not data:
         return None
 
@@ -111,7 +120,7 @@ def get_option_chain(security_id, segment, expiry):
         st.warning("⚠️ Option Chain Failed")
         return None
 
-    # 🔥 sanity check
+    # 🔥 STRUCTURE CHECK
     if "data" not in data or "oc" not in data["data"]:
         st.warning("⚠️ Invalid Option Chain Data")
         return None
