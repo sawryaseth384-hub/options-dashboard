@@ -12,6 +12,9 @@ from dhan_data import instruments
 from dhan_data import chart
 from dhan_data.market_quote import get_ltp
 
+# ✅ NEW IMPORT
+from dhan_data.live_feed import start_live_feed, get_live_ltp
+
 
 # =========================
 # 🔥 PAGE CONFIG
@@ -21,9 +24,17 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
+# 🔥 START LIVE FEED (ONCE)
+# =========================
+if "ws_started" not in st.session_state:
+    start_live_feed()
+    st.session_state.ws_started = True
+
+
+# =========================
 # 🔁 AUTO REFRESH
 # =========================
-st_autorefresh(interval=3000, key="live")
+st_autorefresh(interval=2000, key="live")   # fast refresh
 
 
 # =========================
@@ -59,18 +70,24 @@ mapped_segment = map_segment(segment)
 
 
 # =========================
-# 🔥 SPOT PRICE (FINAL FIX)
+# 🔥 🚀 LIVE SPOT PRICE (FINAL)
 # =========================
-symbol = selected_symbol.upper()
+live_price = get_live_ltp()
 
-if "BANKNIFTY" in symbol:
-    spot = get_ltp(25, "IDX_I")
-
-elif "NIFTY" in symbol:
-    spot = get_ltp(13, "IDX_I")
-
+if live_price and live_price != 0:
+    spot = live_price
 else:
-    spot = get_ltp(security_id, segment)
+    # fallback (if websocket not ready)
+    symbol = selected_symbol.upper()
+
+    if "BANKNIFTY" in symbol:
+        spot = get_ltp(25, "IDX_I")
+
+    elif "NIFTY" in symbol:
+        spot = get_ltp(13, "IDX_I")
+
+    else:
+        spot = get_ltp(security_id, segment)
 
 
 # =========================
@@ -157,7 +174,7 @@ if df is not None:
 
 
 # =========================
-# 📈 LIVE CHART
+# 📈 LIVE CANDLE CHART
 # =========================
 st.markdown("## 📈 Live Chart")
 
