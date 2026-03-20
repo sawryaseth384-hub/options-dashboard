@@ -10,6 +10,7 @@ from utils import helpers
 from utils.debug import render_debug_panel
 from dhan_data import instruments
 from dhan_data import chart
+from dhan_data.market_quote import get_ltp   # ✅ NEW
 
 st.set_page_config(page_title="Dhan AI Options Dashboard", layout="wide")
 st.title("📈 Dhan AI Options Dashboard")
@@ -43,11 +44,13 @@ if refresh > 0:
 
 
 # =========================
-# 🔥 SEGMENT MAP
+# 🔥 SEGMENT MAP (FIXED)
 # =========================
 def get_segment(seg):
     if seg == "D":
         return "NSE_FNO"
+    elif seg == "E":
+        return "NSE_EQ"
     else:
         return "IDX_I"
 
@@ -56,9 +59,20 @@ mapped_segment = get_segment(segment)
 
 
 # =========================
+# 🔥 LIVE SPOT (FIXED)
+# =========================
+spot = get_ltp(security_id, segment)
+
+
+# =========================
 # 🔥 EXPIRY
 # =========================
-expiry_list = dhan_api.get_valid_expiries(security_id, mapped_segment)
+expiry_list = []
+
+try:
+    expiry_list = dhan_api.get_valid_expiries(security_id, mapped_segment)
+except:
+    pass
 
 selected_expiry = None
 
@@ -85,10 +99,9 @@ if selected_expiry:
 # 🔥 PROCESS DATA
 # =========================
 df = None
-spot = 0
 
 if raw_data and raw_data.get("status") == "success":
-    df, spot = helpers.process_option_data(raw_data)
+    df, _ = helpers.process_option_data(raw_data)  # ❗ spot remove
 
 
 # =========================
@@ -125,24 +138,25 @@ if df is not None:
 
 
 # =========================
-# 📊 CHART
+# 📊 OPTION CHARTS
 # =========================
 if df is not None:
     st.plotly_chart(helpers.plot_oi_heatmap(df), width="stretch")
     st.plotly_chart(helpers.plot_payoff(atm), width="stretch")
 
+
 # =========================
-# 📈 LIVE CHART
+# 📈 LIVE CANDLE CHART
 # =========================
 st.markdown("## 📈 Live Chart")
 
 chart_df = chart.get_candle_data(security_id, mapped_segment)
 
-if chart_df is not None:
+if chart_df is not None and not chart_df.empty:
     fig = chart.plot_candle(chart_df)
     st.plotly_chart(fig, width="stretch")
 else:
-    st.warning("No chart data")
+    st.warning("⚠️ No chart data")
 
 
 # =========================
