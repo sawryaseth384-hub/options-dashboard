@@ -9,7 +9,7 @@ from core import dhan_api
 from utils import helpers
 from utils.debug import render_debug_panel
 from dhan_data import instruments
-
+from dhan_data import chart
 
 st.set_page_config(page_title="Dhan AI Options Dashboard", layout="wide")
 st.title("📈 Dhan AI Options Dashboard")
