@@ -1,3 +1,6 @@
+import streamlit as st   # 🔥 MUST ADD (top of file)
+
+
 def get_candle_data(security_id, segment):
 
     try:
@@ -28,7 +31,8 @@ def get_candle_data(security_id, segment):
 
         st.write("CHART RAW:", data)
 
-        if "open" not in data:
+        # ❌ safety check
+        if not data or "open" not in data:
             return None
 
         # 🔥 FLATTEN FUNCTION
@@ -41,12 +45,16 @@ def get_candle_data(security_id, segment):
                     flat.append(i)
             return flat
 
-        open_ = flatten(data["open"])
-        high_ = flatten(data["high"])
-        low_ = flatten(data["low"])
-        close_ = flatten(data["close"])
-        volume_ = flatten(data["volume"])
-        time_ = flatten(data["timestamp"])
+        open_ = flatten(data.get("open", []))
+        high_ = flatten(data.get("high", []))
+        low_ = flatten(data.get("low", []))
+        close_ = flatten(data.get("close", []))
+        volume_ = flatten(data.get("volume", []))
+        time_ = flatten(data.get("timestamp", []))
+
+        # ❌ empty data check
+        if len(time_) == 0:
+            return None
 
         df = pd.DataFrame({
             "open": open_,
