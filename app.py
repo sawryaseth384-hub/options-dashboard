@@ -21,9 +21,9 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 AUTO REFRESH (LIVE)
+# 🔁 AUTO REFRESH
 # =========================
-st_autorefresh(interval=3000, key="live")   # 3 sec refresh
+st_autorefresh(interval=3000, key="live")
 
 
 # =========================
@@ -48,28 +48,26 @@ st.caption(f"Security ID: {security_id} | Segment: {segment}")
 # =========================
 # 🔥 SEGMENT MAP
 # =========================
-def get_segment(seg):
+def map_segment(seg):
     if seg == "D":
         return "NSE_FNO"
-    elif seg == "E":
-        return "NSE_EQ"
     else:
-        return "IDX_I"
+        return "NSE_EQ"
 
 
-mapped_segment = get_segment(segment)
+mapped_segment = map_segment(segment)
 
 
 # =========================
-# 🔥 ✅ FIXED SPOT PRICE
+# 🔥 SPOT PRICE (FINAL FIX)
 # =========================
-symbol_upper = selected_symbol.upper()
+symbol = selected_symbol.upper()
 
-if "NIFTY" in symbol_upper and "BANK" not in symbol_upper:
-    spot = get_ltp(13, "IDX_I")   # NIFTY
+if "BANKNIFTY" in symbol:
+    spot = get_ltp(25, "IDX_I")
 
-elif "BANKNIFTY" in symbol_upper:
-    spot = get_ltp(25, "IDX_I")   # BANKNIFTY
+elif "NIFTY" in symbol:
+    spot = get_ltp(13, "IDX_I")
 
 else:
     spot = get_ltp(security_id, segment)
@@ -113,6 +111,8 @@ df = None
 
 if raw_data and raw_data.get("status") == "success":
     df, _ = helpers.process_option_data(raw_data)
+else:
+    st.error("❌ Option Chain Failed")
 
 
 # =========================
@@ -128,7 +128,7 @@ else:
     pcr = support = resistance = atm = 0
 
 col1.metric("📊 Spot", spot)
-col2.metric("📊 PCR", pcr)
+col2.metric("📊 PCR", round(pcr, 2))
 col3.metric("🟢 Support", support)
 col4.metric("🔴 Resistance", resistance)
 col5.metric("🎯 ATM", atm)
@@ -157,7 +157,7 @@ if df is not None:
 
 
 # =========================
-# 📈 LIVE CANDLE CHART
+# 📈 LIVE CHART
 # =========================
 st.markdown("## 📈 Live Chart")
 
@@ -166,14 +166,12 @@ chart_df = chart.get_candle_data(security_id, segment)
 if chart_df is not None and not chart_df.empty:
     fig, trend = chart.plot_candle(chart_df)
     st.plotly_chart(fig, use_container_width=True)
-
     st.success(f"📈 Trend: {trend}")
-
 else:
     st.warning("⚠️ No chart data")
 
 
 # =========================
-# DEBUG PANEL
+# DEBUG
 # =========================
 render_debug_panel()
