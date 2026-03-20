@@ -1,73 +1,52 @@
-import streamlit as st
-import sys
-import os
-from datetime import datetime
+def render_project_status():
+    import streamlit as st
 
-class DebugManager:
-    def __init__(self):
-        self.logs = []
-        self.api_responses = {}
-        self.status = {}
+    st.sidebar.markdown("## 📊 Project Status")
 
-    def log(self, level, msg, details=None):
-        self.logs.append({
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "level": level,
-            "msg": msg,
-            "details": details
-        })
+    # ✅ LEVEL 1
+    st.sidebar.markdown("### LEVEL 1 (Basic)")
+    st.sidebar.success("✅ Option Chain")
+    st.sidebar.success("✅ Expiry Selection")
+    st.sidebar.success("✅ Spot Price")
 
-    def set_status(self, key, value):
-        self.status[key] = value
+    # 🔥 LEVEL 2
+    st.sidebar.markdown("### LEVEL 2 (Core)")
+    
+    if st.session_state.get("pcr_done"):
+        st.sidebar.success("✅ PCR")
+    else:
+        st.sidebar.error("❌ PCR")
 
-    def set_api(self, key, value):
-        self.api_responses[key] = value
+    if st.session_state.get("sr_done"):
+        st.sidebar.success("✅ Support/Resistance")
+    else:
+        st.sidebar.error("❌ Support/Resistance")
 
-    def render(self):
-        if not st.sidebar.checkbox("🔧 Show Debug Info"):
-            return
+    # 💎 LEVEL 3
+    st.sidebar.markdown("### LEVEL 3 (Advanced)")
+    
+    if st.session_state.get("oi_change_done"):
+        st.sidebar.success("✅ OI Change")
+    else:
+        st.sidebar.error("❌ OI Change")
 
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("🐛 Debug Console")
+    if st.session_state.get("iv_done"):
+        st.sidebar.success("✅ IV")
+    else:
+        st.sidebar.error("❌ IV")
 
-        # 🔹 System Status
-        st.sidebar.markdown("### 📊 System Status")
+    # 🚀 Progress %
+    total = 6
+    done = sum([
+        st.session_state.get("pcr_done", False),
+        st.session_state.get("sr_done", False),
+        st.session_state.get("oi_change_done", False),
+        st.session_state.get("iv_done", False),
+        True, True  # basic features
+    ])
 
-        for key, value in self.status.items():
-            icon = "✅" if value else "🔴"
-            st.sidebar.markdown(f"{icon} {key}: {value}")
+    progress = int((done / total) * 100)
 
-        # 🔹 Logs
-        st.sidebar.markdown("### 📝 Logs")
-        for log in self.logs[-10:]:
-            icon = {
-                "ERROR": "🔴",
-                "WARNING": "🟡",
-                "SUCCESS": "✅"
-            }.get(log["level"], "⚪")
-
-            st.sidebar.markdown(f"{icon} {log['time']} - {log['msg']}")
-
-        # 🔹 API Response Viewer
-        with st.sidebar.expander("📦 API Responses"):
-            for key, value in self.api_responses.items():
-                st.markdown(f"**{key}**")
-                st.json(value)
-
-        # 🔹 Import Check
-        with st.sidebar.expander("📦 Import Check"):
-            try:
-                import core.dhan_api
-                st.success("core.dhan_api OK")
-            except:
-                st.error("core.dhan_api FAILED")
-
-            try:
-                import utils.helpers
-                st.success("utils.helpers OK")
-            except:
-                st.error("utils.helpers FAILED")
-
-        # 🔹 Time Info
-        st.sidebar.markdown("### ⏱ Time")
-        st.sidebar.write(datetime.now().strftime("%H:%M:%S"))
+    st.sidebar.markdown("---")
+    st.sidebar.progress(progress)
+    st.sidebar.write(f"🚀 Progress: {progress}%")
