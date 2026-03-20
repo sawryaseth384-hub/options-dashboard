@@ -1,6 +1,7 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 import sys, os
+import time
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
@@ -26,11 +27,12 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 START WEBSOCKETS
+# 🔥 START WEBSOCKETS (FIXED)
 # =========================
 if "init_done" not in st.session_state:
     start_live_feed()
     start_depth_feed()
+    time.sleep(2)  # 🔥 IMPORTANT: WS ready hone do
     st.session_state.init_done = True
 
 
@@ -67,7 +69,6 @@ def map_segment(symbol):
 
     if "NIFTY" in symbol:
         return "IDX_I"
-
     elif "BANKNIFTY" in symbol:
         return "IDX_I"
 
@@ -78,9 +79,13 @@ mapped_segment = map_segment(selected_symbol)
 
 
 # =========================
-# 🔥 🔴 SUBSCRIBE (VERY IMPORTANT)
+# 🔥 SUBSCRIBE (FIXED)
 # =========================
-if "last_symbol" not in st.session_state or st.session_state.last_symbol != security_id:
+if "last_symbol" not in st.session_state:
+    st.session_state.last_symbol = None
+
+if st.session_state.last_symbol != security_id:
+    time.sleep(1)  # 🔥 ensure WS ready
     subscribe_instrument(security_id, mapped_segment)
     st.session_state.last_symbol = security_id
 
@@ -94,7 +99,6 @@ def get_spot():
     if live_price and live_price != 0:
         return round(live_price, 2)
 
-    # fallback
     symbol = selected_symbol.upper()
 
     if "BANKNIFTY" in symbol:
