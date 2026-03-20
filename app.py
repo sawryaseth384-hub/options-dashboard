@@ -8,11 +8,13 @@ sys.path.insert(0, BASE_DIR)
 from core import dhan_api
 from utils import helpers
 from utils.debug import render_debug_panel
-from dhan_data import instruments
-from dhan_data import chart
+from dhan_data import instruments, chart
 from dhan_data.market_quote import get_ltp
 from dhan_data.live_feed import start_live_feed, get_live_ltp
 from dhan_data.depth_feed import start_depth_feed, get_depth
+
+# (optional future)
+# from dhan_data.expired_options import get_expired_options
 
 
 # =========================
@@ -23,19 +25,12 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 START LIVE FEED
+# 🔥 START WEBSOCKETS (SAFE)
 # =========================
-if "ws_started" not in st.session_state:
+if "init_done" not in st.session_state:
     start_live_feed()
-    st.session_state.ws_started = True
-
-
-# =========================
-# 🔥 START DEPTH FEED
-# =========================
-if "depth_started" not in st.session_state:
     start_depth_feed()
-    st.session_state.depth_started = True
+    st.session_state.init_done = True
 
 
 # =========================
@@ -59,7 +54,7 @@ row = df_instr[df_instr["SEM_TRADING_SYMBOL"] == selected_symbol].iloc[0]
 security_id = int(row["SEM_SMST_SECURITY_ID"])
 segment = row["SEM_SEGMENT"]
 
-st.success(f"✅ Selected: {selected_symbol}")
+st.success(f"✅ {selected_symbol}")
 st.caption(f"Security ID: {security_id} | Segment: {segment}")
 
 
@@ -67,31 +62,33 @@ st.caption(f"Security ID: {security_id} | Segment: {segment}")
 # 🔥 SEGMENT MAP
 # =========================
 def map_segment(seg):
-    if seg == "D":
-        return "NSE_FNO"
-    else:
-        return "NSE_EQ"
+    return "NSE_FNO" if seg == "D" else "NSE_EQ"
 
 
 mapped_segment = map_segment(segment)
 
 
 # =========================
-# 🔥 LIVE SPOT PRICE
+# 🔥 LIVE SPOT (SMART)
 # =========================
-live_price = get_live_ltp()
+def get_spot():
+    live_price = get_live_ltp()
 
-if live_price and live_price != 0:
-    spot = live_price
-else:
+    if live_price and live_price != 0:
+        return round(live_price, 2)
+
     symbol = selected_symbol.upper()
 
     if "BANKNIFTY" in symbol:
-        spot = get_ltp(25, "IDX_I")
+        return get_ltp(25, "IDX_I")
+
     elif "NIFTY" in symbol:
-        spot = get_ltp(13, "IDX_I")
-    else:
-        spot = get_ltp(security_id, segment)
+        return get_ltp(13, "IDX_I")
+
+    return get_ltp(security_id, segment)
+
+
+spot = get_spot()
 
 
 # =========================
@@ -104,36 +101,21 @@ try:
 except Exception as e:
     st.error(f"Expiry Error: {e}")
 
-selected_expiry = None
-
-if expiry_list:
-    selected_expiry = st.selectbox("Select Expiry", expiry_list)
-else:
-    st.warning("⚠️ No expiry available")
+selected_expiry = st.selectbox("Select Expiry", expiry_list) if expiry_list else None
 
 
 # =========================
 # 🔥 OPTION CHAIN
 # =========================
-raw_data = None
-
-if selected_expiry:
-    raw_data = dhan_api.get_option_chain(
-        security_id,
-        mapped_segment,
-        selected_expiry
-    )
-
-
-# =========================
-# 🔥 PROCESS DATA
-# =========================
 df = None
 
-if raw_data and raw_data.get("status") == "success":
-    df, _ = helpers.process_option_data(raw_data)
-else:
-    st.error("❌ Option Chain Failed")
+if selected_expiry:
+    raw = dhan_api.get_option_chain(security_id, mapped_segment, selected_expiry)
+
+    if raw and raw.get("status") == "success":
+        df, _ = helpers.process_option_data(raw)
+    else:
+        st.warning("⚠️ Option Chain Failed")
 
 
 # =========================
@@ -158,8 +140,7 @@ col5.metric("🎯 ATM", atm)
 # =========================
 # 🚀 SIGNAL
 # =========================
-signal = helpers.get_signal(pcr)
-st.subheader(f"🚀 Signal: {signal}")
+st.subheader(f"🚀 Signal: {helpers.get_signal(pcr)}")
 
 
 # =========================
@@ -178,9 +159,9 @@ if df is not None:
 
 
 # =========================
-# 📈 LIVE CANDLE CHART
+# 📈 CHART
 # =========================
-st.markdown("## 📈 Live Chart")
+st.markdown("## 📈 Price Chart")
 
 chart_df = chart.get_candle_data(security_id, segment)
 
@@ -195,7 +176,7 @@ else:
 # =========================
 # 📊 MARKET DEPTH
 # =========================
-st.markdown("## 📊 Market Depth (20 Level)")
+st.markdown("## 📊 Market Depth")
 
 depth = get_depth()
 
@@ -203,17 +184,20 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("🟢 Bids")
-    if depth["bids"]:
-        st.dataframe(depth["bids"], use_container_width=True)
-    else:
-        st.warning("No Bid Data")
+    st.dataframe(depth.get("bids", []), use_container_width=True)
 
 with col2:
     st.subheader("🔴 Asks")
-    if depth["asks"]:
-        st.dataframe(depth["asks"], use_container_width=True)
-    else:
-        st.warning("No Ask Data")
+    st.dataframe(depth.get("asks", []), use_container_width=True)
+
+
+# =========================
+# (OPTIONAL) EXPIRED DATA
+# =========================
+# st.markdown("## 📊 Expired Options")
+# opt_df = get_expired_options()
+# if opt_df is not None:
+#     st.dataframe(opt_df.tail(50))
 
 
 # =========================
