@@ -77,9 +77,9 @@ if raw_data and raw_data.get("status") == "success":
 # =========================
 # 📊 MAIN METRICS
 # =========================
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
-# Spot (Always show)
+# Spot
 with col1:
     st.metric("📊 Spot", f"₹{spot:,.2f}")
 
@@ -109,6 +109,18 @@ with col3:
 
 with col4:
     st.metric("🔴 Resistance", resistance)
+
+
+# 🎯 ATM
+atm = 0
+try:
+    if df is not None:
+        atm = helpers.get_atm_strike(df, spot)
+except Exception as e:
+    st.error(f"❌ ATM Error: {e}")
+
+with col5:
+    st.metric("🎯 ATM", atm)
 
 
 # =========================
