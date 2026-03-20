@@ -1,12 +1,15 @@
 import pandas as pd
 
+
+# =========================
+# 🔥 PROCESS OPTION DATA
+# =========================
 def process_option_data(raw_data):
     try:
         data = raw_data.get("data", {})
         spot = data.get("last_price", 0)
 
         oc = data.get("oc", {})
-
         rows = []
 
         for strike, value in oc.items():
@@ -37,11 +40,10 @@ def process_option_data(raw_data):
 
         df = pd.DataFrame(rows)
 
-        # 🔥 SAFETY CHECK
+        # 🔥 SAFETY
         if df.empty:
             return df, spot
 
-        # 🔥 SORT SAFE
         df = df.sort_values("Strike").reset_index(drop=True)
 
         return df, spot
@@ -49,3 +51,52 @@ def process_option_data(raw_data):
     except Exception as e:
         print("PROCESS ERROR:", e)
         return pd.DataFrame(), 0
+
+
+# =========================
+# 📊 PCR (Put Call Ratio)
+# =========================
+def calculate_pcr(df):
+    try:
+        total_ce_oi = df["CE OI"].sum()
+        total_pe_oi = df["PE OI"].sum()
+
+        if total_ce_oi == 0:
+            return 0
+
+        return round(total_pe_oi / total_ce_oi, 2)
+
+    except Exception as e:
+        print("PCR Error:", e)
+        return 0
+
+
+# =========================
+# 🟢 SUPPORT / 🔴 RESISTANCE
+# =========================
+def get_support_resistance(df):
+    try:
+        support = df.loc[df["PE OI"].idxmax(), "Strike"]
+        resistance = df.loc[df["CE OI"].idxmax(), "Strike"]
+
+        return int(support), int(resistance)
+
+    except Exception as e:
+        print("SR Error:", e)
+        return 0, 0
+
+
+# =========================
+# 🚀 MARKET SIGNAL
+# =========================
+def get_signal(pcr):
+    try:
+        if pcr > 1.2:
+            return "📈 Bullish"
+        elif pcr < 0.8:
+            return "📉 Bearish"
+        else:
+            return "⚖️ Sideways"
+
+    except:
+        return "N/A"
