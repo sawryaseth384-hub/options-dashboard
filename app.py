@@ -11,6 +11,7 @@ from utils.debug import render_debug_panel
 from dhan_data import instruments
 from dhan_data import chart
 from dhan_data.market_quote import get_ltp
+from dhan_data.depth_feed import start_depth_feed, get_depth
 
 # ✅ NEW IMPORT
 from dhan_data.live_feed import start_live_feed, get_live_ltp
