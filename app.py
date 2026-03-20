@@ -1,24 +1,26 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
-import sys, os
-import time
+import sys, os, time
 
+# =========================
+# 🔧 PATH SETUP
+# =========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
+# =========================
+# 📦 IMPORTS
+# =========================
 from core import dhan_api
 from utils import helpers
 from utils.debug import render_debug_panel
 from dhan_data import instruments, chart
 from dhan_data.market_quote import get_ltp
-
-# 🔥 FIXED IMPORT
 from dhan_data.live_market_feed import (
     start_live_feed,
     get_live_ltp,
     subscribe_instrument
 )
-
 from dhan_data.depth_feed import start_depth_feed, get_depth
 
 
@@ -30,13 +32,13 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 START WEBSOCKETS
+# 🚀 START WEBSOCKET
 # =========================
 if "init_done" not in st.session_state:
     start_live_feed()
     start_depth_feed()
     st.session_state.init_done = True
-    st.session_state.ws_ready_time = time.time()
+    st.session_state.ws_start_time = time.time()
 
 
 # =========================
@@ -46,7 +48,7 @@ st_autorefresh(interval=3000, key="live")
 
 
 # =========================
-# 🔥 INSTRUMENT SELECT
+# 📊 SELECT INSTRUMENT
 # =========================
 df_instr = instruments.get_instrument_df()
 
@@ -65,52 +67,44 @@ st.caption(f"Security ID: {security_id} | Segment: {segment}")
 
 
 # =========================
-# 🔥 SEGMENT FIX
+# 🔄 SEGMENT MAP
 # =========================
 def map_segment(symbol):
     symbol = symbol.upper()
-
     if "NIFTY" in symbol or "BANKNIFTY" in symbol:
         return "IDX_I"
-
     return "NSE_EQ"
-
 
 mapped_segment = map_segment(selected_symbol)
 
 
 # =========================
-# 🔥 SUBSCRIBE (FINAL FIX)
+# 📡 SUBSCRIBE LIVE
 # =========================
 if "last_symbol" not in st.session_state:
     st.session_state.last_symbol = None
 
-ws_ready = time.time() - st.session_state.get("ws_ready_time", 0) > 2
+# wait websocket ready
+ws_ready = time.time() - st.session_state.ws_start_time > 2
 
 if ws_ready and st.session_state.last_symbol != security_id:
-    subscribe_instrument(
-        security_id,
-        mapped_segment,
-        mode="full"   # 🔥 VERY IMPORTANT
-    )
+    subscribe_instrument(security_id, mapped_segment)
     st.session_state.last_symbol = security_id
 
 
 # =========================
-# 🔥 LIVE SPOT
+# 💰 GET LIVE SPOT
 # =========================
 def get_spot():
-    live_price = get_live_ltp()
+    price = get_live_ltp()
 
-    if live_price and live_price != 0:
-        return round(live_price, 2)
+    if price and price != 0:
+        return round(price, 2)
 
-    symbol = selected_symbol.upper()
-
-    if "BANKNIFTY" in symbol:
+    # fallback API
+    if "BANKNIFTY" in selected_symbol.upper():
         return get_ltp(25, "IDX_I")
-
-    elif "NIFTY" in symbol:
+    elif "NIFTY" in selected_symbol.upper():
         return get_ltp(13, "IDX_I")
 
     return get_ltp(security_id, segment)
@@ -120,29 +114,31 @@ spot = get_spot()
 
 
 # =========================
-# 🔥 EXPIRY LIST
+# 📅 EXPIRY LIST
 # =========================
 expiry_list = dhan_api.get_valid_expiries(security_id, mapped_segment)
 
-selected_expiry = st.selectbox("Select Expiry", expiry_list) if expiry_list else None
+selected_expiry = None
+if expiry_list:
+    selected_expiry = st.selectbox("Select Expiry", expiry_list)
 
 
 # =========================
-# 🔥 OPTION CHAIN (FINAL FIX)
+# 📊 OPTION CHAIN
 # =========================
 df = None
 
 if selected_expiry:
     raw = dhan_api.get_option_chain(
         security_id,
-        "NSE_FNO",   # 🔥 FIXED
+        "NSE_FNO",   # 🔥 IMPORTANT FIX
         selected_expiry
     )
 
-    if raw:
+    if raw and raw.get("status") == "success":
         df, _ = helpers.process_option_data(raw)
     else:
-        st.error("❌ Option Chain Failed (Check Token / Segment)")
+        st.warning("⚠️ Option Chain not available")
 
 
 # =========================
@@ -157,28 +153,28 @@ if df is not None:
 else:
     pcr = support = resistance = atm = 0
 
-col1.metric("📊 Spot", spot)
-col2.metric("📊 PCR", round(pcr, 2))
-col3.metric("🟢 Support", support)
-col4.metric("🔴 Resistance", resistance)
-col5.metric("🎯 ATM", atm)
+col1.metric("Spot", spot)
+col2.metric("PCR", round(pcr, 2))
+col3.metric("Support", support)
+col4.metric("Resistance", resistance)
+col5.metric("ATM", atm)
 
 
 # =========================
 # 🚀 SIGNAL
 # =========================
-st.subheader(f"🚀 Signal: {helpers.get_signal(pcr)}")
+st.subheader(f"Signal: {helpers.get_signal(pcr)}")
 
 
 # =========================
-# 📊 OPTION TABLE
+# 📋 OPTION TABLE
 # =========================
 if df is not None:
-    st.dataframe(df, width="stretch")  # 🔥 updated
+    st.dataframe(df, width="stretch")
 
 
 # =========================
-# 📊 OPTION CHARTS
+# 📊 CHARTS
 # =========================
 if df is not None:
     st.plotly_chart(helpers.plot_oi_heatmap(df), width="stretch")
@@ -186,39 +182,39 @@ if df is not None:
 
 
 # =========================
-# 📈 PRICE CHART (FIXED)
+# 📈 PRICE CHART
 # =========================
-st.markdown("## 📈 Price Chart")
+st.markdown("## Price Chart")
 
 chart_df = chart.get_candle_data(security_id, mapped_segment)
 
 if chart_df is not None and not chart_df.empty:
     fig, trend = chart.plot_candle(chart_df)
     st.plotly_chart(fig, width="stretch")
-    st.success(f"📈 Trend: {trend}")
+    st.success(f"Trend: {trend}")
 else:
-    st.warning("⚠️ No chart data")
+    st.warning("No chart data")
 
 
 # =========================
 # 📊 MARKET DEPTH
 # =========================
-st.markdown("## 📊 Market Depth")
+st.markdown("## Market Depth")
 
 depth = get_depth()
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("🟢 Bids")
+    st.subheader("Bids")
     st.dataframe(depth.get("bids", []), width="stretch")
 
 with col2:
-    st.subheader("🔴 Asks")
+    st.subheader("Asks")
     st.dataframe(depth.get("asks", []), width="stretch")
 
 
 # =========================
-# DEBUG
+# 🛠 DEBUG
 # =========================
 render_debug_panel()
