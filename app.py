@@ -16,16 +16,20 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 INSTRUMENT SELECT (FIXED)
+# 🔥 INSTRUMENT SELECT
 # =========================
 df_instr = instruments.get_instrument_df()
 
+# 🔥 Remove non F&O equity (extra safety)
+df_instr = df_instr[
+    (df_instr["SEM_SEGMENT"] == "D") | (df_instr["SEM_SEGMENT"] == "I")
+]
+
 selected_symbol = st.selectbox(
     "Select Instrument",
-    df_instr["SEM_TRADING_SYMBOL"].unique()
+    sorted(df_instr["SEM_TRADING_SYMBOL"].unique())
 )
 
-# 👉 security id + segment निकालो
 selected_row = df_instr[df_instr["SEM_TRADING_SYMBOL"] == selected_symbol].iloc[0]
 
 security_id = int(selected_row["SEM_SMST_SECURITY_ID"])
@@ -47,37 +51,44 @@ if refresh > 0:
 # 🔥 SEGMENT MAPPING
 # =========================
 def get_segment(seg):
-    if seg == "E":
-        return "NSE_EQ"
-    elif seg == "D":
+    if seg == "D":
         return "NSE_FNO"
+    elif seg == "E":
+        return "NSE_EQ"
     else:
         return "IDX_I"
 
 
+mapped_segment = get_segment(segment)
+
+
 # =========================
-# 🔥 EXPIRY FETCH (FIXED)
+# 🔥 EXPIRY FETCH
 # =========================
 expiry_list = []
 
 try:
     expiry_list = dhan_api.get_valid_expiries(
         security_id,
-        get_segment(segment)
+        mapped_segment
     )
+
+    st.write("DEBUG Expiry:", expiry_list)  # 🔥 debug
+
 except Exception as e:
     st.error(f"❌ Expiry Error: {e}")
+
 
 selected_expiry = None
 
 if expiry_list:
     selected_expiry = st.selectbox("Select Expiry", expiry_list)
 else:
-    st.warning("⚠️ No expiry available")
+    st.warning("⚠️ No expiry available (check instrument)")
 
 
 # =========================
-# 🔥 OPTION CHAIN FETCH (FIXED)
+# 🔥 OPTION CHAIN FETCH
 # =========================
 raw_data = None
 
@@ -85,9 +96,12 @@ try:
     if selected_expiry:
         raw_data = dhan_api.get_option_chain(
             security_id,
-            get_segment(segment),
+            mapped_segment,
             selected_expiry
         )
+
+        st.write("DEBUG API:", raw_data)  # 🔥 debug
+
 except Exception as e:
     st.error(f"❌ Option Chain Error: {e}")
 
@@ -103,6 +117,7 @@ try:
         df, spot = helpers.process_option_data(raw_data)
     else:
         st.warning("⚠️ Invalid API data")
+
 except Exception as e:
     st.error(f"❌ Processing Error: {e}")
 
@@ -115,7 +130,7 @@ col1, col2, col3, col4, col5 = st.columns(5)
 pcr, support, resistance, atm = 0, 0, 0, 0
 
 try:
-    if df is not None:
+    if df is not None and not df.empty:
         pcr = helpers.calculate_pcr(df)
         support, resistance = helpers.get_support_resistance(df)
         atm = helpers.get_atm_strike(df, spot)
@@ -145,7 +160,7 @@ st.subheader(f"🚀 Market Signal: {signal}")
 # =========================
 # 📊 TABLE
 # =========================
-if df is not None:
+if df is not None and not df.empty:
     try:
         styled_df = df.style.apply(lambda row: helpers.highlight_atm(row, atm), axis=1)
         st.dataframe(styled_df, use_container_width=True)
