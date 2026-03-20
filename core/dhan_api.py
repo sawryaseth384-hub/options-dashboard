@@ -1,7 +1,6 @@
 import requests
 import streamlit as st
 
-# 🔥 MUST ADD THIS
 BASE_URL = "https://api.dhan.co/v2"
 
 
@@ -28,6 +27,15 @@ def get_expiry_list(security_id, segment):
         res = requests.post(url, headers=get_headers(), json=payload)
         data = res.json()
 
+        # ❌ handle error
+        if "808" in str(data):
+            st.error("❌ Token Invalid")
+            return []
+
+        if "813" in str(data):
+            st.error("❌ Invalid Security ID")
+            return []
+
         return data.get("data", [])
 
     except Exception as e:
@@ -35,9 +43,6 @@ def get_expiry_list(security_id, segment):
         return []
 
 
-# =========================
-# 🔥 VALID EXPIRY
-# =========================
 def get_valid_expiries(security_id, segment):
     return get_expiry_list(security_id, segment)
 
@@ -56,7 +61,12 @@ def get_option_chain(security_id, segment, expiry):
         }
 
         res = requests.post(url, headers=get_headers(), json=payload)
-        return res.json()
+        data = res.json()
+
+        if data.get("status") != "success":
+            st.error("❌ Option Chain Failed")
+
+        return data
 
     except Exception as e:
         st.error(f"Option Chain Error: {e}")
