@@ -21,9 +21,7 @@ def get_headers():
 # 🔁 SEGMENT MAP
 # =========================
 def map_segment(segment):
-    if segment == "IDX_I":
-        return "NSE_FNO"
-    elif segment == "D":
+    if segment in ["IDX_I", "D"]:
         return "NSE_FNO"
     else:
         return "NSE_EQ"
@@ -73,15 +71,16 @@ def get_candle_data(security_id, segment):
             return None
 
         # =========================
-        # 🔥 FLATTEN FUNCTION
+        # 🔥 CORRECT FLATTEN
         # =========================
         def flatten(arr):
             flat = []
-            for i in arr:
-                if isinstance(i, list):
-                    flat.extend(i)
+            for sub in arr:
+                if isinstance(sub, list):
+                    for item in sub:
+                        flat.append(item)
                 else:
-                    flat.append(i)
+                    flat.append(sub)
             return flat
 
         open_ = flatten(data.get("open", []))
@@ -100,8 +99,11 @@ def get_candle_data(security_id, segment):
             "low": low_,
             "close": close_,
             "volume": volume_,
-            "time": pd.to_datetime(time_, unit="s")
+            "time": pd.to_datetime(time_, errors="coerce")   # 🔥 FIXED
         })
+
+        # ❗ drop invalid rows
+        df = df.dropna()
 
         return df
 
@@ -128,7 +130,8 @@ def plot_candle(df):
 
     fig.update_layout(
         height=500,
-        xaxis_rangeslider_visible=False
+        xaxis_rangeslider_visible=False,
+        template="plotly_dark"
     )
 
     return fig
