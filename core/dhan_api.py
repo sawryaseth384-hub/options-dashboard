@@ -5,6 +5,9 @@ from datetime import datetime
 BASE_URL = "https://api.dhan.co/v2"
 
 
+# =========================
+# 🔑 HEADERS
+# =========================
 def get_headers():
     return {
         "access-token": st.secrets["ACCESS_TOKEN"],
@@ -13,14 +16,16 @@ def get_headers():
     }
 
 
-# ✅ EXPIRY LIST
-def get_expiry_list():
+# =========================
+# 🔥 EXPIRY LIST (DYNAMIC)
+# =========================
+def get_expiry_list(security_id, segment):
     try:
         url = f"{BASE_URL}/optionchain/expirylist"
 
         payload = {
-            "UnderlyingScrip": 13,
-            "UnderlyingSeg": "IDX_I"
+            "UnderlyingScrip": security_id,
+            "UnderlyingSeg": segment
         }
 
         res = requests.post(url, headers=get_headers(), json=payload)
@@ -32,21 +37,28 @@ def get_expiry_list():
         return []
 
     except Exception as e:
-        st.error(f"Expiry API Error: {e}")
+        st.error(f"❌ Expiry API Error: {e}")
         return []
 
 
-# ✅ FILTER ONLY TUESDAY
-def get_valid_expiries():
-    expiries = get_expiry_list()
+# =========================
+# 🔥 FILTER EXPIRY (OPTIONAL)
+# =========================
+def get_valid_expiries(security_id, segment):
+    expiries = get_expiry_list(security_id, segment)
+
     valid = []
 
     for exp in expiries:
         try:
             dt = datetime.strptime(exp, "%Y-%m-%d")
 
-            if dt.weekday() == 1:  # Tuesday
-                valid.append(exp)
+            # 👉 अभी ALL expiry allow कर रहे (safe)
+            valid.append(exp)
+
+            # 👉 अगर Tuesday filter चाहिए:
+            # if dt.weekday() == 1:
+            #     valid.append(exp)
 
         except:
             continue
@@ -54,20 +66,24 @@ def get_valid_expiries():
     return valid
 
 
-# ✅ OPTION CHAIN
-def get_option_chain(expiry):
+# =========================
+# 🔥 OPTION CHAIN (DYNAMIC)
+# =========================
+def get_option_chain(security_id, segment, expiry):
     try:
         url = f"{BASE_URL}/optionchain"
 
         payload = {
-            "UnderlyingScrip": 13,
-            "UnderlyingSeg": "IDX_I",
+            "UnderlyingScrip": security_id,
+            "UnderlyingSeg": segment,
             "Expiry": expiry
         }
 
         res = requests.post(url, headers=get_headers(), json=payload)
-        return res.json()
+        data = res.json()
+
+        return data
 
     except Exception as e:
-        st.error(f"Option Chain Error: {e}")
+        st.error(f"❌ Option Chain Error: {e}")
         return None
