@@ -100,3 +100,20 @@ def get_signal(pcr):
 
     except:
         return "N/A"
+
+
+# =========================
+# 🎯 ATM STRIKE
+# =========================
+def get_atm_strike(df, spot):
+    try:
+        df_copy = df.copy()  # 🔥 safe copy (important)
+        df_copy["diff"] = abs(df_copy["Strike"] - spot)
+
+        atm_row = df_copy.loc[df_copy["diff"].idxmin()]
+
+        return int(atm_row["Strike"])
+
+    except Exception as e:
+        print("ATM Error:", e)
+        return 0
