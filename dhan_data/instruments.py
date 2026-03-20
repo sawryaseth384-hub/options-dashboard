@@ -1,7 +1,29 @@
+import pandas as pd
+import streamlit as st
+
+URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
+
+
+# =========================
+# 🔥 LOAD CSV
+# =========================
+@st.cache_data(ttl=3600)
+def load_instruments():
+    df = pd.read_csv(URL)
+
+    # Only NSE
+    df = df[df["SEM_EXM_EXCH_ID"] == "NSE"]
+
+    return df
+
+
+# =========================
+# 🔥 STOCK (F&O ONLY)
+# =========================
 def get_stock_df():
     df = load_instruments()
 
-    # 🔥 ONLY F&O
+    # Only derivatives (F&O)
     df = df[df["SEM_SEGMENT"] == "D"]
 
     df = df[[
@@ -10,12 +32,15 @@ def get_stock_df():
         "SEM_SEGMENT"
     ]]
 
+    df = df.dropna()
+
     return df
 
 
+# =========================
+# 🔥 INDEX
+# =========================
 def get_index_df():
-    import pandas as pd
-
     data = [
         {"SEM_TRADING_SYMBOL": "NIFTY", "SEM_SMST_SECURITY_ID": 13, "SEM_SEGMENT": "I"},
         {"SEM_TRADING_SYMBOL": "BANKNIFTY", "SEM_SMST_SECURITY_ID": 25, "SEM_SEGMENT": "I"},
@@ -25,5 +50,11 @@ def get_index_df():
     return pd.DataFrame(data)
 
 
+# =========================
+# 🔥 MASTER DF
+# =========================
 def get_instrument_df():
-    return pd.concat([get_stock_df(), get_index_df()], ignore_index=True)
+    return pd.concat(
+        [get_stock_df(), get_index_df()],
+        ignore_index=True
+    )
