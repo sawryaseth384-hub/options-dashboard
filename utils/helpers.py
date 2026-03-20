@@ -13,7 +13,7 @@ def process_option_data(raw_data):
 
             strike_val = float(strike)
 
-            # 🔥 FILTER ONLY NEAR ATM
+            # 🔥 FILTER NEAR ATM (+/-1000)
             if abs(strike_val - spot) > 1000:
                 continue
 
@@ -37,8 +37,15 @@ def process_option_data(raw_data):
 
         df = pd.DataFrame(rows)
 
-        return df.sort_values("Strike"), spot
+        # 🔥 SAFETY CHECK
+        if df.empty:
+            return df, spot
+
+        # 🔥 SORT SAFE
+        df = df.sort_values("Strike").reset_index(drop=True)
+
+        return df, spot
 
     except Exception as e:
-        print("ERROR:", e)
+        print("PROCESS ERROR:", e)
         return pd.DataFrame(), 0
