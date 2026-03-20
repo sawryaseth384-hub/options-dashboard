@@ -1,9 +1,13 @@
 import requests
 import streamlit as st
+import time
 
 BASE_URL = "https://api.dhan.co/v2"
 
 
+# =========================
+# 🔐 HEADERS
+# =========================
 def get_headers():
     return {
         "access-token": st.secrets["ACCESS_TOKEN"],
@@ -13,34 +17,61 @@ def get_headers():
 
 
 # =========================
-# 🔥 EXPIRY LIST
+# ⚡ SAFE REQUEST
+# =========================
+def safe_post(url, payload, retry=2):
+    for attempt in range(retry):
+        try:
+            res = requests.post(
+                url,
+                headers=get_headers(),
+                json=payload,
+                timeout=10
+            )
+
+            data = res.json()
+
+            # 🔥 TOKEN ERROR
+            if "808" in str(data):
+                st.error("❌ Token Expired / Invalid")
+                return None
+
+            # 🔥 INVALID SECURITY
+            if "813" in str(data):
+                st.error("❌ Invalid Security ID")
+                return None
+
+            return data
+
+        except Exception as e:
+            if attempt < retry - 1:
+                time.sleep(1)
+            else:
+                st.error(f"API Error: {e}")
+                return None
+
+
+# =========================
+# 📅 EXPIRY LIST
 # =========================
 def get_expiry_list(security_id, segment):
-    try:
-        url = f"{BASE_URL}/optionchain/expirylist"
+    url = f"{BASE_URL}/optionchain/expirylist"
 
-        payload = {
-            "UnderlyingScrip": security_id,
-            "UnderlyingSeg": segment
-        }
+    payload = {
+        "UnderlyingScrip": int(security_id),
+        "UnderlyingSeg": segment
+    }
 
-        res = requests.post(url, headers=get_headers(), json=payload)
-        data = res.json()
+    data = safe_post(url, payload)
 
-        # ❌ handle error
-        if "808" in str(data):
-            st.error("❌ Token Invalid")
-            return []
-
-        if "813" in str(data):
-            st.error("❌ Invalid Security ID")
-            return []
-
-        return data.get("data", [])
-
-    except Exception as e:
-        st.error(f"Expiry API Error: {e}")
+    if not data:
         return []
+
+    if data.get("status") != "success":
+        st.warning("⚠️ Expiry Fetch Failed")
+        return []
+
+    return data.get("data", [])
 
 
 def get_valid_expiries(security_id, segment):
@@ -48,26 +79,41 @@ def get_valid_expiries(security_id, segment):
 
 
 # =========================
-# 🔥 OPTION CHAIN
+# 📊 OPTION CHAIN (RATE SAFE)
 # =========================
+_last_call_time = 0
+
+
 def get_option_chain(security_id, segment, expiry):
-    try:
-        url = f"{BASE_URL}/optionchain"
+    global _last_call_time
 
-        payload = {
-            "UnderlyingScrip": security_id,
-            "UnderlyingSeg": segment,
-            "Expiry": expiry
-        }
+    # 🔥 RATE LIMIT (3 sec)
+    now = time.time()
+    if now - _last_call_time < 3:
+        return None  # skip call to avoid block
 
-        res = requests.post(url, headers=get_headers(), json=payload)
-        data = res.json()
+    _last_call_time = now
 
-        if data.get("status") != "success":
-            st.error("❌ Option Chain Failed")
+    url = f"{BASE_URL}/optionchain"
 
-        return data
+    payload = {
+        "UnderlyingScrip": int(security_id),
+        "UnderlyingSeg": segment,
+        "Expiry": expiry
+    }
 
-    except Exception as e:
-        st.error(f"Option Chain Error: {e}")
+    data = safe_post(url, payload)
+
+    if not data:
         return None
+
+    if data.get("status") != "success":
+        st.warning("⚠️ Option Chain Failed")
+        return None
+
+    # 🔥 sanity check
+    if "data" not in data or "oc" not in data["data"]:
+        st.warning("⚠️ Invalid Option Chain Data")
+        return None
+
+    return data
