@@ -18,27 +18,31 @@ def get_headers():
 
 
 # =========================
-# 🔁 SEGMENT MAP
+# 🔁 SEGMENT MAP (FINAL FIX)
 # =========================
 def map_segment(segment):
+
+    # 🔥 INDEX FIX (MOST IMPORTANT)
     if segment in ["IDX_I", "I"]:
-        return "NSE_FNO"
+        return "NSE_EQ"   # ✅ FINAL FIX
+
     elif segment == "D":
         return "NSE_FNO"
+
     elif segment == "E":
         return "NSE_EQ"
+
     else:
         return "NSE_EQ"
 
 
 # =========================
-# 📦 INSTRUMENT TYPE (🔥 FIXED)
+# 📦 INSTRUMENT TYPE
 # =========================
 def get_instrument_type(segment):
 
-    # 🔥 INDEX FIX (MOST IMPORTANT)
     if segment in ["IDX_I", "I"]:
-        return "EQUITY"   # ❗ THIS FIX SOLVES YOUR ERROR
+        return "EQUITY"
 
     elif segment == "D":
         return "FUTSTK"
@@ -92,7 +96,7 @@ def get_candle_data(security_id, segment):
             "securityId": str(security_id),
             "exchangeSegment": mapped_segment,
             "instrument": instrument,
-            "interval": "1",   # 🔥 better
+            "interval": "1",
             "oi": False,
             "fromDate": from_date.strftime("%Y-%m-%d %H:%M:%S"),
             "toDate": to_date.strftime("%Y-%m-%d %H:%M:%S")
