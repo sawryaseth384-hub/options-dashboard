@@ -146,20 +146,20 @@ if df is not None:
 
 
 # =========================
-# 📈 LIVE CANDLE CHART (FIXED)
+# 📈 LIVE CANDLE CHART
 # =========================
 st.markdown("## 📈 Live Chart")
 
-# ❗ IMPORTANT FIX: segment भेजना है, mapped_segment नहीं
-chart_df = chart.get_candle_data(security_id, segment)
+chart_df = chart.get_candle_data(security_id, mapped_segment)
 
 if chart_df is not None and not chart_df.empty:
-    fig = chart.plot_candle(chart_df)
-    st.plotly_chart(fig, width="stretch")
+    fig, trend = chart.plot_candle(chart_df)
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.success(f"Trend: {trend}")
+
 else:
     st.warning("⚠️ No chart data")
-
-
 # =========================
 # DEBUG
 # =========================
