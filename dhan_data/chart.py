@@ -83,14 +83,12 @@ def get_candle_data(security_id, segment):
         mapped_segment = map_segment(segment)
         instrument = get_instrument_type(segment)
 
-        # 🔍 DEBUG
-        st.write("SECURITY:", security_id)
-        st.write("SEGMENT:", segment)
-        st.write("MAPPED:", mapped_segment)
-        st.write("INSTRUMENT:", instrument)
+        # 🔥 FIXED TIME RANGE (MARKET HOURS)
+        now = datetime.now()
+        today = now.strftime("%Y-%m-%d")
 
-        to_date = datetime.now()
-        from_date = to_date - timedelta(days=1)
+        from_date = f"{today} 09:15:00"
+        to_date = f"{today} 15:30:00"
 
         payload = {
             "securityId": str(security_id),
@@ -98,66 +96,54 @@ def get_candle_data(security_id, segment):
             "instrument": instrument,
             "interval": "1",
             "oi": False,
-            "fromDate": from_date.strftime("%Y-%m-%d %H:%M:%S"),
-            "toDate": to_date.strftime("%Y-%m-%d %H:%M:%S")
+            "fromDate": from_date,
+            "toDate": to_date
         }
 
         res = requests.post(url, headers=get_headers(), json=payload)
         data = res.json()
 
-        st.write("RAW DATA:", data)
+        # 🔍 DEBUG
+        st.write("RAW:", data)
 
-        # ❌ API error handle
+        # ❌ ERROR HANDLE
         if "errorCode" in data:
             st.error(data.get("errorMessage"))
             return None
 
         if not data or "open" not in data:
+            st.warning("No data from API")
             return None
 
-        # 🔥 extract
-        open_ = flatten(data.get("open", []))
-        high_ = flatten(data.get("high", []))
-        low_ = flatten(data.get("low", []))
-        close_ = flatten(data.get("close", []))
-        time_ = flatten(data.get("timestamp", []))
+        # 🔥 SAFE EXTRACT
+        open_ = flatten(data["open"])
+        high_ = flatten(data["high"])
+        low_ = flatten(data["low"])
+        close_ = flatten(data["close"])
+        time_ = flatten(data["timestamp"])
 
-        if not time_:
-            return None
-
-        # 🔥 match length
+        # 🔥 LENGTH MATCH
         min_len = min(len(open_), len(high_), len(low_), len(close_), len(time_))
 
-        open_ = open_[:min_len]
-        high_ = high_[:min_len]
-        low_ = low_[:min_len]
-        close_ = close_[:min_len]
-        time_ = time_[:min_len]
-
-        # 🔥 time fix
-        time_ = pd.to_datetime(time_, unit="s", errors="coerce")
-
         df = pd.DataFrame({
-            "time": time_,
-            "open": open_,
-            "high": high_,
-            "low": low_,
-            "close": close_,
+            "time": pd.to_datetime(time_[:min_len], unit="s"),
+            "open": open_[:min_len],
+            "high": high_[:min_len],
+            "low": low_[:min_len],
+            "close": close_[:min_len],
         })
 
-        df = df.dropna()
-        df = df.sort_values("time")
+        df = df.dropna().sort_values("time")
 
         if df.empty:
+            st.warning("Empty dataframe")
             return None
 
         return df
 
     except Exception as e:
-        st.error(f"Chart Error: {e}")
+        st.error(f"Fetch Error: {e}")
         return None
-
-
 # =========================
 # 📊 INDICATORS
 # =========================
