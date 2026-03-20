@@ -21,9 +21,9 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 AUTO LIVE REFRESH (BEST)
+# 🔥 AUTO REFRESH (LIVE)
 # =========================
-st_autorefresh(interval=3000, key="live")   # हर 3 sec refresh
+st_autorefresh(interval=3000, key="live")   # 3 sec refresh
 
 
 # =========================
@@ -46,7 +46,7 @@ st.caption(f"Security ID: {security_id} | Segment: {segment}")
 
 
 # =========================
-# 🔥 SEGMENT MAP (OPTION CHAIN)
+# 🔥 SEGMENT MAP
 # =========================
 def get_segment(seg):
     if seg == "D":
@@ -61,9 +61,18 @@ mapped_segment = get_segment(segment)
 
 
 # =========================
-# 🔥 LIVE SPOT
+# 🔥 ✅ FIXED SPOT PRICE
 # =========================
-spot = get_ltp(security_id, segment)
+symbol_upper = selected_symbol.upper()
+
+if "NIFTY" in symbol_upper and "BANK" not in symbol_upper:
+    spot = get_ltp(13, "IDX_I")   # NIFTY
+
+elif "BANKNIFTY" in symbol_upper:
+    spot = get_ltp(25, "IDX_I")   # BANKNIFTY
+
+else:
+    spot = get_ltp(security_id, segment)
 
 
 # =========================
