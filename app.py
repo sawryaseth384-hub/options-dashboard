@@ -10,7 +10,7 @@ from utils import helpers
 from utils.debug import render_debug_panel
 from dhan_data import instruments
 from dhan_data import chart
-from dhan_data.market_quote import get_ltp   # ✅ NEW
+from dhan_data.market_quote import get_ltp
 
 st.set_page_config(page_title="Dhan AI Options Dashboard", layout="wide")
 st.title("📈 Dhan AI Options Dashboard")
@@ -44,7 +44,7 @@ if refresh > 0:
 
 
 # =========================
-# 🔥 SEGMENT MAP (FIXED)
+# 🔥 SEGMENT MAP (OPTION CHAIN ONLY)
 # =========================
 def get_segment(seg):
     if seg == "D":
@@ -59,7 +59,7 @@ mapped_segment = get_segment(segment)
 
 
 # =========================
-# 🔥 LIVE SPOT (FIXED)
+# 🔥 LIVE SPOT
 # =========================
 spot = get_ltp(security_id, segment)
 
@@ -71,8 +71,8 @@ expiry_list = []
 
 try:
     expiry_list = dhan_api.get_valid_expiries(security_id, mapped_segment)
-except:
-    pass
+except Exception as e:
+    st.error(f"Expiry Error: {e}")
 
 selected_expiry = None
 
@@ -101,7 +101,7 @@ if selected_expiry:
 df = None
 
 if raw_data and raw_data.get("status") == "success":
-    df, _ = helpers.process_option_data(raw_data)  # ❗ spot remove
+    df, _ = helpers.process_option_data(raw_data)
 
 
 # =========================
@@ -146,11 +146,12 @@ if df is not None:
 
 
 # =========================
-# 📈 LIVE CANDLE CHART
+# 📈 LIVE CANDLE CHART (FIXED)
 # =========================
 st.markdown("## 📈 Live Chart")
 
-chart_df = chart.get_candle_data(security_id, mapped_segment)
+# ❗ IMPORTANT FIX: segment भेजना है, mapped_segment नहीं
+chart_df = chart.get_candle_data(security_id, segment)
 
 if chart_df is not None and not chart_df.empty:
     fig = chart.plot_candle(chart_df)
