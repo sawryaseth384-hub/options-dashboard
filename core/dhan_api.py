@@ -94,7 +94,7 @@ def get_option_chain(security_id, segment, expiry):
 
     # 🔥 RATE LIMIT HANDLE (NO SKIP, ONLY WAIT)
     now = time.time()
-    if now - _last_call_time < 3:
+    if now - _last_call_time < 10:
         time.sleep(3 - (now - _last_call_time))
 
     _last_call_time = time.time()
