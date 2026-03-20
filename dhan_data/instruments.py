@@ -4,9 +4,6 @@ import streamlit as st
 URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 
 
-# =========================
-# 🔥 LOAD DATA
-# =========================
 @st.cache_data(ttl=3600)
 def load_instruments():
     df = pd.read_csv(URL)
@@ -14,26 +11,26 @@ def load_instruments():
     # ✅ Only NSE
     df = df[df["SEM_EXM_EXCH_ID"] == "NSE"]
 
-    # ❌ Remove TEST symbols
-    df = df[~df["SEM_TRADING_SYMBOL"].str.contains("TEST", na=False)]
+    # ✅ Only Equity segment
+    df = df[df["SEM_SEGMENT"] == "E"]
 
-    # ❌ Remove futures/options → only EQUITY
-    df = df[df["SEM_INSTRUMENT_NAME"] == "EQUITY"]
+    # ✅ Only real stock symbols (no numbers start)
+    df = df[df["SEM_TRADING_SYMBOL"].str.match(r'^[A-Z]+$', na=False)]
+
+    # ❌ Remove TEST
+    df = df[~df["SEM_TRADING_SYMBOL"].str.contains("TEST", na=False)]
 
     return df
 
 
-# =========================
-# 🔥 GET CLEAN LIST
-# =========================
 def get_instrument_list():
     df = load_instruments()
 
     symbols = df["SEM_TRADING_SYMBOL"].dropna().unique().tolist()
 
-    # ✅ Add Index manually
+    # ✅ Add index manually
     extra = ["NIFTY", "BANKNIFTY", "FINNIFTY"]
 
-    final_list = sorted(list(set(symbols + extra)))
+    final = list(set(symbols + extra))
 
-    return final_list
+    return sorted(final)
