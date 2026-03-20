@@ -30,7 +30,7 @@ st.title("📈 Dhan AI Options Dashboard")
 
 
 # =========================
-# 🔥 START WEBSOCKETS (SAFE)
+# 🔥 START WEBSOCKETS
 # =========================
 if "init_done" not in st.session_state:
     start_live_feed()
@@ -70,9 +70,7 @@ st.caption(f"Security ID: {security_id} | Segment: {segment}")
 def map_segment(symbol):
     symbol = symbol.upper()
 
-    if "NIFTY" in symbol:
-        return "IDX_I"
-    elif "BANKNIFTY" in symbol:
+    if "NIFTY" in symbol or "BANKNIFTY" in symbol:
         return "IDX_I"
 
     return "NSE_EQ"
@@ -82,16 +80,19 @@ mapped_segment = map_segment(selected_symbol)
 
 
 # =========================
-# 🔥 SUBSCRIBE (SAFE)
+# 🔥 SUBSCRIBE (FINAL FIX)
 # =========================
 if "last_symbol" not in st.session_state:
     st.session_state.last_symbol = None
 
-# 👉 wait for websocket ready (no sleep freeze)
 ws_ready = time.time() - st.session_state.get("ws_ready_time", 0) > 2
 
 if ws_ready and st.session_state.last_symbol != security_id:
-    subscribe_instrument(security_id, mapped_segment)
+    subscribe_instrument(
+        security_id,
+        mapped_segment,
+        mode="full"   # 🔥 VERY IMPORTANT
+    )
     st.session_state.last_symbol = security_id
 
 
@@ -127,21 +128,21 @@ selected_expiry = st.selectbox("Select Expiry", expiry_list) if expiry_list else
 
 
 # =========================
-# 🔥 OPTION CHAIN
+# 🔥 OPTION CHAIN (FINAL FIX)
 # =========================
 df = None
 
 if selected_expiry:
     raw = dhan_api.get_option_chain(
         security_id,
-        mapped_segment,
+        "NSE_FNO",   # 🔥 FIXED
         selected_expiry
     )
 
     if raw:
         df, _ = helpers.process_option_data(raw)
     else:
-        st.info("⏳ Waiting (Rate Limit / API Delay)")
+        st.error("❌ Option Chain Failed (Check Token / Segment)")
 
 
 # =========================
@@ -173,27 +174,27 @@ st.subheader(f"🚀 Signal: {helpers.get_signal(pcr)}")
 # 📊 OPTION TABLE
 # =========================
 if df is not None:
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width="stretch")  # 🔥 updated
 
 
 # =========================
 # 📊 OPTION CHARTS
 # =========================
 if df is not None:
-    st.plotly_chart(helpers.plot_oi_heatmap(df), use_container_width=True)
-    st.plotly_chart(helpers.plot_payoff(atm), use_container_width=True)
+    st.plotly_chart(helpers.plot_oi_heatmap(df), width="stretch")
+    st.plotly_chart(helpers.plot_payoff(atm), width="stretch")
 
 
 # =========================
-# 📈 PRICE CHART
+# 📈 PRICE CHART (FIXED)
 # =========================
 st.markdown("## 📈 Price Chart")
 
-chart_df = chart.get_candle_data(security_id, segment)
+chart_df = chart.get_candle_data(security_id, mapped_segment)
 
 if chart_df is not None and not chart_df.empty:
     fig, trend = chart.plot_candle(chart_df)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.success(f"📈 Trend: {trend}")
 else:
     st.warning("⚠️ No chart data")
@@ -210,11 +211,11 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("🟢 Bids")
-    st.dataframe(depth.get("bids", []), use_container_width=True)
+    st.dataframe(depth.get("bids", []), width="stretch")
 
 with col2:
     st.subheader("🔴 Asks")
-    st.dataframe(depth.get("asks", []), use_container_width=True)
+    st.dataframe(depth.get("asks", []), width="stretch")
 
 
 # =========================
