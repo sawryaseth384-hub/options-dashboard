@@ -18,27 +18,35 @@ def get_headers():
 
 
 # =========================
-# 🔁 SEGMENT MAP
+# 🔁 SEGMENT MAP (FINAL)
 # =========================
 def map_segment(segment):
-    if segment in ["IDX_I", "D"]:
+    if segment == "IDX_I":
         return "NSE_FNO"
+    elif segment == "D":
+        return "NSE_FNO"
+    elif segment == "E":
+        return "NSE_EQ"
     else:
         return "NSE_EQ"
 
 
 # =========================
-# 📦 INSTRUMENT TYPE
+# 📦 INSTRUMENT TYPE (FINAL)
 # =========================
 def get_instrument_type(segment):
-    if segment in ["IDX_I", "D"]:
+    if segment == "IDX_I":
         return "FUTIDX"
+    elif segment == "D":
+        return "FUTSTK"
+    elif segment == "E":
+        return "EQUITY"
     else:
         return "EQUITY"
 
 
 # =========================
-# 🔥 SAFE FLATTEN
+# 🔥 SAFE FLATTEN (NO ERROR)
 # =========================
 def flatten(arr):
     if not isinstance(arr, list):
@@ -54,7 +62,7 @@ def flatten(arr):
 
 
 # =========================
-# 📈 GET CANDLE DATA
+# 📈 GET CANDLE DATA (FINAL)
 # =========================
 def get_candle_data(security_id, segment):
 
@@ -63,6 +71,12 @@ def get_candle_data(security_id, segment):
 
         mapped_segment = map_segment(segment)
         instrument = get_instrument_type(segment)
+
+        # 🔍 DEBUG (remove later)
+        st.write("SECURITY:", security_id)
+        st.write("SEGMENT:", segment)
+        st.write("MAPPED:", mapped_segment)
+        st.write("INSTRUMENT:", instrument)
 
         to_date = datetime.now()
         from_date = to_date - timedelta(days=1)
@@ -79,6 +93,9 @@ def get_candle_data(security_id, segment):
 
         res = requests.post(url, headers=get_headers(), json=payload)
         data = res.json()
+
+        # 🔍 DEBUG RAW
+        st.write("RAW DATA:", data)
 
         if not data or "open" not in data:
             return None
@@ -135,7 +152,7 @@ def add_indicators(df):
 
 
 # =========================
-# 📊 PLOT CANDLE
+# 📊 PLOT CANDLE (TRADINGVIEW STYLE)
 # =========================
 def plot_candle(df):
     import plotly.graph_objects as go
@@ -144,7 +161,7 @@ def plot_candle(df):
 
     fig = go.Figure()
 
-    # Candles
+    # 🕯️ Candles
     fig.add_trace(go.Candlestick(
         x=df["time"],
         open=df["open"],
