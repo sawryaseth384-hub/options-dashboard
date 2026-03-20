@@ -64,24 +64,17 @@ def get_candle_data(security_id, segment):
         res = requests.post(url, headers=get_headers(), json=payload)
         data = res.json()
 
-        # 🔍 DEBUG
-        st.write("CHART RAW:", data)
+        # ❗ RAW DEBUG (optional)
+        # st.write(data)
 
         if not data or "open" not in data:
             return None
 
         # =========================
-        # 🔥 CORRECT FLATTEN
+        # 🔥 FAST FLATTEN
         # =========================
         def flatten(arr):
-            flat = []
-            for sub in arr:
-                if isinstance(sub, list):
-                    for item in sub:
-                        flat.append(item)
-                else:
-                    flat.append(sub)
-            return flat
+            return [item for sub in arr for item in sub]
 
         open_ = flatten(data.get("open", []))
         high_ = flatten(data.get("high", []))
@@ -94,16 +87,17 @@ def get_candle_data(security_id, segment):
             return None
 
         df = pd.DataFrame({
+            "time": pd.to_datetime(time_, errors="coerce"),
             "open": open_,
             "high": high_,
             "low": low_,
             "close": close_,
             "volume": volume_,
-            "time": pd.to_datetime(time_, errors="coerce")   # 🔥 FIXED
         })
 
-        # ❗ drop invalid rows
+        # साफ data
         df = df.dropna()
+        df = df.sort_values("time")
 
         return df
 
@@ -113,25 +107,47 @@ def get_candle_data(security_id, segment):
 
 
 # =========================
-# 📊 PLOT CANDLE
+# 📊 INDICATORS
+# =========================
+def add_indicators(df):
+
+    df["EMA21"] = df["close"].ewm(span=21).mean()
+    df["EMA50"] = df["close"].ewm(span=50).mean()
+
+    # Trend
+    if df["EMA21"].iloc[-1] > df["EMA50"].iloc[-1]:
+        trend = "BULLISH"
+    else:
+        trend = "BEARISH"
+
+    return df, trend
+
+
+# =========================
+# 📊 PLOT CANDLE (CLEAN)
 # =========================
 def plot_candle(df):
     import plotly.graph_objects as go
 
-    fig = go.Figure(data=[
-        go.Candlestick(
-            x=df["time"],
-            open=df["open"],
-            high=df["high"],
-            low=df["low"],
-            close=df["close"]
-        )
-    ])
+    fig = go.Figure()
+
+    fig.add_trace(go.Candlestick(
+        x=df["time"],
+        open=df["open"],
+        high=df["high"],
+        low=df["low"],
+        close=df["close"],
+        increasing_line_color='#00ff88',
+        decreasing_line_color='#ff4d4d',
+        name="Price"
+    ))
 
     fig.update_layout(
-        height=500,
-        xaxis_rangeslider_visible=False,
-        template="plotly_dark"
+        template="plotly_dark",
+        height=550,
+        margin=dict(l=10, r=10, t=30, b=10),
+        xaxis=dict(showgrid=False, rangeslider=dict(visible=False)),
+        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)")
     )
 
     return fig
