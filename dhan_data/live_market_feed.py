@@ -1,79 +1,123 @@
 import websocket
 import json
-import struct
 import threading
+import struct
 import streamlit as st
 
-LIVE_DATA = {}
+# =========================
+# 🔐 CONFIG
+# =========================
+TOKEN = st.secrets["ACCESS_TOKEN"]
+CLIENT_ID = st.secrets["CLIENT_ID"]
 
+WS_URL = f"wss://api-feed.dhan.co?version=2&token={TOKEN}&clientId={CLIENT_ID}&authType=2"
 
-def get_ws_url():
-    token = st.secrets["ACCESS_TOKEN"]
-    client_id = st.secrets["CLIENT_ID"]
+# =========================
+# 🔥 GLOBAL STATE
+# =========================
+latest_data = {
+    "ltp": 0,
+    "time": 0,
+    "symbol": None
+}
 
-    return f"wss://api-feed.dhan.co?version=2&token={token}&clientId={client_id}&authType=2"
+ws_app = None
 
 
 # =========================
-# 📡 PARSE BINARY (LTP)
+# 🔥 PARSE TICKER (CODE 2)
 # =========================
-def parse_ltp(binary_data):
+def parse_ticker(message):
     try:
-        # little endian
-        ltp = struct.unpack('<f', binary_data[8:12])[0]
-        return ltp
-    except:
-        return None
+        # header (8 bytes skip)
+        ltp = struct.unpack('<f', message[8:12])[0]
+        ltt = struct.unpack('<i', message[12:16])[0]
+
+        latest_data["ltp"] = round(ltp, 2)
+        latest_data["time"] = ltt
+
+    except Exception as e:
+        print("Parse Error:", e)
 
 
 # =========================
-# 📡 ON MESSAGE
+# 🔥 ON MESSAGE
 # =========================
 def on_message(ws, message):
-    global LIVE_DATA
-
     if isinstance(message, bytes):
-        ltp = parse_ltp(message)
 
-        if ltp:
-            LIVE_DATA["ltp"] = ltp
+        # first byte = response code
+        response_code = message[0]
+
+        if response_code == 2:  # ticker packet
+            parse_ticker(message)
+
+
+def on_error(ws, error):
+    print("WS ERROR:", error)
+
+
+def on_close(ws, close_status_code, close_msg):
+    print("WS CLOSED")
 
 
 def on_open(ws):
-    print("✅ WebSocket Connected")
-
-    payload = {
-        "RequestCode": 15,
-        "InstrumentCount": 1,
-        "InstrumentList": [
-            {
-                "ExchangeSegment": "IDX_I",
-                "SecurityId": "13"   # NIFTY
-            }
-        ]
-    }
-
-    ws.send(json.dumps(payload))
-
-
-def start_ws():
-    ws = websocket.WebSocketApp(
-        get_ws_url(),
-        on_message=on_message,
-        on_open=on_open
-    )
-
-    ws.run_forever()
+    print("✅ WS CONNECTED")
 
 
 # =========================
-# 🚀 START THREAD
+# 🚀 START CONNECTION
 # =========================
 def start_live_feed():
-    thread = threading.Thread(target=start_ws)
+    global ws_app
+
+    if ws_app:
+        return  # already running
+
+    def run():
+        global ws_app
+
+        ws_app = websocket.WebSocketApp(
+            WS_URL,
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
+        )
+
+        ws_app.run_forever()
+
+    thread = threading.Thread(target=run)
     thread.daemon = True
     thread.start()
 
 
+# =========================
+# 🔄 SUBSCRIBE (DYNAMIC)
+# =========================
+def subscribe_instrument(security_id, segment):
+    global ws_app
+
+    if not ws_app:
+        return
+
+    payload = {
+        "RequestCode": 15,  # ticker
+        "InstrumentCount": 1,
+        "InstrumentList": [
+            {
+                "ExchangeSegment": segment,
+                "SecurityId": str(security_id)
+            }
+        ]
+    }
+
+    ws_app.send(json.dumps(payload))
+    latest_data["symbol"] = security_id
+
+
+# =========================
+# 📊 GET LTP
+# =========================
 def get_live_ltp():
-    return LIVE_DATA.get("ltp", 0)
+    return latest_data["ltp"]
