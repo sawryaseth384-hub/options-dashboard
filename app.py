@@ -10,7 +10,11 @@ from utils import helpers
 from utils.debug import render_debug_panel
 from dhan_data import instruments, chart
 from dhan_data.market_quote import get_ltp
-from dhan_data.live_feed import start_live_feed, get_live_ltp
+from dhan_data.live_feed import (
+    start_live_feed,
+    get_live_ltp,
+    subscribe_instrument
+)
 from dhan_data.depth_feed import start_depth_feed, get_depth
 
 
@@ -31,9 +35,9 @@ if "init_done" not in st.session_state:
 
 
 # =========================
-# 🔁 AUTO REFRESH (FIXED)
+# 🔁 AUTO REFRESH
 # =========================
-st_autorefresh(interval=3000, key="live")  # 🔥 IMPORTANT
+st_autorefresh(interval=3000, key="live")
 
 
 # =========================
@@ -56,7 +60,7 @@ st.caption(f"Security ID: {security_id} | Segment: {segment}")
 
 
 # =========================
-# 🔥 CORRECT SEGMENT (VERY IMPORTANT)
+# 🔥 SEGMENT FIX
 # =========================
 def map_segment(symbol):
     symbol = symbol.upper()
@@ -74,6 +78,14 @@ mapped_segment = map_segment(selected_symbol)
 
 
 # =========================
+# 🔥 🔴 SUBSCRIBE (VERY IMPORTANT)
+# =========================
+if "last_symbol" not in st.session_state or st.session_state.last_symbol != security_id:
+    subscribe_instrument(security_id, mapped_segment)
+    st.session_state.last_symbol = security_id
+
+
+# =========================
 # 🔥 LIVE SPOT
 # =========================
 def get_spot():
@@ -82,6 +94,7 @@ def get_spot():
     if live_price and live_price != 0:
         return round(live_price, 2)
 
+    # fallback
     symbol = selected_symbol.upper()
 
     if "BANKNIFTY" in symbol:
@@ -105,7 +118,7 @@ selected_expiry = st.selectbox("Select Expiry", expiry_list) if expiry_list else
 
 
 # =========================
-# 🔥 OPTION CHAIN (FIXED)
+# 🔥 OPTION CHAIN
 # =========================
 df = None
 
@@ -116,7 +129,6 @@ if selected_expiry:
         selected_expiry
     )
 
-    # 🔥 FIX: no status check needed
     if raw:
         df, _ = helpers.process_option_data(raw)
     else:
