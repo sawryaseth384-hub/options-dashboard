@@ -10,7 +10,7 @@ sys.path.insert(0, BASE_DIR)
 
 from core import dhan_api
 from utils import helpers
-from utils.debug import render_debug_panel   # ✅ only debug call
+from utils.debug import render_debug_panel
 
 
 # 🔥 PAGE CONFIG
@@ -29,35 +29,49 @@ if refresh > 0:
 # =========================
 # 🔥 EXPIRY FETCH
 # =========================
-expiry_list = dhan_api.get_valid_expiries()
+expiry_list = []
+
+try:
+    expiry_list = dhan_api.get_valid_expiries()
+except Exception as e:
+    st.error(f"❌ Expiry Error: {e}")
 
 if not expiry_list:
-    st.error("❌ No valid expiry available (API issue)")
-    st.stop()
+    st.warning("⚠️ No expiry data")
 
 
 # 🔥 SELECT EXPIRY
-selected_expiry = st.selectbox("Select Expiry", expiry_list)
+selected_expiry = None
+if expiry_list:
+    selected_expiry = st.selectbox("Select Expiry", expiry_list)
 
 
 # =========================
 # 🔥 OPTION CHAIN FETCH
 # =========================
-raw_data = dhan_api.get_option_chain(selected_expiry)
+raw_data = None
 
-if not raw_data or raw_data.get("status") != "success":
+if selected_expiry:
+    try:
+        raw_data = dhan_api.get_option_chain(selected_expiry)
+    except Exception as e:
+        st.error(f"❌ Option Chain Error: {e}")
+
+if raw_data and raw_data.get("status") != "success":
     st.error("❌ Option chain failed")
-    st.stop()
 
 
 # =========================
 # 🔥 PROCESS DATA
 # =========================
-df, spot = helpers.process_option_data(raw_data)
+df = None
+spot = 0
 
-if df.empty:
-    st.warning("⚠️ No option data available")
-    st.stop()
+if raw_data and raw_data.get("status") == "success":
+    try:
+        df, spot = helpers.process_option_data(raw_data)
+    except Exception as e:
+        st.error(f"❌ Data Processing Error: {e}")
 
 
 # =========================
@@ -65,22 +79,30 @@ if df.empty:
 # =========================
 col1, col2, col3, col4 = st.columns(4)
 
-# Spot
+# Spot (Always show)
 with col1:
     st.metric("📊 Spot", f"₹{spot:,.2f}")
 
 
 # PCR
-pcr = helpers.calculate_pcr(df)
-st.session_state["pcr_done"] = True
+pcr = 0
+try:
+    if df is not None:
+        pcr = helpers.calculate_pcr(df)
+except Exception as e:
+    st.error(f"❌ PCR Error: {e}")
 
 with col2:
-    st.metric("📊 PCR", round(pcr, 2))
+    st.metric("📊 PCR", pcr)
 
 
 # Support / Resistance
-support, resistance = helpers.get_support_resistance(df)
-st.session_state["sr_done"] = True
+support, resistance = 0, 0
+try:
+    if df is not None:
+        support, resistance = helpers.get_support_resistance(df)
+except Exception as e:
+    st.error(f"❌ SR Error: {e}")
 
 with col3:
     st.metric("🟢 Support", support)
@@ -92,7 +114,11 @@ with col4:
 # =========================
 # 🚀 SIGNAL
 # =========================
-signal = helpers.get_signal(pcr)
+signal = "N/A"
+try:
+    signal = helpers.get_signal(pcr)
+except Exception as e:
+    st.error(f"❌ Signal Error: {e}")
 
 st.subheader(f"🚀 Market Signal: {signal}")
 
@@ -100,10 +126,16 @@ st.subheader(f"🚀 Market Signal: {signal}")
 # =========================
 # 📊 OPTION CHAIN TABLE
 # =========================
-st.dataframe(df, use_container_width=True)
+if df is not None:
+    try:
+        st.dataframe(df, use_container_width=True)
+    except Exception as e:
+        st.error(f"❌ Table Error: {e}")
+else:
+    st.warning("⚠️ No data to display")
 
 
 # =========================
-# 🔧 DEBUG PANEL (OUTSIDE)
+# 🔧 DEBUG PANEL
 # =========================
 render_debug_panel()
