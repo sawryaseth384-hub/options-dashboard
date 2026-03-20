@@ -150,7 +150,8 @@ if df is not None:
 # =========================
 st.markdown("## 📈 Live Chart")
 
-chart_df = chart.get_candle_data(security_id, mapped_segment)
+# ❗ IMPORTANT FIX
+chart_df = chart.get_candle_data(security_id, segment)
 
 if chart_df is not None and not chart_df.empty:
     fig, trend = chart.plot_candle(chart_df)
@@ -159,8 +160,7 @@ if chart_df is not None and not chart_df.empty:
     st.success(f"Trend: {trend}")
 
 else:
-    st.warning("⚠️ No chart data")
-# =========================
+    st.warning("⚠️ No chart data")# =========================
 # DEBUG
 # =========================
 render_debug_panel()
