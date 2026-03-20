@@ -232,3 +232,112 @@ with col2:
 # 🛠 DEBUG
 # =========================
 render_debug_panel()
+# =========================
+# 📁 FILE / MODULE HEALTH CHECK
+# =========================
+st.markdown("## 📁 FILE HEALTH CHECK")
+
+with st.expander("🔍 Check All Modules", expanded=True):
+
+    results = {}
+
+    # -------------------------
+    # core.dhan_api
+    # -------------------------
+    try:
+        from core import dhan_api
+        results["core/dhan_api.py"] = "✅ Imported"
+    except Exception as e:
+        results["core/dhan_api.py"] = f"❌ {e}"
+
+    # -------------------------
+    # utils.helpers
+    # -------------------------
+    try:
+        from utils import helpers
+        results["utils/helpers.py"] = "✅ Imported"
+    except Exception as e:
+        results["utils/helpers.py"] = f"❌ {e}"
+
+    # -------------------------
+    # instruments
+    # -------------------------
+    try:
+        from dhan_data import instruments
+        df_test = instruments.get_instrument_df()
+        if df_test is not None and not df_test.empty:
+            results["dhan_data/instruments.py"] = "✅ Working"
+        else:
+            results["dhan_data/instruments.py"] = "❌ Empty Data"
+    except Exception as e:
+        results["dhan_data/instruments.py"] = f"❌ {e}"
+
+    # -------------------------
+    # market_quote
+    # -------------------------
+    try:
+        from dhan_data.market_quote import get_ltp
+        test_price = get_ltp(13, "IDX_I")
+        if test_price:
+            results["dhan_data/market_quote.py"] = "✅ Working"
+        else:
+            results["dhan_data/market_quote.py"] = "❌ No Data"
+    except Exception as e:
+        results["dhan_data/market_quote.py"] = f"❌ {e}"
+
+    # -------------------------
+    # live_market_feed
+    # -------------------------
+    try:
+        from dhan_data.live_market_feed import get_live_ltp
+        live = get_live_ltp()
+        if live:
+            results["dhan_data/live_market_feed.py"] = "✅ Working"
+        else:
+            results["dhan_data/live_market_feed.py"] = "⚠️ No Live Data"
+    except Exception as e:
+        results["dhan_data/live_market_feed.py"] = f"❌ {e}"
+
+    # -------------------------
+    # depth_feed
+    # -------------------------
+    try:
+        from dhan_data.depth_feed import get_depth
+        depth = get_depth()
+        if depth:
+            results["dhan_data/depth_feed.py"] = "✅ Working"
+        else:
+            results["dhan_data/depth_feed.py"] = "⚠️ No Data"
+    except Exception as e:
+        results["dhan_data/depth_feed.py"] = f"❌ {e}"
+
+    # -------------------------
+    # chart
+    # -------------------------
+    try:
+        from dhan_data import chart
+        cdf = chart.get_candle_data(13, "IDX_I")
+        if cdf is not None and not cdf.empty:
+            results["dhan_data/chart.py"] = "✅ Working"
+        else:
+            results["dhan_data/chart.py"] = "❌ No Data"
+    except Exception as e:
+        results["dhan_data/chart.py"] = f"❌ {e}"
+
+    # -------------------------
+    # helpers processing
+    # -------------------------
+    try:
+        if df is not None:
+            _ = helpers.calculate_pcr(df)
+            results["utils/helpers (logic)"] = "✅ Working"
+        else:
+            results["utils/helpers (logic)"] = "⚠️ No Data"
+    except Exception as e:
+        results["utils/helpers (logic)"] = f"❌ {e}"
+
+    # -------------------------
+    # SHOW RESULTS
+    # -------------------------
+    for file, status in results.items():
+        st.write(f"{file} → {status}")
