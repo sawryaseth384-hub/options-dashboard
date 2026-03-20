@@ -11,15 +11,20 @@ def process_option_data(raw_data):
 
         for strike, value in oc.items():
 
+            strike_val = float(strike)
+
+            # 🔥 FILTER ONLY NEAR ATM
+            if abs(strike_val - spot) > 1000:
+                continue
+
             ce = value.get("ce")
             pe = value.get("pe")
 
-            # 🔥 Skip if both missing
             if not ce and not pe:
                 continue
 
             rows.append({
-                "Strike": int(float(strike)),
+                "Strike": int(strike_val),
 
                 "CE OI": ce["oi"] if ce else 0,
                 "CE LTP": ce["last_price"] if ce else 0,
