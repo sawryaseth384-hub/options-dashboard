@@ -131,6 +131,19 @@ if df is not None:
     st.plotly_chart(helpers.plot_oi_heatmap(df), width="stretch")
     st.plotly_chart(helpers.plot_payoff(atm), width="stretch")
 
+# =========================
+# 📈 LIVE CHART
+# =========================
+st.markdown("## 📈 Live Chart")
+
+chart_df = chart.get_candle_data(security_id, mapped_segment)
+
+if chart_df is not None:
+    fig = chart.plot_candle(chart_df)
+    st.plotly_chart(fig, width="stretch")
+else:
+    st.warning("No chart data")
+
 
 # =========================
 # DEBUG
