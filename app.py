@@ -16,46 +16,49 @@ from dhan_data.depth_feed import (
 )
 
 # =========================
-# 🎨 GLOBAL STYLE
+# CONFIG
 # =========================
 st.set_page_config(page_title="🔥 AI Trading System", layout="wide")
 
+# =========================
+# STYLE
+# =========================
 st.markdown("""
 <style>
 body {background-color:#0b0f1a;}
 
-.block-container {padding-top:1rem;}
-
 .card {
     background:#111827;
-    padding:15px;
-    border-radius:12px;
+    padding:12px;
+    border-radius:10px;
     border:1px solid #1f2937;
 }
 
 .ticker {
     display:flex;
-    gap:15px;
+    gap:10px;
     overflow-x:auto;
-    padding:10px;
-    background:#020617;
-    border-radius:10px;
-    border:1px solid #1e293b;
-}
-.ticker-item {
-    min-width:120px;
     padding:8px;
-    background:#0f172a;
+    background:#020617;
     border-radius:8px;
-    text-align:center;
 }
+
+.ticker-item {
+    min-width:100px;
+    padding:6px;
+    background:#0f172a;
+    border-radius:6px;
+    text-align:center;
+    font-size:12px;
+}
+
 .green {color:#22c55e;}
 .red {color:#ef4444;}
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# 🔝 HEADER
+# HEADER
 # =========================
 col1, col2, col3 = st.columns([2,4,2])
 
@@ -66,23 +69,18 @@ with col2:
     symbol = st.text_input("🔍 Search Symbol", value="NIFTY").upper()
 
 with col3:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.metric("💰 Balance", "₹1,00,000")
     st.metric("📊 P&L", "+₹2,500")
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# 📡 TOP TICKER STRIP
+# TICKER
 # =========================
 st.markdown("""
 <div class="ticker">
-    <div class="ticker-item"><b>NIFTY</b><br>22,450 <span class="green">+120</span></div>
-    <div class="ticker-item"><b>BANKNIFTY</b><br>48,200 <span class="green">+300</span></div>
-    <div class="ticker-item"><b>SENSEX</b><br>74,500 <span class="green">+250</span></div>
-    <div class="ticker-item"><b>DOW</b><br>38,500 <span class="green">+200</span></div>
-    <div class="ticker-item"><b>NASDAQ</b><br>16,200 <span class="green">+100</span></div>
-    <div class="ticker-item"><b>GOLD</b><br>62,000 <span class="green">+500</span></div>
-    <div class="ticker-item"><b>CRUDE</b><br>6,500 <span class="red">-100</span></div>
+    <div class="ticker-item"><b>NIFTY</b><br>22450 <span class="green">+120</span></div>
+    <div class="ticker-item"><b>BANKNIFTY</b><br>48200 <span class="green">+300</span></div>
+    <div class="ticker-item"><b>SENSEX</b><br>74500 <span class="green">+250</span></div>
+    <div class="ticker-item"><b>DOW</b><br>38500 <span class="green">+200</span></div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -92,7 +90,7 @@ if not symbol:
     st.stop()
 
 # =========================
-# 🚀 FETCH DATA
+# FETCH DATA
 # =========================
 try:
     data = dhan_api.get_full_data(symbol)
@@ -105,7 +103,7 @@ if not data or "error" in data:
     st.stop()
 
 # =========================
-# 🔌 WS START
+# WS START
 # =========================
 if "ws_started" not in st.session_state:
     try:
@@ -116,7 +114,7 @@ if "ws_started" not in st.session_state:
         pass
 
 # =========================
-# 📡 SUBSCRIBE
+# SUBSCRIBE
 # =========================
 if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_symbol != symbol:
     try:
@@ -127,17 +125,19 @@ if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_sy
         pass
 
 # =========================
-# 💰 LIVE PRICE
+# LIVE PRICE
 # =========================
 live_price = get_live_ltp()
 spot = live_price if live_price != 0 else data.get("ltp", 0)
 
 # =========================
-# 🔀 TABS
+# TABS
 # =========================
 tab1, tab2, tab3 = st.tabs(["📊 Option", "📈 Stock", "🧠 War Room"])
 
-# ================= OPTION =================
+# ============================================================
+# OPTION DASHBOARD
+# ============================================================
 with tab1:
 
     col1, col2, col3 = st.columns(3)
@@ -189,7 +189,25 @@ with tab1:
         except Exception as e:
             st.error(f"Option Error: {e}")
 
-# ================= STOCK =================
+    # 🔥 MARKET DEPTH (ADD BACK)
+    st.markdown("### 📊 Market Depth")
+
+    depth = get_depth()
+
+    colA, colB = st.columns(2)
+
+    with colA:
+        st.subheader("Bids")
+        st.dataframe(depth.get("bids", []))
+
+    with colB:
+        st.subheader("Asks")
+        st.dataframe(depth.get("asks", []))
+
+
+# ============================================================
+# STOCK DASHBOARD
+# ============================================================
 with tab2:
 
     col1, col2 = st.columns([2,5])
@@ -217,10 +235,9 @@ with tab2:
             fig.update_layout(template="plotly_dark")
             st.plotly_chart(fig, use_container_width=True)
 
-        else:
-            st.info("No chart data")
-
-# ================= WAR ROOM =================
+# ============================================================
+# WAR ROOM
+# ============================================================
 with tab3:
 
     st.markdown("## 🧠 War Room")
