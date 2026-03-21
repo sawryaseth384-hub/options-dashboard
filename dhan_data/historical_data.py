@@ -1,62 +1,49 @@
-import requests
-import pandas as pd
-import streamlit as st
-from datetime import datetime, timedelta
+def get_historical(security_id, segment):
+    import requests
+    from datetime import datetime, timedelta
+    import streamlit as st
 
-BASE_URL = "https://api.dhan.co/v2"
+    url = "https://api.dhan.co/v2/charts/intraday"
 
-def get_headers():
-    return {
+    to_date = datetime.now()
+    from_date = to_date - timedelta(days=3)
+
+    payload = {
+        "securityId": str(security_id),
+        "exchangeSegment": "NSE_EQ" if segment == "IDX_I" else segment,
+        "instrument": "INDEX",
+        "interval": "5",
+        "oi": False,
+        "fromDate": from_date.strftime("%Y-%m-%d %H:%M:%S"),
+        "toDate": to_date.strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+    headers = {
         "access-token": st.secrets["ACCESS_TOKEN"],
         "client-id": st.secrets["CLIENT_ID"],
         "Content-Type": "application/json"
     }
 
-def get_historical(security_id, segment):
+    res = requests.post(url, headers=headers, json=payload)
+    data = res.json()
 
-    try:
-        url = f"{BASE_URL}/charts/intraday"
+    if "data" not in data:
+        return []
 
-        to_date = datetime.now()
-        from_date = to_date - timedelta(days=1)
+    d = data["data"]
 
-        payload = {
-            "securityId": int(security_id),
-            "exchangeSegment": segment,
-            "interval": "5",
-            "oi": False,
-            "fromDate": from_date.strftime("%Y-%m-%d %H:%M:%S"),
-            "toDate": to_date.strftime("%Y-%m-%d %H:%M:%S")
-        }
+    if "open" not in d:
+        return []
 
-        res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
-        raw = res.json()
+    result = []
 
-        # 🔍 DEBUG
-        if st.sidebar.checkbox("Show Historical Debug"):
-            st.write("RAW HIST:", raw)
-
-        # ✅ HANDLE BOTH CASES
-        data = raw.get("data", raw)
-
-        # ❌ अगर open नहीं है → return
-        if "open" not in data:
-            return None
-
-        df = pd.DataFrame({
-            "time": pd.to_datetime(data["timestamp"], unit="s"),
-            "open": data["open"],
-            "high": data["high"],
-            "low": data["low"],
-            "close": data["close"],
-            "volume": data.get("volume", [0]*len(data["open"]))
+    for i in range(len(d["timestamp"])):
+        result.append({
+            "time": d["timestamp"][i],
+            "open": d["open"][i],
+            "high": d["high"][i],
+            "low": d["low"][i],
+            "close": d["close"][i]
         })
 
-        if df.empty:
-            return None
-
-        return df
-
-    except Exception as e:
-        st.error(f"Historical Error: {e}")
-        return None
+    return result
