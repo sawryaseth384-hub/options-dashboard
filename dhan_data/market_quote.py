@@ -1,131 +1,155 @@
-import requests
-import streamlit as st
+const axios = require('axios');
+require('dotenv').config(); // For environment variables
 
-BASE_URL = "https://api.dhan.co/v2"
+const BASE_URL = "https://api.dhan.co/v2";
 
+// ========================= 
+// 🔐 HEADERS 
+// =========================
+function getHeaders() {
+  return {
+    "access-token": process.env.ACCESS_TOKEN,
+    "client-id": process.env.CLIENT_ID,
+    "Content-Type": "application/json"
+  };
+}
 
-# =========================
-# 🔐 HEADERS
-# =========================
-def get_headers():
-    return {
-        "access-token": st.secrets["ACCESS_TOKEN"],
-        "client-id": st.secrets["CLIENT_ID"],
-        "Content-Type": "application/json"
-    }
+// ========================= 
+// 🔄 SEGMENT → EXCHANGE MAP 
+// =========================
+function mapExchange(segment) {
+  // Index (NIFTY / BANKNIFTY)
+  if (segment === "IDX_I") {
+    return "NSE_EQ";
+  }
+  // Stocks / FNO
+  return "NSE_FNO";
+}
 
+// ========================= 
+// 🧪 DEBUG TOGGLE 
+// =========================
+function debugLog(label, data, isDebugEnabled = false) {
+  if (isDebugEnabled) {
+    console.log(`${label}:`, data);
+  }
+}
 
-# =========================
-# 🔄 SEGMENT → EXCHANGE MAP
-# =========================
-def map_exchange(segment):
-    if segment == "IDX_I":
-        return "NSE_EQ"
-    elif segment == "NSE_FNO":
-        return "NSE_FNO"
-    else:
-        return "NSE_EQ"
+// ========================= 
+// 💰 LTP (Last Price) 
+// =========================
+async function getLtp(securityId, segment, isDebugEnabled = false) {
+  const exchange = mapExchange(segment);
+  
+  const payload = {
+    "NSE_EQ": [],
+    "NSE_FNO": []
+  };
+  
+  payload[exchange].push(parseInt(securityId));
+  
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/marketfeed/ltp`,
+      payload,
+      { headers: getHeaders(), timeout: 10000 }
+    );
+    
+    const data = response.data;
+    debugLog("LTP RAW", data, isDebugEnabled);
+    
+    return data?.data?.[exchange]?.[securityId]?.last_price || 0;
+  } catch (error) {
+    console.error(`LTP Error: ${error.message}`);
+    return 0;
+  }
+}
 
+// ========================= 
+// 📊 OHLC DATA 
+// =========================
+async function getOhlc(securityId, segment, isDebugEnabled = false) {
+  const exchange = mapExchange(segment);
+  
+  const payload = {
+    "NSE_EQ": [],
+    "NSE_FNO": []
+  };
+  
+  payload[exchange].push(parseInt(securityId));
+  
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/marketfeed/ohlc`,
+      payload,
+      { headers: getHeaders(), timeout: 10000 }
+    );
+    
+    const data = response.data;
+    debugLog("OHLC RAW", data, isDebugEnabled);
+    
+    return data?.data?.[exchange]?.[securityId] || {};
+  } catch (error) {
+    console.error(`OHLC Error: ${error.message}`);
+    return {};
+  }
+}
 
-# =========================
-# 🧪 DEBUG TOGGLE
-# =========================
-def debug_log(label, data):
-    if st.sidebar.checkbox("Show Debug Data"):
-        st.write(f"{label}:", data)
+// ========================= 
+// 📊 FULL QUOTE (Market Depth) 
+// =========================
+async function getQuote(securityId, segment, isDebugEnabled = false) {
+  const exchange = mapExchange(segment);
+  
+  const payload = {
+    "NSE_EQ": [],
+    "NSE_FNO": []
+  };
+  
+  payload[exchange].push(parseInt(securityId));
+  
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/marketfeed/quote`,
+      payload,
+      { headers: getHeaders(), timeout: 10000 }
+    );
+    
+    const data = response.data;
+    debugLog("QUOTE RAW", data, isDebugEnabled);
+    
+    return data?.data?.[exchange]?.[securityId] || {};
+  } catch (error) {
+    console.error(`Quote Error: ${error.message}`);
+    return {};
+  }
+}
 
+// Example usage
+async function main() {
+  const securityId = "49081"; // Example security ID
+  const segment = "NSE_FNO";
+  
+  console.log("Getting LTP...");
+  const ltp = await getLtp(securityId, segment, true);
+  console.log("LTP:", ltp);
+  
+  console.log("Getting OHLC...");
+  const ohlc = await getOhlc(securityId, segment, true);
+  console.log("OHLC:", ohlc);
+  
+  console.log("Getting Quote...");
+  const quote = await getQuote(securityId, segment, true);
+  console.log("Quote:", quote);
+}
 
-# =========================
-# 💰 LTP (Last Price)
-# =========================
-def get_ltp(security_id, segment):
+// Uncomment to run the example
+// main().catch(console.error);
 
-    exchange = map_exchange(segment)
-
-    payload = {
-        "NSE_EQ": [],
-        "NSE_FNO": []
-    }
-
-    payload[exchange].append(int(security_id))
-
-    try:
-        res = requests.post(
-            f"{BASE_URL}/marketfeed/ltp",
-            headers=get_headers(),
-            json=payload,
-            timeout=10
-        )
-
-        data = res.json()
-        debug_log("LTP RAW", data)
-
-        return data.get("data", {}).get(exchange, {}).get(str(security_id), {}).get("last_price", 0)
-
-    except Exception as e:
-        st.error(f"LTP Error: {e}")
-        return 0
-
-
-# =========================
-# 📊 OHLC DATA
-# =========================
-def get_ohlc(security_id, segment):
-
-    exchange = map_exchange(segment)
-
-    payload = {
-        "NSE_EQ": [],
-        "NSE_FNO": []
-    }
-
-    payload[exchange].append(int(security_id))
-
-    try:
-        res = requests.post(
-            f"{BASE_URL}/marketfeed/ohlc",
-            headers=get_headers(),
-            json=payload,
-            timeout=10
-        )
-
-        data = res.json()
-        debug_log("OHLC RAW", data)
-
-        return data.get("data", {}).get(exchange, {}).get(str(security_id), {})
-
-    except Exception as e:
-        st.error(f"OHLC Error: {e}")
-        return {}
-
-
-# =========================
-# 📊 FULL QUOTE (Market Depth)
-# =========================
-def get_quote(security_id, segment):
-
-    exchange = map_exchange(segment)
-
-    payload = {
-        "NSE_EQ": [],
-        "NSE_FNO": []
-    }
-
-    payload[exchange].append(int(security_id))
-
-    try:
-        res = requests.post(
-            f"{BASE_URL}/marketfeed/quote",
-            headers=get_headers(),
-            json=payload,
-            timeout=10
-        )
-
-        data = res.json()
-        debug_log("QUOTE RAW", data)
-
-        return data.get("data", {}).get(exchange, {}).get(str(security_id), {})
-
-    except Exception as e:
-        st.error(f"Quote Error: {e}")
-        return {}
+module.exports = {
+  getLtp,
+  getOhlc,
+  getQuote,
+  mapExchange,
+  getHeaders
+};
