@@ -50,14 +50,12 @@ def get_symbol_info(symbol):
 # 📅 EXPIRY
 # =========================
 def fetch_expiry(security_id, segment):
-
-    data = get_expiry(headers(), security_id, segment)
-
-    if data and data.get("status") == "success":
-        return data.get("data", [])
-
-    return []
-
+    try:
+        data = get_expiry(security_id, segment)
+        return data if data else []
+    except Exception as e:
+        print("Expiry Error:", e)
+        return []
 # =========================
 # 📊 OPTION CHAIN
 # =========================
