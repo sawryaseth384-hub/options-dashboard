@@ -3,6 +3,9 @@ from core import dhan_api
 import pandas as pd
 import plotly.graph_objects as go
 
+# 🔌 LIVE FEED
+from dhan_data.live_market_feed import start_live_feed, subscribe_instrument, get_live_ltp
+
 # =========================
 # 🔥 PAGE CONFIG
 # =========================
@@ -15,7 +18,7 @@ st.title("📈 Dhan AI Full Options Dashboard")
 symbol = st.text_input(
     "Enter Symbol (NIFTY / BANKNIFTY / RELIANCE / SBIN)",
     value="NIFTY"
-)
+).upper()
 
 if not symbol:
     st.stop()
@@ -30,12 +33,32 @@ if "error" in data:
     st.stop()
 
 # =========================
+# 🔌 START WEBSOCKET (ONCE)
+# =========================
+if "ws_started" not in st.session_state:
+    start_live_feed()
+    st.session_state.ws_started = True
+
+# =========================
+# 📡 SUBSCRIBE (ONCE PER SYMBOL)
+# =========================
+if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_symbol != symbol:
+    subscribe_instrument(data["security_id"], data["segment"])
+    st.session_state.subscribed_symbol = symbol
+
+# =========================
+# 💰 LIVE LTP
+# =========================
+live_price = get_live_ltp()
+spot = live_price if live_price != 0 else data["ltp"]
+
+# =========================
 # 📊 BASIC INFO
 # =========================
 col1, col2, col3 = st.columns(3)
 
 col1.metric("Symbol", data["symbol"])
-col2.metric("Spot (LTP)", data["ltp"])
+col2.metric("Spot (LTP)", spot)
 col3.metric("Segment", data["segment"])
 
 st.caption(f"Security ID: {data['security_id']}")
