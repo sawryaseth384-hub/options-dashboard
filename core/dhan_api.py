@@ -9,26 +9,15 @@ from dhan_data.market_quote import get_ltp
 from dhan_data.historical_data import get_historical
 from dhan_data.expired_options import get_expired_options
 from dhan_data.instruments import get_symbol_data
-from dhan_data.instruments import get_symbol_data
 
 # =========================
-# 🔐 HEADERS
-# =========================
-def headers():
-    return {
-        "access-token": st.secrets["ACCESS_TOKEN"],
-        "client-id": st.secrets["CLIENT_ID"],
-        "Content-Type": "application/json"
-    }
-
-# =========================
-# 🎯 SYMBOL HANDLER (AUTO)
+# 🎯 SYMBOL HANDLER
 # =========================
 def get_symbol_info(symbol):
 
     symbol = symbol.upper()
 
-    # INDEX FIX
+    # INDEX
     if symbol == "NIFTY":
         return 13, "IDX_I"
 
@@ -38,13 +27,11 @@ def get_symbol_info(symbol):
     if symbol == "FINNIFTY":
         return 27, "IDX_I"
 
-    # STOCK (FNO)
-    data = get_symbol_data(symbol)
+    # STOCK (dynamic)
+    security_id, segment = get_symbol_data(symbol)
 
-    if data:
-        return data.get("security_id"), data.get("segment")
+    return security_id, segment
 
-    return None, None
 
 # =========================
 # 📅 EXPIRY
@@ -52,21 +39,24 @@ def get_symbol_info(symbol):
 def fetch_expiry(security_id, segment):
     try:
         data = get_expiry(security_id, segment)
-        return data if data else []
+        return data if isinstance(data, list) else []
     except Exception as e:
         print("Expiry Error:", e)
         return []
+
+
 # =========================
 # 📊 OPTION CHAIN
 # =========================
 def fetch_option_chain(security_id, segment, expiry):
 
-    data = get_option_chain(headers(), security_id, segment, expiry)
+    data = get_option_chain(security_id, segment, expiry)
 
     if data and data.get("status") == "success":
         return data
 
     return {}
+
 
 # =========================
 # 💰 LTP
@@ -74,36 +64,50 @@ def fetch_option_chain(security_id, segment, expiry):
 def fetch_ltp(security_id, segment):
 
     try:
-        return get_ltp(headers(), security_id, segment)
-    except:
+        return get_ltp(security_id, segment)
+    except Exception as e:
+        print("LTP Error:", e)
         return 0
+
 
 # =========================
 # 📈 HISTORICAL DATA
 # =========================
 def fetch_historical(security_id, segment):
 
-    data = get_historical(headers(), security_id, segment)
+    try:
+        data = get_historical(security_id, segment)
 
-    if data and "data" in data:
-        return data["data"]
+        if data is not None:
+            return data
 
-    return []
+        return []
+
+    except Exception as e:
+        print("Historical Error:", e)
+        return []
+
 
 # =========================
 # 📦 EXPIRED OPTIONS
 # =========================
 def fetch_expired(security_id, segment):
 
-    data = get_expired_options(headers(), security_id, segment)
+    try:
+        data = get_expired_options(security_id)
 
-    if data and data.get("status") == "success":
-        return data.get("data", [])
+        if data is not None:
+            return data
 
-    return []
+        return []
+
+    except Exception as e:
+        print("Expired Error:", e)
+        return []
+
 
 # =========================
-# 🔥 FULL DATA PACK (ALL IN ONE)
+# 🔥 FULL DATA PACK
 # =========================
 def get_full_data(symbol):
 
