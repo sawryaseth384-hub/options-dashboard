@@ -4,18 +4,35 @@ import struct
 import threading
 import streamlit as st
 
+# =========================
+# 🔥 GLOBAL STORE
+# =========================
 DEPTH_DATA = {
     "bids": [],
     "asks": []
 }
 
+ws_app = None
+is_connected = False
+subscribed = set()
 
+# =========================
+# 🔐 WS URL
+# =========================
 def get_ws_url():
     token = st.secrets["ACCESS_TOKEN"]
     client_id = st.secrets["CLIENT_ID"]
-
     return f"wss://depth-api-feed.dhan.co/twentydepth?token={token}&clientId={client_id}&authType=2"
 
+# =========================
+# 🔄 SEGMENT MAP (IMPORTANT)
+# =========================
+def map_ws_segment(segment):
+    if segment == "IDX_I":
+        return 1   # NSE_EQ (Index)
+    elif segment == "NSE_FNO":
+        return 2   # NSE_FNO
+    return 1
 
 # =========================
 # 📊 PARSE DEPTH (20 LEVEL)
@@ -24,11 +41,7 @@ def parse_depth(message):
     global DEPTH_DATA
 
     try:
-        header = message[:12]
-
-        # response code
         code = message[2]
-
         body = message[12:]
 
         levels = []
@@ -53,13 +66,11 @@ def parse_depth(message):
         # 41 = BID, 51 = ASK
         if code == 41:
             DEPTH_DATA["bids"] = levels
-
         elif code == 51:
             DEPTH_DATA["asks"] = levels
 
     except Exception as e:
         print("Depth Parse Error:", e)
-
 
 # =========================
 # 📡 MESSAGE
@@ -68,42 +79,83 @@ def on_message(ws, message):
     if isinstance(message, bytes):
         parse_depth(message)
 
-
+# =========================
+# ✅ OPEN
+# =========================
 def on_open(ws):
+    global is_connected
+    is_connected = True
     print("✅ Depth WS Connected")
+
+# =========================
+# ❌ ERROR
+# =========================
+def on_error(ws, error):
+    print("Depth WS Error:", error)
+
+# =========================
+# 🔌 CLOSE
+# =========================
+def on_close(ws, code, msg):
+    global is_connected
+    is_connected = False
+    print("Depth WS Closed")
+
+# =========================
+# 🚀 START WEBSOCKET
+# =========================
+def start_depth_feed():
+    global ws_app
+
+    if ws_app is not None:
+        return
+
+    ws_app = websocket.WebSocketApp(
+        get_ws_url(),
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close
+    )
+
+    thread = threading.Thread(target=ws_app.run_forever)
+    thread.daemon = True
+    thread.start()
+
+# =========================
+# 📡 SUBSCRIBE (FIXED)
+# =========================
+def subscribe_depth(security_id, segment):
+    global ws_app, is_connected, subscribed
+
+    if ws_app is None or not is_connected:
+        print("Depth WS not ready")
+        return
+
+    key = f"{security_id}_{segment}"
+    if key in subscribed:
+        return
+
+    subscribed.add(key)
 
     payload = {
         "RequestCode": 23,
         "InstrumentCount": 1,
         "InstrumentList": [
             {
-                "ExchangeSegment": "NSE_FNO",
-                "SecurityId": "13"
+                "ExchangeSegment": map_ws_segment(segment),
+                "SecurityId": str(security_id)
             }
         ]
     }
 
-    ws.send(json.dumps(payload))
-
-
-def start_ws():
-    ws = websocket.WebSocketApp(
-        get_ws_url(),
-        on_message=on_message,
-        on_open=on_open
-    )
-
-    ws.run_forever()
-
+    try:
+        ws_app.send(json.dumps(payload))
+    except Exception as e:
+        print("Depth Subscribe Error:", e)
 
 # =========================
-# 🚀 START THREAD
+# 📊 GET DEPTH
 # =========================
-def start_depth_feed():
-    thread = threading.Thread(target=start_ws)
-    thread.daemon = True
-    thread.start()
-
-
 def get_depth():
     return DEPTH_DATA
