@@ -19,11 +19,12 @@ def get_headers():
 # 🔄 SEGMENT → EXCHANGE MAP
 # =========================
 def map_exchange(segment):
-    # Index (NIFTY / BANKNIFTY)
     if segment == "IDX_I":
         return "NSE_EQ"
-    # Stocks / FNO
-    return "NSE_FNO"
+    elif segment == "NSE_FNO":
+        return "NSE_FNO"
+    else:
+        return "NSE_EQ"
 
 
 # =========================
