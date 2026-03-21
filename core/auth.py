@@ -6,8 +6,8 @@ import time
 # =========================
 # 🔐 CONFIG (from secrets)
 # =========================
-CLIENT_ID = st.secrets["CLIENT_ID"]
-PIN = st.secrets["PIN"]
+CLIENT_ID = st.secrets["1106299230"]
+PIN = st.secrets["009988"]
 TOTP_SECRET = st.secrets["TOTP_SECRET"]
 
 # =========================
