@@ -11,23 +11,35 @@ def get_headers():
     }
 
 def get_expiry(security_id, segment):
-
-    url = f"{BASE_URL}/optionchain/expirylist"
-
-    payload = {
-        "UnderlyingScrip": int(security_id),
-        "UnderlyingSeg": segment
-    }
-
     try:
-        res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
+        url = f"{BASE_URL}/optionchain/expirylist"
+
+        payload = {
+            "UnderlyingScrip": int(security_id),
+            "UnderlyingSeg": segment
+        }
+
+        res = requests.post(
+            url,
+            headers=get_headers(),
+            json=payload,
+            timeout=10
+        )
+
         data = res.json()
 
-        if not data or data.get("status") != "success":
+        # ✅ IMPORTANT FIX
+        if data.get("status") != "success":
             return []
 
-        return data.get("data", [])
+        expiry_list = data.get("data", [])
+
+        # ensure list
+        if isinstance(expiry_list, list):
+            return expiry_list
+
+        return []
 
     except Exception as e:
-        st.error(f"Expiry Error: {e}")
+        print("Expiry Error:", e)
         return []
