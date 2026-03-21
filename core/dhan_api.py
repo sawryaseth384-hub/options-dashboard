@@ -1,148 +1,96 @@
-import streamlit as st
+const axios = require('axios');
+const moment = require('moment');
 
-# =========================
-# 📦 IMPORT ALL MODULES
-# =========================
-from dhan_data.expiry import get_expiry
-from dhan_data.option_chain import get_option_chain
-from dhan_data.market_quote import get_ltp
-from dhan_data.historical_data import get_historical
-from dhan_data.expired_options import get_expired_options
-from dhan_data.instruments import get_symbol_data
+const BASE_URL = "https://api.dhan.co/v2";
 
-# =========================
-# 🎯 SYMBOL HANDLER
-# =========================
-def get_symbol_info(symbol):
-
-    symbol = symbol.upper()
-
-    # INDEX
-    if symbol == "NIFTY":
-        return 13, "IDX_I"
-
-    if symbol == "BANKNIFTY":
-        return 25, "IDX_I"
-
-    if symbol == "FINNIFTY":
-        return 27, "IDX_I"
-
-    # STOCK (dynamic)
-    security_id, segment = get_symbol_data(symbol)
-
-    return security_id, segment
-
-
-# =========================
-# 📅 EXPIRY
-# =========================
-def fetch_expiry(security_id, segment):
-    try:
-        data = get_expiry(security_id, segment)
-        return data if isinstance(data, list) else []
-    except Exception as e:
-        print("Expiry Error:", e)
-        return []
-
-
-# =========================
-# 📊 OPTION CHAIN
-# =========================
-def fetch_option_chain(security_id, segment, expiry):
-
-    data = get_option_chain(security_id, segment, expiry)
-
-    if data and data.get("status") == "success":
-        return data
-
-    return {}
-
-
-# =========================
-# 💰 LTP
-# =========================
-def fetch_ltp(security_id, segment):
-
-    try:
-        return get_ltp(security_id, segment)
-    except Exception as e:
-        print("LTP Error:", e)
-        return 0
-
-
-# =========================
-# 📈 HISTORICAL DATA
-# =========================
-def fetch_historical(security_id, segment):
-
-    try:
-        data = get_historical(security_id, segment)
-
-        if data is not None:
-            return data
-
-        return []
-
-    except Exception as e:
-        print("Historical Error:", e)
-        return []
-
-
-# =========================
-# 📦 EXPIRED OPTIONS
-# =========================
-def fetch_expired(security_id, segment):
-
-    try:
-        data = get_expired_options(security_id)
-
-        if data is not None:
-            return data
-
-        return []
-
-    except Exception as e:
-        print("Expired Error:", e)
-        return []
-
-
-# =========================
-# 🔥 FULL DATA PACK
-# =========================
-def get_full_data(symbol):
-
-    security_id, segment = get_symbol_info(symbol)
-
-    if not security_id:
-        return {"error": "Invalid Symbol"}
-
-    # 🔹 LTP
-    ltp = fetch_ltp(security_id, segment)
-
-    # 🔹 Expiry
-    expiries = fetch_expiry(security_id, segment)
-
-    expiry = expiries[0] if expiries else None
-
-    # 🔹 Option Chain
-    option_chain = {}
-    if expiry:
-        option_chain = fetch_option_chain(security_id, segment, expiry)
-
-    # 🔹 Historical
-    historical = fetch_historical(security_id, segment)
-
-    # 🔹 Expired Options
-    expired = fetch_expired(security_id, segment)
-
+// =========================
+// 🔐 HEADERS
+// =========================
+function getHeaders() {
     return {
-        "symbol": symbol,
-        "security_id": security_id,
-        "segment": segment,
-        "ltp": ltp,
-        "expiry": expiry,
-        "expiries": expiries,
-        "option_chain": option_chain,
-        "historical": historical,
-        "expired": expired
+        "access-token": process.env.ACCESS_TOKEN,
+        "client-id": process.env.CLIENT_ID,
+        "Content-Type": "application/json"
+    };
+}
+
+// =========================
+// 📈 GET HISTORICAL DATA
+// =========================
+async function getHistorical(securityId, segment) {
+
+    const url = `${BASE_URL}/charts/intraday`;
+
+    const toDate = moment();
+    const fromDate = moment().subtract(1, 'days');
+
+    const payload = {
+        securityId: String(securityId),
+        exchangeSegment: segment,
+
+        // 🔥 CRITICAL FIX
+        instrument: segment === "IDX_I" ? "INDEX" : "EQUITY",
+
+        interval: "5",
+        oi: false,
+        fromDate: fromDate.format("YYYY-MM-DD HH:mm:ss"),
+        toDate: toDate.format("YYYY-MM-DD HH:mm:ss")
+    };
+
+    try {
+        const response = await axios.post(url, payload, {
+            headers: getHeaders(),
+            timeout: 10000
+        });
+
+        const res = response.data;
+
+        // =========================
+        // ❌ ERROR CHECK
+        // =========================
+        if (!res || res.status === "failure" || !res.data) {
+            console.log("❌ Invalid API response:", res);
+            return [];
+        }
+
+        const d = res.data;
+
+        if (!d.timestamp || !d.open) {
+            return [];
+        }
+
+        // =========================
+        // ✅ FORMAT DATA
+        // =========================
+        const result = d.timestamp.map((ts, i) => ({
+            time: new Date(ts * 1000),   // ✅ FIX (human readable)
+            open: d.open[i],
+            high: d.high[i],
+            low: d.low[i],
+            close: d.close[i],
+            volume: d.volume ? d.volume[i] : 0
+        }));
+
+        return result;
+
+    } catch (error) {
+        console.error("❌ Historical API Error:", error.response?.data || error.message);
+        return [];
     }
+}
+
+// =========================
+// 🚀 TEST
+// =========================
+async function main() {
+    const data = await getHistorical(13, "IDX_I"); // NIFTY
+
+    console.log("📊 DATA SAMPLE:");
+    console.log(data.slice(0, 3));
+}
+
+if (require.main === module) {
+    main();
+}
+
+module.exports = { getHistorical };
