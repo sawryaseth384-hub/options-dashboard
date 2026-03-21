@@ -3,14 +3,12 @@ from core import dhan_api
 import pandas as pd
 import plotly.graph_objects as go
 
-# 🔌 LIVE FEED
 from dhan_data.live_market_feed import (
     start_live_feed,
     subscribe_instrument,
     get_live_ltp
 )
 
-# 🔌 DEPTH FEED
 from dhan_data.depth_feed import (
     start_depth_feed,
     subscribe_depth,
@@ -18,9 +16,28 @@ from dhan_data.depth_feed import (
 )
 
 # =========================
-# 🔥 PAGE CONFIG
+# 🎨 GLOBAL STYLE (🔥 PRO UI)
 # =========================
 st.set_page_config(page_title="🔥 AI Trading System", layout="wide")
+
+st.markdown("""
+<style>
+body {background-color:#0b0f1a;}
+
+.block-container {padding-top:1rem;}
+
+.card {
+    background:#111827;
+    padding:15px;
+    border-radius:12px;
+    border:1px solid #1f2937;
+    box-shadow:0 0 10px rgba(0,0,0,0.4);
+}
+
+.metric-green {color:#22c55e;}
+.metric-red {color:#ef4444;}
+</style>
+""", unsafe_allow_html=True)
 
 # =========================
 # 🔝 HEADER
@@ -31,36 +48,43 @@ with col1:
     st.markdown("## 🔥 SHREE AI")
 
 with col2:
-    symbol = st.text_input(
-        "🔍 Search Symbol",
-        value="NIFTY"
-    ).upper()
+    symbol = st.text_input("🔍 Search Symbol", value="NIFTY").upper()
 
 with col3:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.metric("💰 Balance", "₹1,00,000")
     st.metric("📊 P&L", "+₹2,500")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
 # =========================
-# 🌍 MARKET STRIP
+# 🌍 MARKET STRIP (🔥 UPGRADE)
 # =========================
+def market_card(title, value, change):
+    color = "#22c55e" if "+" in change else "#ef4444"
+
+    st.markdown(f"""
+    <div class="card">
+        <h4 style="color:#9ca3af;">{title}</h4>
+        <h2>{value}</h2>
+        <span style="color:{color};font-weight:bold;">{change}</span>
+    </div>
+    """, unsafe_allow_html=True)
+
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.markdown("### 🇮🇳 Indices")
-    st.metric("NIFTY", "22,450", "+120")
-    st.metric("BANKNIFTY", "48,200", "+300")
+    market_card("🇮🇳 NIFTY", "22,450", "+120")
+    market_card("BANKNIFTY", "48,200", "+300")
 
 with col2:
-    st.markdown("### 🌎 Global")
-    st.metric("DOW", "38,500", "+200")
-    st.metric("NASDAQ", "16,200", "+100")
+    market_card("🌎 DOW", "38,500", "+200")
+    market_card("NASDAQ", "16,200", "+100")
 
 with col3:
-    st.markdown("### 🛢️ Commodity")
-    st.metric("GOLD", "62,000", "+500")
-    st.metric("CRUDE", "6,500", "-100")
+    market_card("🛢️ GOLD", "62,000", "+500")
+    market_card("CRUDE", "6,500", "-100")
 
 st.divider()
 
@@ -118,7 +142,7 @@ tab1, tab2, tab3 = st.tabs(["📊 Option", "📈 Stock", "🧠 War Room"])
 # ============================================================
 with tab1:
 
-    col1, col2, col3 = st.columns([3,2,2])
+    col1, col2, col3 = st.columns(3)
 
     col1.metric("Symbol", data.get("symbol"))
     col2.metric("Spot", spot)
@@ -128,7 +152,7 @@ with tab1:
     if data.get("expiries"):
         expiry = st.selectbox("Expiry", data["expiries"])
 
-    st.markdown("## 📊 Option Chain")
+    st.markdown("### 📊 Option Chain")
 
     if expiry:
         try:
@@ -143,7 +167,6 @@ with tab1:
             if option_data and "data" in option_data:
                 oc = option_data["data"].get("oc", {})
 
-                # ✅ FIXED LOOP
                 for strike, val in oc.items():
                     ce = val.get("ce", {})
                     pe = val.get("pe", {})
@@ -158,19 +181,13 @@ with tab1:
 
                 df = pd.DataFrame(rows).sort_values("Strike")
 
-                # 🔥 LOAD MORE
                 if "limit" not in st.session_state:
                     st.session_state.limit = 10
 
-                colA, colB = st.columns([1,1])
-                with colA:
-                    if st.button("➕ Load More"):
-                        st.session_state.limit += 10
+                if st.button("➕ Load More"):
+                    st.session_state.limit += 10
 
                 st.dataframe(df.head(st.session_state.limit), use_container_width=True)
-
-            else:
-                st.warning("No option chain")
 
         except Exception as e:
             st.error(f"Option Error: {e}")
@@ -183,7 +200,7 @@ with tab2:
     col1, col2 = st.columns([2,5])
 
     with col1:
-        st.markdown("### Watchlist")
+        st.markdown("### 📋 Watchlist")
         st.write(["RELIANCE", "TCS", "SBIN"])
 
     with col2:
@@ -202,61 +219,60 @@ with tab2:
                 close=df["close"]
             )])
 
+            fig.update_layout(template="plotly_dark")
+
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No chart data")
 
 # ============================================================
-# 🧠 WAR ROOM (ADVANCED)
+# 🧠 WAR ROOM (🔥 POWER MODE)
 # ============================================================
 with tab3:
 
-    st.markdown("## 🧠 War Room (Custom Layout)")
+    st.markdown("## 🧠 War Room")
 
-    # 🔥 DYNAMIC GRID CONTROL
-    cols = st.slider("Select Columns", 1, 4, 2)
-
+    cols = st.slider("Columns", 1, 4, 2)
     grid = st.columns(cols)
 
-    # 🔥 PANELS (CUSTOM ADD)
-    panel_options = [
-        "NIFTY Chart",
-        "BANKNIFTY Chart",
-        "OI Analysis",
-        "FII DII",
-        "Market Depth",
-        "AI Signals"
+    panels = [
+        "NIFTY",
+        "BANKNIFTY",
+        "OI",
+        "FII/DII",
+        "Depth",
+        "AI"
     ]
 
-    selected = st.multiselect("Select Panels", panel_options, default=panel_options[:cols])
+    selected = st.multiselect("Panels", panels, default=panels[:cols])
 
-    for i, panel in enumerate(selected):
+    for i, p in enumerate(selected):
         with grid[i % cols]:
 
-            if panel == "NIFTY Chart":
-                st.subheader("NIFTY")
-                st.metric("Value", spot)
+            st.markdown('<div class="card">', unsafe_allow_html=True)
 
-            elif panel == "BANKNIFTY Chart":
-                st.subheader("BANKNIFTY")
-                st.metric("Value", "48,200")
+            if p == "NIFTY":
+                st.metric("NIFTY", spot)
 
-            elif panel == "OI Analysis":
-                st.subheader("OI")
-                st.info("OI Data")
+            elif p == "BANKNIFTY":
+                st.metric("BANKNIFTY", "48,200")
 
-            elif panel == "FII DII":
-                st.subheader("FII/DII")
-                st.metric("FII", "+1200 Cr")
-                st.metric("DII", "-500 Cr")
+            elif p == "OI":
+                st.info("OI Analysis")
 
-            elif panel == "Market Depth":
+            elif p == "FII/DII":
+                st.metric("FII", "+1200Cr")
+                st.metric("DII", "-500Cr")
+
+            elif p == "Depth":
                 depth = get_depth()
                 st.dataframe(depth.get("bids", []))
 
-            elif panel == "AI Signals":
+            elif p == "AI":
                 st.success("BUY CALL")
                 st.warning("Avoid PE")
+
+            st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
 # 🔍 DEBUG
