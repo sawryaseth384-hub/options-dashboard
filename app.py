@@ -20,22 +20,55 @@ from dhan_data.depth_feed import (
 # =========================
 # 🔥 PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 Dhan Full System", layout="wide")
-st.title("📈 Dhan AI Full Options Dashboard")
+st.set_page_config(page_title="🔥 AI Trading System", layout="wide")
 
 # =========================
-# 🎯 SYMBOL INPUT
+# 🔝 HEADER
 # =========================
-symbol = st.text_input(
-    "Enter Symbol (NIFTY / BANKNIFTY / RELIANCE / SBIN)",
-    value="NIFTY"
-).upper()
+col1, col2, col3 = st.columns([2,4,2])
+
+with col1:
+    st.markdown("## 🔥 SHREE AI")
+
+with col2:
+    symbol = st.text_input(
+        "🔍 Search Symbol",
+        value="NIFTY"
+    ).upper()
+
+with col3:
+    st.metric("💰 Balance", "₹1,00,000")
+    st.metric("📊 P&L", "+₹2,500")
+
+st.divider()
+
+# =========================
+# 🌍 MARKET STRIP
+# =========================
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.markdown("### 🇮🇳 Indices")
+    st.metric("NIFTY", "22,450", "+120")
+    st.metric("BANKNIFTY", "48,200", "+300")
+
+with col2:
+    st.markdown("### 🌎 Global")
+    st.metric("DOW", "38,500", "+200")
+    st.metric("NASDAQ", "16,200", "+100")
+
+with col3:
+    st.markdown("### 🛢️ Commodity")
+    st.metric("GOLD", "62,000", "+500")
+    st.metric("CRUDE", "6,500", "-100")
+
+st.divider()
 
 if not symbol:
     st.stop()
 
 # =========================
-# 🚀 FETCH FULL DATA
+# 🚀 FETCH DATA
 # =========================
 try:
     data = dhan_api.get_full_data(symbol)
@@ -44,158 +77,189 @@ except Exception as e:
     st.stop()
 
 if not data or "error" in data:
-    st.error(data.get("error", "Invalid Symbol / API Issue"))
+    st.error(data.get("error", "Invalid Symbol"))
     st.stop()
 
 # =========================
-# 🔌 START WS (ONLY ONCE)
+# 🔌 WS START
 # =========================
 if "ws_started" not in st.session_state:
     try:
         start_live_feed()
         start_depth_feed()
         st.session_state.ws_started = True
-    except Exception as e:
-        st.warning(f"⚠️ WebSocket Error: {e}")
+    except:
+        pass
 
 # =========================
-# 📡 SUBSCRIBE (ONCE PER SYMBOL)
+# 📡 SUBSCRIBE
 # =========================
-if (
-    "subscribed_symbol" not in st.session_state or
-    st.session_state.subscribed_symbol != symbol
-):
+if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_symbol != symbol:
     try:
         subscribe_instrument(data["security_id"], data["segment"])
         subscribe_depth(data["security_id"], data["segment"])
         st.session_state.subscribed_symbol = symbol
-    except Exception as e:
-        st.warning(f"⚠️ Subscribe Error: {e}")
+    except:
+        pass
 
 # =========================
-# 💰 LIVE LTP
+# 💰 LIVE PRICE
 # =========================
 live_price = get_live_ltp()
 spot = live_price if live_price != 0 else data.get("ltp", 0)
 
 # =========================
-# 📊 BASIC INFO
+# 🔀 TABS
 # =========================
-col1, col2, col3 = st.columns(3)
+tab1, tab2, tab3 = st.tabs(["📊 Option", "📈 Stock", "🧠 War Room"])
 
-col1.metric("Symbol", data.get("symbol", "-"))
-col2.metric("Spot (LTP)", spot)
-col3.metric("Segment", data.get("segment", "-"))
+# ============================================================
+# 📊 OPTION DASHBOARD
+# ============================================================
+with tab1:
 
-st.caption(f"Security ID: {data.get('security_id')}")
+    col1, col2, col3 = st.columns([3,2,2])
 
-# =========================
-# 📅 EXPIRY SELECT
-# =========================
-expiry = None
+    col1.metric("Symbol", data.get("symbol"))
+    col2.metric("Spot", spot)
+    col3.metric("Segment", data.get("segment"))
 
-if data.get("expiries"):
-    expiry = st.selectbox("Select Expiry", data["expiries"])
-else:
-    st.warning("No expiry data available")
+    expiry = None
+    if data.get("expiries"):
+        expiry = st.selectbox("Expiry", data["expiries"])
 
-# =========================
-# 📊 OPTION CHAIN
-# =========================
-st.markdown("## 📊 Option Chain")
+    st.markdown("## 📊 Option Chain")
 
-if expiry:
-    try:
-        option_data = dhan_api.fetch_option_chain(
-            data["security_id"],
-            data["segment"],
-            expiry
-        )
-
-        if option_data and "data" in option_data:
-            oc = option_data["data"].get("oc", {})
+    if expiry:
+        try:
+            option_data = dhan_api.fetch_option_chain(
+                data["security_id"],
+                data["segment"],
+                expiry
+            )
 
             rows = []
 
-            for strike, val in oc.items():
-                ce = val.get("ce", {})
-                pe = val.get("pe", {})
+            if option_data and "data" in option_data:
+                oc = option_data["data"].get("oc", {})
 
-                rows.append({
-                    "Strike": float(strike),
-                    "Call OI": ce.get("oi", 0),
-                    "Call LTP": ce.get("last_price", 0),
-                    "Put OI": pe.get("oi", 0),
-                    "Put LTP": pe.get("last_price", 0)
-                })
+                # ✅ FIXED LOOP
+                for strike, val in oc.items():
+                    ce = val.get("ce", {})
+                    pe = val.get("pe", {})
 
-            df = pd.DataFrame(rows).sort_values("Strike")
+                    rows.append({
+                        "Strike": float(strike),
+                        "Call OI": ce.get("oi", 0),
+                        "Call LTP": ce.get("last_price", 0),
+                        "Put OI": pe.get("oi", 0),
+                        "Put LTP": pe.get("last_price", 0)
+                    })
 
-            st.dataframe(df, use_container_width=True)
+                df = pd.DataFrame(rows).sort_values("Strike")
 
+                # 🔥 LOAD MORE
+                if "limit" not in st.session_state:
+                    st.session_state.limit = 10
+
+                colA, colB = st.columns([1,1])
+                with colA:
+                    if st.button("➕ Load More"):
+                        st.session_state.limit += 10
+
+                st.dataframe(df.head(st.session_state.limit), use_container_width=True)
+
+            else:
+                st.warning("No option chain")
+
+        except Exception as e:
+            st.error(f"Option Error: {e}")
+
+# ============================================================
+# 📈 STOCK DASHBOARD
+# ============================================================
+with tab2:
+
+    col1, col2 = st.columns([2,5])
+
+    with col1:
+        st.markdown("### Watchlist")
+        st.write(["RELIANCE", "TCS", "SBIN"])
+
+    with col2:
+        st.markdown("### 📈 Chart")
+
+        hist = data.get("historical", [])
+
+        if hist:
+            df = pd.DataFrame(hist)
+
+            fig = go.Figure(data=[go.Candlestick(
+                x=df["time"],
+                open=df["open"],
+                high=df["high"],
+                low=df["low"],
+                close=df["close"]
+            )])
+
+            st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No option chain data")
+            st.info("No chart data")
 
-    except Exception as e:
-        st.error(f"Option Chain Error: {e}")
+# ============================================================
+# 🧠 WAR ROOM (ADVANCED)
+# ============================================================
+with tab3:
 
-# =========================
-# 📈 HISTORICAL CHART
-# =========================
-st.markdown("## 📈 Price Chart")
+    st.markdown("## 🧠 War Room (Custom Layout)")
 
-hist = data.get("historical", [])
+    # 🔥 DYNAMIC GRID CONTROL
+    cols = st.slider("Select Columns", 1, 4, 2)
 
-if hist:
-    try:
-        df = pd.DataFrame(hist)
+    grid = st.columns(cols)
 
-        fig = go.Figure(data=[go.Candlestick(
-            x=df["time"],
-            open=df["open"],
-            high=df["high"],
-            low=df["low"],
-            close=df["close"]
-        )])
+    # 🔥 PANELS (CUSTOM ADD)
+    panel_options = [
+        "NIFTY Chart",
+        "BANKNIFTY Chart",
+        "OI Analysis",
+        "FII DII",
+        "Market Depth",
+        "AI Signals"
+    ]
 
-        st.plotly_chart(fig, use_container_width=True)
+    selected = st.multiselect("Select Panels", panel_options, default=panel_options[:cols])
 
-    except Exception as e:
-        st.error(f"Chart Error: {e}")
-else:
-    st.warning("No historical data")
+    for i, panel in enumerate(selected):
+        with grid[i % cols]:
 
-# =========================
-# 📦 EXPIRED OPTIONS
-# =========================
-st.markdown("## 📦 Expired Options")
+            if panel == "NIFTY Chart":
+                st.subheader("NIFTY")
+                st.metric("Value", spot)
 
-expired = data.get("expired", [])
+            elif panel == "BANKNIFTY Chart":
+                st.subheader("BANKNIFTY")
+                st.metric("Value", "48,200")
 
-if expired:
-    st.json(expired)
-else:
-    st.warning("No expired options data")
+            elif panel == "OI Analysis":
+                st.subheader("OI")
+                st.info("OI Data")
 
-# =========================
-# 📊 MARKET DEPTH
-# =========================
-st.markdown("## 📊 Market Depth")
+            elif panel == "FII DII":
+                st.subheader("FII/DII")
+                st.metric("FII", "+1200 Cr")
+                st.metric("DII", "-500 Cr")
 
-depth = get_depth()
+            elif panel == "Market Depth":
+                depth = get_depth()
+                st.dataframe(depth.get("bids", []))
 
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("Bids")
-    st.dataframe(depth.get("bids", []), use_container_width=True)
-
-with col2:
-    st.subheader("Asks")
-    st.dataframe(depth.get("asks", []), use_container_width=True)
+            elif panel == "AI Signals":
+                st.success("BUY CALL")
+                st.warning("Avoid PE")
 
 # =========================
-# 🔍 DEBUG PANEL
+# 🔍 DEBUG
 # =========================
-with st.expander("🔍 Debug Info"):
+with st.expander("Debug"):
     st.json(data)
