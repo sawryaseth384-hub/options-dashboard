@@ -16,19 +16,26 @@ def get_headers():
 
 
 # =========================
-# 🔥 SEGMENT FIX
+# 🔄 SEGMENT → EXCHANGE MAP
 # =========================
 def map_exchange(segment):
-    if segment in ["IDX_I", "I"]:
-        return "NSE_EQ"   # index bhi yahi
-    elif segment == "D":
-        return "NSE_FNO"
-    else:
+    # Index (NIFTY / BANKNIFTY)
+    if segment == "IDX_I":
         return "NSE_EQ"
+    # Stocks / FNO
+    return "NSE_FNO"
 
 
 # =========================
-# 📊 LTP API
+# 🧪 DEBUG TOGGLE
+# =========================
+def debug_log(label, data):
+    if st.sidebar.checkbox("Show Debug Data"):
+        st.write(f"{label}:", data)
+
+
+# =========================
+# 💰 LTP (Last Price)
 # =========================
 def get_ltp(security_id, segment):
 
@@ -45,13 +52,14 @@ def get_ltp(security_id, segment):
         res = requests.post(
             f"{BASE_URL}/marketfeed/ltp",
             headers=get_headers(),
-            json=payload
+            json=payload,
+            timeout=10
         )
 
         data = res.json()
-        st.write("LTP RAW:", data)
+        debug_log("LTP RAW", data)
 
-        return data["data"][exchange][str(security_id)]["last_price"]
+        return data.get("data", {}).get(exchange, {}).get(str(security_id), {}).get("last_price", 0)
 
     except Exception as e:
         st.error(f"LTP Error: {e}")
@@ -59,7 +67,7 @@ def get_ltp(security_id, segment):
 
 
 # =========================
-# 📊 OHLC API
+# 📊 OHLC DATA
 # =========================
 def get_ohlc(security_id, segment):
 
@@ -76,21 +84,22 @@ def get_ohlc(security_id, segment):
         res = requests.post(
             f"{BASE_URL}/marketfeed/ohlc",
             headers=get_headers(),
-            json=payload
+            json=payload,
+            timeout=10
         )
 
         data = res.json()
-        st.write("OHLC RAW:", data)
+        debug_log("OHLC RAW", data)
 
-        return data["data"][exchange][str(security_id)]
+        return data.get("data", {}).get(exchange, {}).get(str(security_id), {})
 
     except Exception as e:
         st.error(f"OHLC Error: {e}")
-        return None
+        return {}
 
 
 # =========================
-# 📊 FULL QUOTE (DEPTH)
+# 📊 FULL QUOTE (Market Depth)
 # =========================
 def get_quote(security_id, segment):
 
@@ -107,14 +116,15 @@ def get_quote(security_id, segment):
         res = requests.post(
             f"{BASE_URL}/marketfeed/quote",
             headers=get_headers(),
-            json=payload
+            json=payload,
+            timeout=10
         )
 
         data = res.json()
-        st.write("QUOTE RAW:", data)
+        debug_log("QUOTE RAW", data)
 
-        return data["data"][exchange][str(security_id)]
+        return data.get("data", {}).get(exchange, {}).get(str(security_id), {})
 
     except Exception as e:
         st.error(f"Quote Error: {e}")
-        return None
+        return {}
