@@ -6,6 +6,9 @@ import plotly.graph_objects as go
 # 🔌 LIVE FEED
 from dhan_data.live_market_feed import start_live_feed, subscribe_instrument, get_live_ltp
 
+# 🔌 DEPTH FEED
+from dhan_data.depth_feed import start_depth_feed, subscribe_depth, get_depth
+
 # =========================
 # 🔥 PAGE CONFIG
 # =========================
@@ -33,10 +36,11 @@ if "error" in data:
     st.stop()
 
 # =========================
-# 🔌 START WEBSOCKET (ONCE)
+# 🔌 START WS (ONLY ONCE)
 # =========================
 if "ws_started" not in st.session_state:
     start_live_feed()
+    start_depth_feed()
     st.session_state.ws_started = True
 
 # =========================
@@ -44,6 +48,7 @@ if "ws_started" not in st.session_state:
 # =========================
 if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_symbol != symbol:
     subscribe_instrument(data["security_id"], data["segment"])
+    subscribe_depth(data["security_id"], data["segment"])
     st.session_state.subscribed_symbol = symbol
 
 # =========================
@@ -142,6 +147,23 @@ if expired:
     st.json(expired)
 else:
     st.warning("No expired options data")
+
+# =========================
+# 📊 MARKET DEPTH (NEW)
+# =========================
+st.markdown("## 📊 Market Depth")
+
+depth = get_depth()
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Bids")
+    st.dataframe(depth.get("bids", []), use_container_width=True)
+
+with col2:
+    st.subheader("Asks")
+    st.dataframe(depth.get("asks", []), use_container_width=True)
 
 # =========================
 # 🔍 DEBUG PANEL
