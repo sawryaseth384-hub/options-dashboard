@@ -22,15 +22,26 @@ latest_data = {
 }
 
 ws_app = None
+is_connected = False
+subscribed = set()
 
+# =========================
+# 🔄 SEGMENT MAP (IMPORTANT)
+# =========================
+def map_ws_segment(segment):
+    if segment == "IDX_I":
+        return 1   # NSE_EQ
+    elif segment == "NSE_FNO":
+        return 2   # NSE_FNO
+    return 1
 
 # =========================
 # 🔥 PARSE TICKER (Code 2)
 # =========================
 def parse_ticker(msg):
     try:
-        ltp = struct.unpack('f', msg[8:12])[0]
-        ltt = struct.unpack('i', msg[12:16])[0]
+        ltp = struct.unpack('<f', msg[8:12])[0]
+        ltt = struct.unpack('<i', msg[12:16])[0]
 
         latest_data["ltp"] = round(ltp, 2)
         latest_data["ltt"] = ltt
@@ -38,21 +49,19 @@ def parse_ticker(msg):
     except Exception as e:
         print("Ticker Parse Error:", e)
 
-
 # =========================
 # 🔥 PARSE QUOTE (Code 4)
 # =========================
 def parse_quote(msg):
     try:
-        ltp = struct.unpack('f', msg[8:12])[0]
-        volume = struct.unpack('i', msg[22:26])[0]
+        ltp = struct.unpack('<f', msg[8:12])[0]
+        volume = struct.unpack('<i', msg[22:26])[0]
 
         latest_data["ltp"] = round(ltp, 2)
         latest_data["volume"] = volume
 
     except Exception as e:
         print("Quote Parse Error:", e)
-
 
 # =========================
 # 📡 ON MESSAGE
@@ -71,27 +80,27 @@ def on_message(ws, message):
     except Exception as e:
         print("Message Error:", e)
 
-
 # =========================
 # ❌ ERROR
 # =========================
 def on_error(ws, error):
     print("WS ERROR:", error)
 
-
 # =========================
 # 🔌 CLOSE
 # =========================
 def on_close(ws, close_status_code, close_msg):
+    global is_connected
+    is_connected = False
     print("WS CLOSED")
-
 
 # =========================
 # ✅ OPEN
 # =========================
 def on_open(ws):
+    global is_connected
+    is_connected = True
     print("✅ LIVE CONNECTED")
-
 
 # =========================
 # 🚀 START WEBSOCKET
@@ -114,22 +123,28 @@ def start_live_feed():
     thread.daemon = True
     thread.start()
 
-
 # =========================
-# 📡 SUBSCRIBE
+# 📡 SUBSCRIBE (FIXED)
 # =========================
 def subscribe_instrument(security_id, segment):
-    global ws_app
+    global ws_app, is_connected, subscribed
 
-    if ws_app is None:
+    if ws_app is None or not is_connected:
+        print("WS not ready")
         return
+
+    key = f"{security_id}_{segment}"
+    if key in subscribed:
+        return
+
+    subscribed.add(key)
 
     payload = {
         "RequestCode": 15,
         "InstrumentCount": 1,
         "InstrumentList": [
             {
-                "ExchangeSegment": segment,
+                "ExchangeSegment": map_ws_segment(segment),
                 "SecurityId": str(security_id)
             }
         ]
@@ -139,7 +154,6 @@ def subscribe_instrument(security_id, segment):
         ws_app.send(json.dumps(payload))
     except Exception as e:
         print("Subscribe Error:", e)
-
 
 # =========================
 # 💰 GET LIVE LTP
