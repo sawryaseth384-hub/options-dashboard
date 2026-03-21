@@ -16,7 +16,7 @@ from dhan_data.depth_feed import (
 )
 
 # =========================
-# 🎨 GLOBAL STYLE (🔥 PRO UI)
+# 🎨 GLOBAL STYLE
 # =========================
 st.set_page_config(page_title="🔥 AI Trading System", layout="wide")
 
@@ -31,11 +31,26 @@ body {background-color:#0b0f1a;}
     padding:15px;
     border-radius:12px;
     border:1px solid #1f2937;
-    box-shadow:0 0 10px rgba(0,0,0,0.4);
 }
 
-.metric-green {color:#22c55e;}
-.metric-red {color:#ef4444;}
+.ticker {
+    display:flex;
+    gap:15px;
+    overflow-x:auto;
+    padding:10px;
+    background:#020617;
+    border-radius:10px;
+    border:1px solid #1e293b;
+}
+.ticker-item {
+    min-width:120px;
+    padding:8px;
+    background:#0f172a;
+    border-radius:8px;
+    text-align:center;
+}
+.green {color:#22c55e;}
+.red {color:#ef4444;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,35 +71,20 @@ with col3:
     st.metric("📊 P&L", "+₹2,500")
     st.markdown('</div>', unsafe_allow_html=True)
 
-st.divider()
-
 # =========================
-# 🌍 MARKET STRIP (🔥 UPGRADE)
+# 📡 TOP TICKER STRIP
 # =========================
-def market_card(title, value, change):
-    color = "#22c55e" if "+" in change else "#ef4444"
-
-    st.markdown(f"""
-    <div class="card">
-        <h4 style="color:#9ca3af;">{title}</h4>
-        <h2>{value}</h2>
-        <span style="color:{color};font-weight:bold;">{change}</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    market_card("🇮🇳 NIFTY", "22,450", "+120")
-    market_card("BANKNIFTY", "48,200", "+300")
-
-with col2:
-    market_card("🌎 DOW", "38,500", "+200")
-    market_card("NASDAQ", "16,200", "+100")
-
-with col3:
-    market_card("🛢️ GOLD", "62,000", "+500")
-    market_card("CRUDE", "6,500", "-100")
+st.markdown("""
+<div class="ticker">
+    <div class="ticker-item"><b>NIFTY</b><br>22,450 <span class="green">+120</span></div>
+    <div class="ticker-item"><b>BANKNIFTY</b><br>48,200 <span class="green">+300</span></div>
+    <div class="ticker-item"><b>SENSEX</b><br>74,500 <span class="green">+250</span></div>
+    <div class="ticker-item"><b>DOW</b><br>38,500 <span class="green">+200</span></div>
+    <div class="ticker-item"><b>NASDAQ</b><br>16,200 <span class="green">+100</span></div>
+    <div class="ticker-item"><b>GOLD</b><br>62,000 <span class="green">+500</span></div>
+    <div class="ticker-item"><b>CRUDE</b><br>6,500 <span class="red">-100</span></div>
+</div>
+""", unsafe_allow_html=True)
 
 st.divider()
 
@@ -137,13 +137,10 @@ spot = live_price if live_price != 0 else data.get("ltp", 0)
 # =========================
 tab1, tab2, tab3 = st.tabs(["📊 Option", "📈 Stock", "🧠 War Room"])
 
-# ============================================================
-# 📊 OPTION DASHBOARD
-# ============================================================
+# ================= OPTION =================
 with tab1:
 
     col1, col2, col3 = st.columns(3)
-
     col1.metric("Symbol", data.get("symbol"))
     col2.metric("Spot", spot)
     col3.metric("Segment", data.get("segment"))
@@ -192,9 +189,7 @@ with tab1:
         except Exception as e:
             st.error(f"Option Error: {e}")
 
-# ============================================================
-# 📈 STOCK DASHBOARD
-# ============================================================
+# ================= STOCK =================
 with tab2:
 
     col1, col2 = st.columns([2,5])
@@ -220,14 +215,12 @@ with tab2:
             )])
 
             fig.update_layout(template="plotly_dark")
-
             st.plotly_chart(fig, use_container_width=True)
+
         else:
             st.info("No chart data")
 
-# ============================================================
-# 🧠 WAR ROOM (🔥 POWER MODE)
-# ============================================================
+# ================= WAR ROOM =================
 with tab3:
 
     st.markdown("## 🧠 War Room")
@@ -235,14 +228,7 @@ with tab3:
     cols = st.slider("Columns", 1, 4, 2)
     grid = st.columns(cols)
 
-    panels = [
-        "NIFTY",
-        "BANKNIFTY",
-        "OI",
-        "FII/DII",
-        "Depth",
-        "AI"
-    ]
+    panels = ["NIFTY","BANKNIFTY","OI","FII/DII","Depth","AI"]
 
     selected = st.multiselect("Panels", panels, default=panels[:cols])
 
@@ -274,8 +260,6 @@ with tab3:
 
             st.markdown('</div>', unsafe_allow_html=True)
 
-# =========================
-# 🔍 DEBUG
-# =========================
+# ================= DEBUG =================
 with st.expander("Debug"):
     st.json(data)
