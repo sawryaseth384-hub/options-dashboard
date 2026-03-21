@@ -1,9 +1,9 @@
 import requests
 import pandas as pd
 import streamlit as st
+from datetime import datetime, timedelta
 
 BASE_URL = "https://api.dhan.co/v2"
-
 
 # =========================
 # 🔐 HEADERS
@@ -15,56 +15,72 @@ def get_headers():
         "Content-Type": "application/json"
     }
 
+# =========================
+# 📊 GET EXPIRED OPTIONS
+# =========================
+def get_expired_options(security_id, segment, option_type="CALL"):
 
-# =========================
-# 📊 GET EXPIRED OPTION DATA
-# =========================
-def get_expired_options(security_id=13, option_type="CALL"):
     try:
         url = f"{BASE_URL}/charts/rollingoption"
+
+        # 📅 Last 5 days dynamic
+        to_date = datetime.now()
+        from_date = to_date - timedelta(days=5)
 
         payload = {
             "exchangeSegment": "NSE_FNO",
             "interval": "1",
-            "securityId": security_id,
-            "instrument": "OPTIDX",
+            "securityId": int(security_id),
+            "instrument": "OPTIDX" if segment == "IDX_I" else "OPTSTK",
             "expiryFlag": "WEEK",
             "expiryCode": 0,
             "strike": "ATM",
-            "drvOptionType": option_type,
+            "drvOptionType": option_type,  # CALL / PUT
             "requiredData": [
                 "open", "high", "low", "close",
                 "volume", "oi", "iv", "spot"
             ],
-            "fromDate": "2024-01-01",
-            "toDate": "2024-01-05"
+            "fromDate": from_date.strftime("%Y-%m-%d"),
+            "toDate": to_date.strftime("%Y-%m-%d")
         }
 
-        res = requests.post(url, headers=get_headers(), json=payload)
-        data = res.json()
+        res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
+        raw = res.json()
 
-        if "data" not in data:
-            st.error("❌ No data")
+        # 🔍 DEBUG (optional)
+        if st.sidebar.checkbox("Show Expired Debug"):
+            st.write("EXPIRED RAW:", raw)
+
+        # ❌ No data
+        if not raw or "data" not in raw:
             return None
 
-        ce = data["data"].get("ce")
+        # ✅ CALL / PUT select
+        key = "ce" if option_type == "CALL" else "pe"
+        data = raw["data"].get(key)
 
-        if not ce:
+        if not data:
             return None
 
+        # 📊 DataFrame
         df = pd.DataFrame({
-            "time": pd.to_datetime(ce["timestamp"], unit="s"),
-            "open": ce.get("open", []),
-            "high": ce.get("high", []),
-            "low": ce.get("low", []),
-            "close": ce.get("close", []),
-            "volume": ce.get("volume", []),
-            "oi": ce.get("oi", []),
-            "iv": ce.get("iv", []),
-            "spot": ce.get("spot", []),
-            "strike": ce.get("strike", [])
+            "time": pd.to_datetime(data.get("timestamp", []), unit="s"),
+            "open": data.get("open", []),
+            "high": data.get("high", []),
+            "low": data.get("low", []),
+            "close": data.get("close", []),
+            "volume": data.get("volume", []),
+            "oi": data.get("oi", []),
+            "iv": data.get("iv", []),
+            "spot": data.get("spot", []),
+            "strike": data.get("strike", [])
         })
 
+        # ❌ Empty check
+        if df.empty:
+            return None
+
+        # साफ data
         df = df.dropna()
 
         return df
