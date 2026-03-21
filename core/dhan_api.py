@@ -9,6 +9,7 @@ from dhan_data.market_quote import get_ltp
 from dhan_data.historical_data import get_historical
 from dhan_data.expired_options import get_expired_options
 from dhan_data.instruments import get_symbol_data
+from dhan_data.instruments import get_symbol_data
 
 # =========================
 # 🔐 HEADERS
