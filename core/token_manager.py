@@ -6,10 +6,14 @@ import pyotp
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
-# Read secrets – keys must be exactly these names
-CLIENT_ID = st.secrets["CLIENT_ID"]
-PIN = st.secrets["DHAN_PIN"]
-TOTP_SECRET = st.secrets["TOTP_SECRET"]
+# Check if secrets exist
+try:
+    CLIENT_ID = st.secrets["1106299230"]
+    PIN = st.secrets["009988"]
+    TOTP_SECRET = st.secrets["DJUQ7WLHTV2ZVFHOTOORRT3VGHQJCMLV"]
+except KeyError as e:
+    st.error(f"Missing secret: {e}. Please add it to .streamlit/secrets.toml or Cloud secrets.")
+    st.stop()
 
 def get_headers():
     token = get_token()
