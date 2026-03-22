@@ -16,48 +16,12 @@ from dhan_data.depth_feed import (
 )
 
 from dhan_data.market_quote import get_ltp
+from dhan_data.option_chain import get_option_chain  # 🔥 NEW
 
 # =========================
 # CONFIG
 # =========================
 st.set_page_config(page_title="🔥 AI Trading System", layout="wide")
-
-# =========================
-# STYLE
-# =========================
-st.markdown("""
-<style>
-body {background-color:#0b0f1a;}
-
-.card {
-    background:#111827;
-    padding:12px;
-    border-radius:10px;
-    border:1px solid #1f2937;
-}
-
-.ticker {
-    display:flex;
-    gap:10px;
-    overflow-x:auto;
-    padding:8px;
-    background:#020617;
-    border-radius:8px;
-}
-
-.ticker-item {
-    min-width:100px;
-    padding:6px;
-    background:#0f172a;
-    border-radius:6px;
-    text-align:center;
-    font-size:12px;
-}
-
-.green {color:#22c55e;}
-.red {color:#ef4444;}
-</style>
-""", unsafe_allow_html=True)
 
 # =========================
 # HEADER
@@ -74,18 +38,6 @@ with col3:
     st.metric("💰 Balance", "₹1,00,000")
     st.metric("📊 P&L", "+₹2,500")
 
-# =========================
-# TICKER
-# =========================
-st.markdown("""
-<div class="ticker">
-    <div class="ticker-item"><b>NIFTY</b><br>22450 <span class="green">+120</span></div>
-    <div class="ticker-item"><b>BANKNIFTY</b><br>48200 <span class="green">+300</span></div>
-    <div class="ticker-item"><b>SENSEX</b><br>74500 <span class="green">+250</span></div>
-    <div class="ticker-item"><b>DOW</b><br>38500 <span class="green">+200</span></div>
-</div>
-""", unsafe_allow_html=True)
-
 st.divider()
 
 if not symbol:
@@ -94,40 +46,41 @@ if not symbol:
 # =========================
 # FETCH DATA
 # =========================
-try:
-    data = dhan_api.get_full_data(symbol)
-except Exception as e:
-    st.error(f"❌ API Error: {e}")
-    st.stop()
+data = dhan_api.get_full_data(symbol)
 
 if not data or "error" in data:
-    st.error(data.get("error", "Invalid Symbol"))
+    st.error("Invalid Symbol")
     st.stop()
 
 # =========================
 # WS START
 # =========================
 if "ws_started" not in st.session_state:
-    try:
-        start_live_feed()
-        start_depth_feed()
-        st.session_state.ws_started = True
-    except:
-        pass
+    start_live_feed()
+    start_depth_feed()
+    st.session_state.ws_started = True
+
+# =========================
+# 🔥 SEGMENT FIX
+# =========================
+segment = data["segment"]
+
+if "IDX" in segment:
+    segment = "NSE_FNO"
 
 # =========================
 # SUBSCRIBE
 # =========================
 if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_symbol != symbol:
     try:
-        subscribe_instrument(data["security_id"], data["segment"])
-        subscribe_depth(data["security_id"], data["segment"])
+        subscribe_instrument(data["security_id"], segment)
+        subscribe_depth(data["security_id"], segment)
         st.session_state.subscribed_symbol = symbol
-    except:
-        pass
+    except Exception as e:
+        st.error(f"Subscribe Error: {e}")
 
 # =========================
-# LIVE PRICE FIX
+# 🔥 LIVE PRICE FIX
 # =========================
 live_price = get_live_ltp()
 
@@ -151,172 +104,85 @@ with tab1:
     col2.metric("Spot", spot)
     col3.metric("Segment", data.get("segment"))
 
+    st.write("Expiries:", data.get("expiries"))  # 🔥 DEBUG
+
     expiry = None
     if data.get("expiries"):
         expiry = st.selectbox("Expiry", data["expiries"])
 
-    st.markdown("### 📊 Option Chain")
-
     if expiry:
-        try:
-            option_data = dhan_api.fetch_option_chain(
-                data["security_id"],
-                data["segment"],
-                expiry
-            )
 
-            if not option_data or "data" not in option_data:
-                st.error("No option data")
-                st.stop()
+        option_data = get_option_chain(   # 🔥 FIXED
+            data["security_id"],
+            data["segment"],
+            expiry
+        )
 
-            oc = option_data["data"].get("oc", {})
+        if not option_data or "data" not in option_data:
+            st.error("No option data")
+            st.stop()
 
-            if not oc:
-                st.warning("Option Chain Empty")
-                st.stop()
+        oc = option_data["data"].get("oc", {})
 
-            rows = []
+        if not oc:
+            st.warning("Option Chain Empty")
+            st.stop()
 
-            for strike, val in oc.items():
-                try:
-                    strike = float(strike)
+        rows = []
 
-                    ce = val.get("ce", {})
-                    pe = val.get("pe", {})
+        for strike, val in oc.items():
+            try:
+                strike = float(strike)
 
-                    rows.append({
-                        "Strike": strike,
-                        "Call OI": ce.get("oi", 0),
-                        "Call LTP": ce.get("last_price", 0),
-                        "Call Delta": ce.get("greeks", {}).get("delta", 0),
-                        "Call IV": ce.get("implied_volatility", 0),
+                ce = val.get("ce", {})
+                pe = val.get("pe", {})
 
-                        "Put OI": pe.get("oi", 0),
-                        "Put LTP": pe.get("last_price", 0),
-                        "Put Delta": pe.get("greeks", {}).get("delta", 0),
-                        "Put IV": pe.get("implied_volatility", 0),
-                    })
+                rows.append({
+                    "Strike": strike,
+                    "Call OI": ce.get("oi", 0),
+                    "Call LTP": ce.get("last_price", 0),
+                    "Put OI": pe.get("oi", 0),
+                    "Put LTP": pe.get("last_price", 0),
+                })
+            except:
+                continue
 
-                except:
-                    continue
+        df = pd.DataFrame(rows).sort_values("Strike")
 
-            df = pd.DataFrame(rows).sort_values("Strike")
+        st.dataframe(df, use_container_width=True)
 
-            # 🔥 ATM Highlight
-            atm = min(df["Strike"], key=lambda x: abs(x - spot))
-
-            def highlight(row):
-                if row["Strike"] == atm:
-                    return ["background-color: #1e293b"] * len(row)
-                return [""] * len(row)
-
-            st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
-
-            # 🔥 AI SIGNAL
-            st.markdown("## 🤖 AI Signal")
-
-            call_oi = df["Call OI"].sum()
-            put_oi = df["Put OI"].sum()
-
-            if put_oi > call_oi:
-                st.success("📈 BUY CALL")
-            elif call_oi > put_oi:
-                st.error("📉 BUY PUT")
-            else:
-                st.warning("⚖️ WAIT")
-
-        except Exception as e:
-            st.error(f"Option Error: {e}")
-
-    # 🔥 MARKET DEPTH
-    st.markdown("### 📊 Market Depth")
+    # ================= DEPTH =================
+    st.markdown("### Market Depth")
 
     depth = get_depth()
 
-    colA, colB = st.columns(2)
-
-    with colA:
-        st.subheader("Bids")
-        st.dataframe(depth.get("bids", []))
-
-    with colB:
-        st.subheader("Asks")
-        st.dataframe(depth.get("asks", []))
+    st.write("Bids:", depth.get("bids", []))
+    st.write("Asks:", depth.get("asks", []))
 
 
 # ============================================================
-# STOCK DASHBOARD
+# STOCK
 # ============================================================
 with tab2:
 
-    col1, col2 = st.columns([2,5])
+    hist = data.get("historical", [])
 
-    with col1:
-        st.markdown("### 📋 Watchlist")
-        st.write(["RELIANCE", "TCS", "SBIN"])
+    if hist:
+        df_chart = pd.DataFrame(hist)
 
-    with col2:
-        st.markdown("### 📈 Chart")
+        fig = go.Figure(data=[go.Candlestick(
+            x=df_chart["time"],
+            open=df_chart["open"],
+            high=df_chart["high"],
+            low=df_chart["low"],
+            close=df_chart["close"]
+        )])
 
-        hist = data.get("historical", [])
-
-        if hist:
-            df_chart = pd.DataFrame(hist)
-
-            fig = go.Figure(data=[go.Candlestick(
-                x=df_chart["time"],
-                open=df_chart["open"],
-                high=df_chart["high"],
-                low=df_chart["low"],
-                close=df_chart["close"]
-            )])
-
-            fig.update_layout(template="plotly_dark")
-            st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
 
 # ============================================================
 # WAR ROOM
 # ============================================================
 with tab3:
-
-    st.markdown("## 🧠 War Room")
-
-    cols = st.slider("Columns", 1, 4, 2)
-    grid = st.columns(cols)
-
-    panels = ["NIFTY","BANKNIFTY","OI","FII/DII","Depth","AI"]
-
-    selected = st.multiselect("Panels", panels, default=panels[:cols])
-
-    for i, p in enumerate(selected):
-        with grid[i % cols]:
-
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-
-            if p == "NIFTY":
-                st.metric("NIFTY", spot)
-
-            elif p == "BANKNIFTY":
-                st.metric("BANKNIFTY", "48,200")
-
-            elif p == "OI":
-                st.info("OI Analysis")
-
-            elif p == "FII/DII":
-                st.metric("FII", "+1200Cr")
-                st.metric("DII", "-500Cr")
-
-            elif p == "Depth":
-                depth = get_depth()
-                st.dataframe(depth.get("bids", []))
-
-            elif p == "AI":
-                st.success("BUY CALL")
-                st.warning("Avoid PE")
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-# ================= DEBUG =================
-with st.expander("Debug"):
-    st.json(data)
+    st.write("War Room Active")
