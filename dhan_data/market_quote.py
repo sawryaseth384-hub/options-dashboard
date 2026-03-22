@@ -1,14 +1,8 @@
 import requests
 import streamlit as st
+from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
-
-def get_headers():
-    return {
-        "access-token": st.secrets["ACCESS_TOKEN"],
-        "client-id": st.secrets["CLIENT_ID"],
-        "Content-Type": "application/json"
-    }
 
 def map_exchange(segment):
     if segment == "IDX_I":
@@ -19,7 +13,6 @@ def get_ltp(security_id, segment):
     exchange = map_exchange(segment)
     payload = {"NSE_EQ": [], "NSE_FNO": []}
     payload[exchange].append(int(security_id))
-
     try:
         res = requests.post(
             f"{BASE_URL}/marketfeed/ltp",
