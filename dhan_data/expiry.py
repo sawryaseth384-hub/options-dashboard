@@ -12,6 +12,14 @@ def get_headers():
         "Content-Type": "application/json"
     }
 
+def map_api_segment(segment):
+    if segment in ["I", "IDX_I"]:
+        return "IDX_I"
+    elif segment in ["D", "NSE_FNO"]:
+        return "NSE_FNO"
+    else:
+        return "NSE_EQ"
+
 def get_expiry(security_id, segment):
     global _last_call_time
     now = time.time()
@@ -21,16 +29,17 @@ def get_expiry(security_id, segment):
     _last_call_time = time.time()
 
     url = f"{BASE_URL}/optionchain/expirylist"
+    api_segment = map_api_segment(segment)
     payload = {
         "UnderlyingScrip": int(security_id),
-        "UnderlyingSeg": segment
+        "UnderlyingSeg": api_segment
     }
 
     try:
         res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
         data = res.json()
 
-        # DEBUG: show full response in Streamlit
+        # Debug – show raw response
         st.write("### Expiry API Response")
         st.json(data)
 
