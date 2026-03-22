@@ -1,3 +1,5 @@
+# ================= OPTION TABLE BUILD =================
+
 rows = []
 
 for strike, options in oc.items():
@@ -11,7 +13,7 @@ for strike, options in oc.items():
         rows.append({
             "Strike": strike,
 
-            # CALL
+            # ================= CALL =================
             "Call OI": ce.get("oi", 0),
             "Call LTP": ce.get("last_price", 0),
             "Call Delta": ce.get("greeks", {}).get("delta", 0),
@@ -20,7 +22,7 @@ for strike, options in oc.items():
             "Call Vega": ce.get("greeks", {}).get("vega", 0),
             "Call IV": ce.get("implied_volatility", 0),
 
-            # PUT
+            # ================= PUT =================
             "Put OI": pe.get("oi", 0),
             "Put LTP": pe.get("last_price", 0),
             "Put Delta": pe.get("greeks", {}).get("delta", 0),
@@ -30,5 +32,24 @@ for strike, options in oc.items():
             "Put IV": pe.get("implied_volatility", 0),
         })
 
-    except:
+    except Exception as e:
         continue
+
+# ================= DATAFRAME =================
+df = pd.DataFrame(rows)
+
+if df.empty:
+    st.warning("No option data parsed")
+    st.stop()
+
+df = df.sort_values("Strike")
+
+# ================= ATM HIGHLIGHT =================
+atm = min(df["Strike"], key=lambda x: abs(x - spot))
+
+def highlight(row):
+    if row["Strike"] == atm:
+        return ["background-color: #1e293b"] * len(row)
+    return [""] * len(row)
+
+st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
