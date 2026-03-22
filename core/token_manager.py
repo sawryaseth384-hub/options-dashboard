@@ -3,6 +3,7 @@ import time
 import streamlit as st
 from core.totp import get_totp
 
+# ✅ Correct keys
 CLIENT_ID = st.secrets["1106299230"]
 PIN = st.secrets["009988"]
 
