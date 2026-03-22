@@ -17,29 +17,27 @@ def load_instruments():
     if seg_col:
         df = df.rename(columns={seg_col: "SEGMENT"})
 
-    # Keep only NSE instruments
+    # Keep only NSE
     df = df[df["EXCH_ID"] == "NSE"]
     return df
 
 def get_stock_df():
     df = load_instruments()
-    # Stocks are in segment "D"
     stock_df = df[df["SEGMENT"] == "D"]
-    # Remove options and futures
     stock_df = stock_df[~stock_df["SEM_TRADING_SYMBOL"].str.contains("-", na=False)]
     stock_df = stock_df[~stock_df["SEM_TRADING_SYMBOL"].str.contains("FUT", na=False)]
     stock_df = stock_df[stock_df["SEM_TRADING_SYMBOL"].str.match(r'^[A-Z]+$', na=False)]
     return stock_df[["SEM_TRADING_SYMBOL", "SEM_SMST_SECURITY_ID", "SEGMENT"]].drop_duplicates(subset="SEM_TRADING_SYMBOL")
 
 def get_index_df():
-    # Try to get indices from CSV (they may have SEGMENT = "I" or "IDX_I")
     df = load_instruments()
+    # Indices may have SEGMENT = "I" or "IDX_I"
     index_df = df[df["SEGMENT"].isin(["I", "IDX_I"])]
     if not index_df.empty:
-        # Keep only major indices (optional)
+        # Keep only major indices
         index_df = index_df[index_df["SEM_TRADING_SYMBOL"].isin(["NIFTY", "BANKNIFTY", "FINNIFTY"])]
     else:
-        # Fallback to hardcoded IDs (from earlier Dhan data)
+        # Fallback hardcoded IDs (if not found in CSV)
         data = [
             {"SEM_TRADING_SYMBOL": "NIFTY",    "SEM_SMST_SECURITY_ID": 13, "SEGMENT": "IDX_I"},
             {"SEM_TRADING_SYMBOL": "BANKNIFTY","SEM_SMST_SECURITY_ID": 25, "SEGMENT": "IDX_I"},
