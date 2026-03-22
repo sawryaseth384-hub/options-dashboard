@@ -1,3 +1,4 @@
+# instruments.py
 import pandas as pd
 import streamlit as st
 
@@ -5,6 +6,23 @@ import streamlit as st
 def load_instruments():
     url = "https://images.dhan.co/api-data/api-scrip-master.csv"
     df = pd.read_csv(url)
+
+    # 🔍 Debug: log column names (visible in Streamlit logs)
+    print("Columns in master CSV:", df.columns.tolist())
+
+    # 🔧 Automatically detect the exchange column
+    if "EXCH_ID" not in df.columns:
+        # Look for column containing "EXCH" or "exchange" (case-insensitive)
+        exch_cols = [col for col in df.columns if "EXCH" in col.upper() or "EXCHANGE" in col.upper()]
+        if exch_cols:
+            exch_col = exch_cols[0]
+            print(f"Using '{exch_col}' as exchange column")
+            df = df.rename(columns={exch_col: "EXCH_ID"})
+        else:
+            # If still not found, raise a clear error
+            raise KeyError("No exchange column found in master CSV. Available columns: " + ", ".join(df.columns))
+
+    # Keep only NSE instruments
     df = df[df["EXCH_ID"] == "NSE"]
     return df
 
