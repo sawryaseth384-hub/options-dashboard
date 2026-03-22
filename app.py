@@ -1,24 +1,18 @@
 import streamlit as st
-from core import dhan_api
 import pandas as pd
 import plotly.graph_objects as go
-
-from dhan_data.live_market_feed import (
-    start_live_feed,
-    subscribe_instrument,
-    get_live_ltp
-)
-from dhan_data.depth_feed import (
-    start_depth_feed,
-    subscribe_depth,
-    get_depth
-)
-from dhan_data.market_quote import get_ltp
+import requests
+from core.token_manager import get_headers
+from dhan_data.instruments import get_symbol_data
 from dhan_data.option_chain import get_option_chain
+from dhan_data.live_market_feed import start_live_feed, subscribe_instrument, get_live_ltp
+from dhan_data.depth_feed import start_depth_feed, subscribe_depth, get_depth
+from dhan_data.market_quote import get_ltp
 
-st.set_page_config(page_title="🔥 AI Trading System", layout="wide")
+st.set_page_config(page_title="🔥 AI Option Trading System", layout="wide")
 
-col1, col2, col3 = st.columns([2,4,2])
+# ---- Header ----
+col1, col2, col3 = st.columns([2, 4, 2])
 with col1:
     st.markdown("## 🔥 SHREE AI")
 with col2:
@@ -26,152 +20,145 @@ with col2:
 with col3:
     st.metric("💰 Balance", "₹1,00,000")
     st.metric("📊 P&L", "+₹2,500")
-
 st.divider()
 
 if not symbol:
     st.stop()
 
-# Fetch symbol data
-data = dhan_api.get_full_data(symbol)
-if not data or "error" in data:
+# ---- Get symbol data ----
+security_id, segment = get_symbol_data(symbol)
+if security_id is None:
     st.error("Invalid Symbol")
     st.stop()
 
-# ========== SEGMENT HANDLING ==========
-original_segment = data["segment"]               # e.g., "IDX_I" for NIFTY
-# For option chain, always use the original segment (IDX_I for indices, D for stocks)
-option_segment = original_segment                # No conversion needed – Dhan expects "IDX_I" for index options
-
-# For spot price, we may need to map to NSE_EQ (handled inside get_ltp)
-
-# For debugging, show what we have
-with st.expander("🔍 Debug Info", expanded=False):
-    st.write("Security ID:", data["security_id"])
-    st.write("Original Segment:", original_segment)
-    st.write("Option Segment (will be used):", option_segment)
-    st.write("Expiries:", data.get("expiries", []))
-    st.write("Historical Data Count:", len(data.get("historical", [])))
-
-# ========== WEBSOCKET CONNECTION ==========
+# ---- Start WebSockets (once) ----
 if "ws_started" not in st.session_state:
     start_live_feed()
     start_depth_feed()
     st.session_state.ws_started = True
 
-# Subscribe only once per symbol
+# Subscribe only once
 if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_symbol != symbol:
     try:
-        # Subscribe to spot price (use original segment)
-        subscribe_instrument(data["security_id"], original_segment)
-        # Subscribe to depth (use original segment; depth for index may not work, but we'll try)
-        subscribe_depth(data["security_id"], original_segment)
+        subscribe_instrument(security_id, segment)
+        subscribe_depth(security_id, segment)
         st.session_state.subscribed_symbol = symbol
     except Exception as e:
         st.error(f"Subscribe Error: {e}")
 
-# ========== GET SPOT PRICE ==========
+# ---- Spot Price ----
 live_price = get_live_ltp()
 if live_price == 0:
-    live_price = get_ltp(data["security_id"], original_segment)
-
+    live_price = get_ltp(security_id, segment)
 spot = live_price
 
-# ========== TABS ==========
+# ---- Fetch Expiry List (via API) ----
+url = "https://api.dhan.co/v2/optionchain/expirylist"
+payload = {"UnderlyingScrip": security_id, "UnderlyingSeg": "IDX_I"}
+resp = requests.post(url, headers=get_headers(), json=payload)
+expiries = []
+if resp.status_code == 200 and resp.json().get("status") == "success":
+    expiries = resp.json().get("data", [])
+
+if not expiries:
+    st.error("No expiry dates found. Check token or Data API subscription.")
+    st.stop()
+
+# ---- Tabs ----
 tab1, tab2, tab3 = st.tabs(["📊 Option", "📈 Stock", "🧠 War Room"])
 
 with tab1:
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Symbol", data.get("symbol"))
-    col2.metric("Spot", spot)
-    col3.metric("Segment (Option)", option_segment)
+    # ---- Expiry Selection ----
+    expiry = st.selectbox("Expiry", expiries)
 
-    # Get expiry list from data (already fetched)
-    expiry = None
-    if data.get("expiries"):
-        expiry = st.selectbox("Expiry", data["expiries"])
-    else:
-        st.warning("No expiry dates available for this symbol.")
+    # ---- Fetch Option Chain ----
+    option_data = get_option_chain(security_id, segment, expiry)
+    if not option_data or "data" not in option_data:
+        st.error("No option data received")
         st.stop()
 
-    if expiry:
-        # Fetch option chain using the correct segment (original segment, e.g., "IDX_I")
-        option_data = get_option_chain(data["security_id"], option_segment, expiry)
+    oc = option_data["data"].get("oc", {})
+    if not oc:
+        st.warning("Option chain empty")
+        with st.expander("Raw API Response"):
+            st.json(option_data)
+        st.stop()
 
-        # Check response
-        if not option_data:
-            st.error("No option data received from API")
-            st.stop()
+    # ---- Convert to DataFrame ----
+    rows = []
+    for strike_str, opts in oc.items():
+        try:
+            strike = float(strike_str)
+            ce = opts.get("ce", {})
+            pe = opts.get("pe", {})
+            rows.append({
+                "Strike": strike,
+                "Call OI": ce.get("oi", 0),
+                "Call LTP": ce.get("last_price", 0),
+                "Call IV": ce.get("implied_volatility", 0),
+                "Call Delta": ce.get("greeks", {}).get("delta", 0),
+                "Put OI": pe.get("oi", 0),
+                "Put LTP": pe.get("last_price", 0),
+                "Put IV": pe.get("implied_volatility", 0),
+                "Put Delta": pe.get("greeks", {}).get("delta", 0),
+            })
+        except Exception as e:
+            continue
 
-        if "data" not in option_data:
-            st.error("Unexpected response format (missing 'data')")
-            st.stop()
+    df = pd.DataFrame(rows).sort_values("Strike")
+    if df.empty:
+        st.warning("No option data parsed")
+        st.stop()
 
-        oc = option_data["data"].get("oc")
-        if not oc:
-            st.warning("Option chain is empty. Possible reasons: market closed, invalid expiry, or no data for this instrument.")
-            # Optionally show the raw response for debugging
-            with st.expander("Raw API Response"):
-                st.json(option_data)
-            st.stop()
+    # ---- Analytics ----
+    total_call_oi = df["Call OI"].sum()
+    total_put_oi = df["Put OI"].sum()
+    pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0
 
-        # Parse strikes
-        rows = []
-        for strike, options in oc.items():
-            try:
-                strike = float(strike)
-                ce = options.get("ce", {})
-                pe = options.get("pe", {})
-                rows.append({
-                    "Strike": strike,
-                    "Call OI": ce.get("oi", 0),
-                    "Call LTP": ce.get("last_price", 0),
-                    "Call Delta": ce.get("greeks", {}).get("delta", 0),
-                    "Call Theta": ce.get("greeks", {}).get("theta", 0),
-                    "Call Gamma": ce.get("greeks", {}).get("gamma", 0),
-                    "Call Vega": ce.get("greeks", {}).get("vega", 0),
-                    "Call IV": ce.get("implied_volatility", 0),
-                    "Put OI": pe.get("oi", 0),
-                    "Put LTP": pe.get("last_price", 0),
-                    "Put Delta": pe.get("greeks", {}).get("delta", 0),
-                    "Put Theta": pe.get("greeks", {}).get("theta", 0),
-                    "Put Gamma": pe.get("greeks", {}).get("gamma", 0),
-                    "Put Vega": pe.get("greeks", {}).get("vega", 0),
-                    "Put IV": pe.get("implied_volatility", 0),
-                })
-            except Exception as e:
-                st.warning(f"Error parsing strike {strike}: {e}")
-                continue
+    # ATM strike
+    atm_strike = df.iloc[(df["Strike"] - spot).abs().argsort()[:1]]["Strike"].values[0]
+    atm_row = df[df["Strike"] == atm_strike].iloc[0]
+    call_strength = atm_row["Call OI"] / total_call_oi * 100 if total_call_oi else 0
+    put_strength = atm_row["Put OI"] / total_put_oi * 100 if total_put_oi else 0
 
-        df = pd.DataFrame(rows)
-        if df.empty:
-            st.warning("No option data could be parsed.")
-            st.stop()
+    # AI Signal
+    if pcr > 1.2:
+        signal = "📉 BEARISH (High Put OI)"
+    elif pcr < 0.8:
+        signal = "📈 BULLISH (High Call OI)"
+    else:
+        signal = "⚖️ NEUTRAL with Call Bias" if call_strength > put_strength else "⚖️ NEUTRAL with Put Bias"
 
-        df = df.sort_values("Strike")
+    # ---- Display Metrics ----
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Spot Price", f"{spot:,.2f}")
+    col2.metric("Put‑Call Ratio (PCR)", f"{pcr:.2f}")
+    col3.metric("ATM Strike", f"{atm_strike:.0f}")
+    col4.metric("AI Signal", signal)
 
-        # Highlight ATM strike
-        atm = None
-        if spot > 0:
-            atm = min(df["Strike"], key=lambda x: abs(x - spot))
+    # ---- Top OI Strikes ----
+    st.subheader("📊 Top OI Strikes")
+    top_oi = df.nlargest(5, "Call OI")[["Strike", "Call OI", "Put OI"]]
+    st.dataframe(top_oi, use_container_width=True)
 
-        def highlight(row):
-            if atm and row["Strike"] == atm:
-                return ["background-color: #1e293b"] * len(row)
-            return [""] * len(row)
+    # ---- Full Option Chain ----
+    st.subheader("📋 Full Option Chain")
+    st.dataframe(df.style.format({
+        "Call OI": "{:,.0f}", "Put OI": "{:,.0f}",
+        "Call LTP": "{:.2f}", "Put LTP": "{:.2f}",
+        "Call IV": "{:.2f}%", "Put IV": "{:.2f}%",
+        "Call Delta": "{:.3f}", "Put Delta": "{:.3f}"
+    }), use_container_width=True)
 
-        st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
+    # ---- OI Distribution Chart ----
+    st.subheader("📈 OI Distribution (ATM ± 5 strikes)")
+    atm_index = df[df["Strike"] == atm_strike].index[0]
+    start = max(0, atm_index - 5)
+    end = min(len(df), atm_index + 6)
+    oi_subset = df.iloc[start:end][["Strike", "Call OI", "Put OI"]].set_index("Strike")
+    st.bar_chart(oi_subset)
 
-        st.markdown("## 🤖 AI Signal")
-        call_oi = df["Call OI"].sum()
-        put_oi = df["Put OI"].sum()
-        if put_oi > call_oi:
-            st.success("📈 BUY CALL (Bullish)")
-        elif call_oi > put_oi:
-            st.error("📉 BUY PUT (Bearish)")
-        else:
-            st.warning("⚖️ WAIT")
-
+    # ---- Market Depth ----
     st.markdown("### 📊 Market Depth")
     depth = get_depth()
     colA, colB = st.columns(2)
@@ -183,20 +170,10 @@ with tab1:
         st.dataframe(depth.get("asks", []))
 
 with tab2:
-    hist = data.get("historical", [])
-    if hist:
-        df_chart = pd.DataFrame(hist)
-        fig = go.Figure(data=[go.Candlestick(
-            x=df_chart["time"],
-            open=df_chart["open"],
-            high=df_chart["high"],
-            low=df_chart["low"],
-            close=df_chart["close"]
-        )])
-        fig.update_layout(template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No historical data available for this symbol.")
+    st.info("Stock chart coming soon")
+    # You can later integrate historical data here
 
 with tab3:
     st.write("War Room Active")
+
+st.caption("Data refreshes on page reload. Token auto‑refreshes every 24h.")
