@@ -1,31 +1,22 @@
-# dhan_data/historical_data.py
 import requests
 from datetime import datetime, timedelta
 import streamlit as st
 import time
+from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
 _last_hist_call = 0
 
-def get_headers():
-    return {
-        "access-token": st.secrets["ACCESS_TOKEN"],
-        "client-id": st.secrets["CLIENT_ID"],
-        "Content-Type": "application/json"
-    }
-
 def map_to_exchange(segment):
-    """Convert internal segment to exchangeSegment for intraday API."""
     if segment in ["IDX_I", "I"]:
-        return "NSE_EQ"      # indices are under NSE_EQ
+        return "NSE_EQ"
     elif segment == "D":
-        return "NSE_EQ"      # stocks are under NSE_EQ
+        return "NSE_EQ"
     else:
         return "NSE_FNO"
 
 def get_historical(security_id, segment):
     global _last_hist_call
-
     now = time.time()
     wait = max(0, 1 - (now - _last_hist_call))
     if wait > 0:
@@ -33,13 +24,10 @@ def get_historical(security_id, segment):
     _last_hist_call = time.time()
 
     url = f"{BASE_URL}/charts/intraday"
-
     to_date = datetime.now()
     from_date = to_date - timedelta(days=1)
-
     exchange = map_to_exchange(segment)
     instrument = "INDEX" if segment in ["IDX_I", "I"] else "EQUITY"
-
     payload = {
         "securityId": str(security_id),
         "exchangeSegment": exchange,
@@ -49,7 +37,6 @@ def get_historical(security_id, segment):
         "fromDate": from_date.strftime("%Y-%m-%d %H:%M:%S"),
         "toDate": to_date.strftime("%Y-%m-%d %H:%M:%S")
     }
-
     try:
         res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
         data = res.json()
