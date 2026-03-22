@@ -3,8 +3,9 @@ import json
 import threading
 import struct
 import streamlit as st
+from core.token_manager import get_token
 
-TOKEN = st.secrets["ACCESS_TOKEN"]
+TOKEN = get_token()
 CLIENT_ID = st.secrets["CLIENT_ID"]
 WS_URL = f"wss://api-feed.dhan.co?version=2&token={TOKEN}&clientId={CLIENT_ID}&authType=2"
 
@@ -13,12 +14,11 @@ ws_app = None
 is_connected = False
 subscribed = set()
 
-# 🔥 FIX: Map segment to integer
 def map_ws_segment(segment):
     if segment == "NSE_FNO":
         return 2
     else:
-        return 1   # NSE_EQ (including indices)
+        return 1
 
 def parse_ticker(msg):
     try:
@@ -82,25 +82,17 @@ def subscribe_instrument(security_id, segment):
     if ws_app is None or not is_connected:
         print("WS not ready")
         return
-
     key = f"{security_id}_{segment}"
     if key in subscribed:
         return
-
     subscribed.add(key)
-
-    # 🔥 Use integer segment
     payload = {
         "RequestCode": 15,
         "InstrumentCount": 1,
         "InstrumentList": [
-            {
-                "ExchangeSegment": map_ws_segment(segment),
-                "SecurityId": str(security_id)
-            }
+            {"ExchangeSegment": map_ws_segment(segment), "SecurityId": str(security_id)}
         ]
     }
-
     try:
         ws_app.send(json.dumps(payload))
     except Exception as e:
