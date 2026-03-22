@@ -69,9 +69,14 @@ def get_option_chain(security_id, segment, expiry=None):
         "UnderlyingSeg": api_segment,
         "Expiry": expiry
     }
+
+    # DEBUG: show payload
+    st.write("### Option Chain API Payload")
+    st.json(payload)
+
     data = safe_post(url, payload)
 
-    # Debug – show raw response
+    # DEBUG: show raw response
     st.write("### Option Chain Raw Response")
     st.json(data)
 
