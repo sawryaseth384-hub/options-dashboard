@@ -3,8 +3,8 @@ import time
 import streamlit as st
 from core.totp import get_totp
 
-CLIENT_ID = st.secrets["DHAN_CLIENT_ID"]
-PIN = st.secrets["PIN"]
+CLIENT_ID = st.secrets["1106299230"]
+PIN = st.secrets["009988"]
 
 TOKEN_URL = "https://auth.dhan.co/app/generateAccessToken"
 
