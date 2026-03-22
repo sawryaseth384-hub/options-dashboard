@@ -1,67 +1,66 @@
+# core/token_manager.py
+import streamlit as st
 import requests
 import time
 import pyotp
 
-# 🔐 CONFIG (secrets में रख)
-DHAN_CLIENT_ID = "1106299230"
-PIN = "009988"
-TOTP_SECRET = "DJUQ7WLHTV2ZVFHOTOORRT3VGHQJCMLV"
+AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
-TOKEN_URL = "https://auth.dhan.co/app/generateAccessToken"
+# Use secrets for credentials
+CLIENT_ID = st.secrets["1106299230"]
+PIN = st.secrets["009988"]
+TOTP_SECRET = st.secrets["DJUQ7WLHTV2ZVFHOTOORRT3VGHQJCMLV"]
 
-token_cache = {
-    "token": None,
-    "expiry": 0
-}
+def get_headers():
+    """Return headers with a valid access token (auto‑refreshed)."""
+    token = get_token()
+    return {
+        "access-token": token,
+        "client-id": CLIENT_ID,
+        "Content-Type": "application/json"
+    }
 
+def get_token():
+    """Return a valid access token, refreshing if necessary."""
+    # Use session state to store token and expiry across reruns
+    if "dhan_token" not in st.session_state:
+        st.session_state.dhan_token = None
+        st.session_state.token_expiry = 0
 
-# 🔥 dynamic TOTP
-def get_totp():
-    return pyotp.TOTP(TOTP_SECRET).now()
+    if st.session_state.dhan_token is None or time.time() > st.session_state.token_expiry:
+        _refresh_token()
 
+    return st.session_state.dhan_token
 
-def generate_token():
+def _refresh_token():
+    """Generate a fresh token using PIN and TOTP."""
     try:
-        res = requests.post(
-            TOKEN_URL,
-            params={
-                "dhanClientId": DHAN_CLIENT_ID,
-                "pin": PIN,
-                "totp": get_totp()   # 🔥 FIX
-            },
-            timeout=10
-        )
+        # Generate current TOTP code
+        totp = pyotp.TOTP(TOTP_SECRET)
+        current_totp = totp.now()
 
-        data = res.json()
+        params = {
+            "dhanClientId": CLIENT_ID,
+            "pin": PIN,
+            "totp": current_totp
+        }
+        resp = requests.post(AUTH_URL, params=params, timeout=10)
+        data = resp.json()
 
-        if "accessToken" in data:
-            token_cache["token"] = data["accessToken"]
+        if resp.status_code == 200 and "accessToken" in data:
+            st.session_state.dhan_token = data["accessToken"]
 
-            # 🔥 FIX: API expiry use कर
+            # Use API expiry time if available, otherwise default 24h
             expiry_time = data.get("expiryTime")
-
             if expiry_time:
                 from datetime import datetime
                 expiry_dt = datetime.fromisoformat(expiry_time)
-                token_cache["expiry"] = expiry_dt.timestamp() - 60  # buffer
+                st.session_state.token_expiry = expiry_dt.timestamp() - 60  # buffer 1 min
             else:
-                token_cache["expiry"] = time.time() + (23 * 60 * 60)
-
-            print("✅ New Token Generated")
-
-            return token_cache["token"]
-
+                st.session_state.token_expiry = time.time() + (23 * 60 * 60)  # 23h as fallback
         else:
-            print("❌ Token Error:", data)
-            return None
-
+            st.error(f"Token refresh failed: {data}")
+            st.stop()
     except Exception as e:
-        print("❌ Token Exception:", e)
-        return None
-
-
-def get_token():
-    if token_cache["token"] is None or time.time() > token_cache["expiry"]:
-        return generate_token()
-
-    return token_cache["token"]
+        st.error(f"Error refreshing token: {e}")
+        st.stop()
