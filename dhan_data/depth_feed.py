@@ -3,30 +3,28 @@ import json
 import struct
 import threading
 import streamlit as st
+from core.token_manager import get_token   # 👈 import
+
+TOKEN = get_token()
+CLIENT_ID = st.secrets["CLIENT_ID"]
+WS_URL = f"wss://depth-api-feed.dhan.co/twentydepth?token={TOKEN}&clientId={CLIENT_ID}&authType=2"
 
 DEPTH_DATA = {"bids": [], "asks": []}
 ws_app = None
 is_connected = False
 subscribed = set()
 
-def get_ws_url():
-    token = st.secrets["ACCESS_TOKEN"]
-    client_id = st.secrets["CLIENT_ID"]
-    return f"wss://depth-api-feed.dhan.co/twentydepth?token={token}&clientId={client_id}&authType=2"
-
-# 🔥 FIX: Map segment to integer
 def map_ws_segment(segment):
     if segment == "NSE_FNO":
         return 2
     else:
-        return 1   # NSE_EQ (including indices)
+        return 1
 
 def parse_depth(message):
     global DEPTH_DATA
     try:
         code = message[2]
         body = message[12:]
-
         levels = []
         for i in range(20):
             start = i * 16
@@ -37,12 +35,10 @@ def parse_depth(message):
             qty = struct.unpack('<I', chunk[8:12])[0]
             orders = struct.unpack('<I', chunk[12:16])[0]
             levels.append({"price": round(price, 2), "qty": qty, "orders": orders})
-
         if code == 41:
             DEPTH_DATA["bids"] = levels
         elif code == 51:
             DEPTH_DATA["asks"] = levels
-
     except Exception as e:
         print("Depth Parse Error:", e)
 
@@ -68,7 +64,7 @@ def start_depth_feed():
     if ws_app is not None:
         return
     ws_app = websocket.WebSocketApp(
-        get_ws_url(),
+        WS_URL,
         on_open=on_open,
         on_message=on_message,
         on_error=on_error,
@@ -83,25 +79,17 @@ def subscribe_depth(security_id, segment):
     if ws_app is None or not is_connected:
         print("Depth WS not ready")
         return
-
     key = f"{security_id}_{segment}"
     if key in subscribed:
         return
-
     subscribed.add(key)
-
-    # 🔥 Use integer segment from map_ws_segment
     payload = {
         "RequestCode": 23,
         "InstrumentCount": 1,
         "InstrumentList": [
-            {
-                "ExchangeSegment": map_ws_segment(segment),
-                "SecurityId": str(security_id)
-            }
+            {"ExchangeSegment": map_ws_segment(segment), "SecurityId": str(security_id)}
         ]
     }
-
     try:
         ws_app.send(json.dumps(payload))
     except Exception as e:
