@@ -1,24 +1,28 @@
-# core/dhan_api.py
-from dhan_data.instruments import get_symbol_data
-from dhan_data.expiry import get_expiry
-from dhan_data.historical_data import get_historical
+import requests
+import streamlit as st
+from core.token_manager import get_token
 
-def get_full_data(symbol):
-    """Fetch all data for a symbol: security ID, segment, expiries, historical candles."""
-    security_id, segment = get_symbol_data(symbol)
-    if security_id is None:
-        return {"error": "Symbol not found"}
+CLIENT_ID = st.secrets["1106299230"]
 
-    # Get expiry list using the correct segment (original segment from instrument data)
-    expiries = get_expiry(security_id, segment)
+BASE_URL = "https://api.dhan.co/v2"
 
-    # Get historical intraday data (5‑minute candles)
-    historical = get_historical(security_id, segment)
-
+def get_headers():
     return {
-        "symbol": symbol,
-        "security_id": security_id,
-        "segment": segment,
-        "expiries": expiries,
-        "historical": historical
+        "access-token": get_token(),
+        "client-id": CLIENT_ID,
+        "Content-Type": "application/json"
     }
+
+
+def get_option_chain():
+    url = f"{BASE_URL}/optionchain"
+
+    payload = {
+        "UnderlyingScrip": 13,
+        "UnderlyingSeg": "IDX_I",
+        "Expiry": "2026-03-24"
+    }
+
+    res = requests.post(url, headers=get_headers(), json=payload)
+
+    return res.json()
