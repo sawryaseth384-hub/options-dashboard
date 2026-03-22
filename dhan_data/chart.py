@@ -2,13 +2,12 @@ import requests
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
+import time
 
 BASE_URL = "https://api.dhan.co/v2"
 
+_last_chart_call = 0
 
-# =========================
-# 🔐 HEADERS
-# =========================
 def get_headers():
     return {
         "access-token": st.secrets["ACCESS_TOKEN"],
@@ -16,20 +15,12 @@ def get_headers():
         "Content-Type": "application/json"
     }
 
-
-# =========================
-# 🔁 SEGMENT MAP
-# =========================
 def map_segment(segment):
     if segment in ["IDX_I", "I", "D"]:
         return "NSE_FNO"
     else:
         return "NSE_EQ"
 
-
-# =========================
-# 📦 INSTRUMENT TYPE
-# =========================
 def get_instrument(segment):
     if segment in ["IDX_I", "I"]:
         return "INDEX"
@@ -38,11 +29,15 @@ def get_instrument(segment):
     else:
         return "EQUITY"
 
-
-# =========================
-# 🔥 HISTORICAL DATA (BEST)
-# =========================
 def get_candle_data(security_id, segment):
+    global _last_chart_call
+
+    # Rate limiting
+    now = time.time()
+    wait = max(0, 1 - (now - _last_chart_call))
+    if wait > 0:
+        time.sleep(wait)
+    _last_chart_call = time.time()
 
     try:
         url = f"{BASE_URL}/charts/intraday"
@@ -51,13 +46,13 @@ def get_candle_data(security_id, segment):
         instrument = get_instrument(segment)
 
         to_date = datetime.now()
-        from_date = to_date - timedelta(days=3)   # more candles
+        from_date = to_date - timedelta(days=3)
 
         payload = {
             "securityId": str(security_id),
             "exchangeSegment": mapped_segment,
             "instrument": instrument,
-            "interval": "1",   # 🔥 1 min (best)
+            "interval": "1",
             "oi": False,
             "fromDate": from_date.strftime("%Y-%m-%d %H:%M:%S"),
             "toDate": to_date.strftime("%Y-%m-%d %H:%M:%S")
@@ -70,53 +65,40 @@ def get_candle_data(security_id, segment):
             st.error(data.get("errorMessage"))
             return None
 
-        if not data or "open" not in data:
+        # 🔥 FIX: Check for "data" key
+        if "data" not in data or not data["data"]:
             return None
 
-        # =========================
-        # 🔥 CLEAN DATA
-        # =========================
+        d = data["data"]
+
         df = pd.DataFrame({
-            "time": pd.to_datetime(data["timestamp"], unit="s", errors="coerce"),
-            "open": data["open"],
-            "high": data["high"],
-            "low": data["low"],
-            "close": data["close"],
-            "volume": data["volume"]
+            "time": pd.to_datetime(d["timestamp"], unit="s", errors="coerce"),
+            "open": d["open"],
+            "high": d["high"],
+            "low": d["low"],
+            "close": d["close"],
+            "volume": d["volume"]
         })
 
         df = df.dropna()
         df = df.sort_values("time")
-
         return df
 
     except Exception as e:
         st.error(f"Chart Error: {e}")
         return None
 
-
-# =========================
-# 📊 INDICATORS
-# =========================
 def add_indicators(df):
-
     df["EMA21"] = df["close"].ewm(span=21).mean()
     df["EMA50"] = df["close"].ewm(span=50).mean()
-
     return df
 
-
-# =========================
-# 📊 PLOT (TRADINGVIEW STYLE)
-# =========================
 def plot_candle(df):
     import plotly.graph_objects as go
 
     df = add_indicators(df)
 
     fig = go.Figure()
-
-    # candles
     fig.add_trace(go.Candlestick(
         x=df["time"],
         open=df["open"],
@@ -126,20 +108,8 @@ def plot_candle(df):
         increasing_line_color='#00ff88',
         decreasing_line_color='#ff4d4d'
     ))
-
-    # EMA21
-    fig.add_trace(go.Scatter(
-        x=df["time"],
-        y=df["EMA21"],
-        name="EMA 21"
-    ))
-
-    # EMA50
-    fig.add_trace(go.Scatter(
-        x=df["time"],
-        y=df["EMA50"],
-        name="EMA 50"
-    ))
+    fig.add_trace(go.Scatter(x=df["time"], y=df["EMA21"], name="EMA 21"))
+    fig.add_trace(go.Scatter(x=df["time"], y=df["EMA50"], name="EMA 50"))
 
     fig.update_layout(
         template="plotly_dark",
@@ -150,5 +120,4 @@ def plot_candle(df):
     )
 
     trend = "BULLISH" if df["EMA21"].iloc[-1] > df["EMA50"].iloc[-1] else "BEARISH"
-
     return fig, trend
