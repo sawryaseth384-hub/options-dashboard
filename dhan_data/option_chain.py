@@ -3,7 +3,6 @@ import streamlit as st
 import time
 
 BASE_URL = "https://api.dhan.co/v2"
-
 _last_call_time = 0
 
 def get_headers():
@@ -29,7 +28,8 @@ def safe_post(url, payload, retries=2):
             if data.get("status") == "failure":
                 return None
             return data
-        except Exception:
+        except Exception as e:
+            print(f"safe_post attempt {attempt+1} failed: {e}")
             continue
     return None
 
@@ -58,4 +58,9 @@ def get_option_chain(security_id, segment, expiry=None):
         "Expiry": expiry
     }
     data = safe_post(url, payload)
+
+    # Log the response for debugging
+    if data and data.get("status") != "success":
+        print("Option chain API error:", data)
+        st.error(f"Option chain error: {data.get('errorMessage', 'Unknown error')}")
     return data
