@@ -3,8 +3,8 @@ import time
 import streamlit as st
 from core.totp import get_totp
 
-CLIENT_ID = st.secrets["1106299230"]
-PIN = st.secrets["009988"]
+CLIENT_ID = st.secrets["DHAN_CLIENT_ID"]
+PIN = st.secrets["PIN"]
 
 TOKEN_URL = "https://auth.dhan.co/app/generateAccessToken"
 
@@ -15,12 +15,14 @@ token_cache = {
 
 def generate_token():
     try:
+        totp = get_totp()
+
         res = requests.post(
             TOKEN_URL,
             params={
                 "dhanClientId": CLIENT_ID,
                 "pin": PIN,
-                "totp": get_totp()
+                "totp": totp
             },
             timeout=10
         )
@@ -29,25 +31,27 @@ def generate_token():
 
         if "accessToken" in data:
             token_cache["token"] = data["accessToken"]
-
-            from datetime import datetime
-            expiry = datetime.fromisoformat(data["expiryTime"]).timestamp()
-
-            token_cache["expiry"] = expiry - 60
-
+            token_cache["expiry"] = time.time() + (23 * 60 * 60)
             return token_cache["token"]
-
         else:
-            print("Token Error:", data)
+            print("❌ Token Error:", data)
             return None
 
     except Exception as e:
-        print("Token Exception:", e)
+        print("❌ Token Exception:", e)
         return None
 
 
 def get_token():
     if token_cache["token"] is None or time.time() > token_cache["expiry"]:
         return generate_token()
-
     return token_cache["token"]
+
+
+def get_headers():
+    token = get_token()
+    return {
+        "access-token": token,
+        "client-id": CLIENT_ID,
+        "Content-Type": "application/json"
+    }
