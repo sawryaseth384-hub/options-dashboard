@@ -12,6 +12,14 @@ def get_headers():
         "Content-Type": "application/json"
     }
 
+def map_api_segment(segment):
+    if segment in ["I", "IDX_I"]:
+        return "IDX_I"
+    elif segment in ["D", "NSE_FNO"]:
+        return "NSE_FNO"
+    else:
+        return "NSE_EQ"
+
 def safe_post(url, payload, retries=2):
     global _last_call_time
     for attempt in range(retries):
@@ -37,7 +45,8 @@ def safe_post(url, payload, retries=2):
 
 def get_expiry_list(security_id, segment):
     url = f"{BASE_URL}/optionchain/expirylist"
-    payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": segment}
+    api_segment = map_api_segment(segment)
+    payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": api_segment}
     data = safe_post(url, payload)
     if not data or data.get("status") != "success":
         st.error("Expiry list API failed")
@@ -54,16 +63,16 @@ def get_option_chain(security_id, segment, expiry=None):
         st.info(f"Using nearest expiry: {expiry}")
 
     url = f"{BASE_URL}/optionchain"
+    api_segment = map_api_segment(segment)
     payload = {
         "UnderlyingScrip": int(security_id),
-        "UnderlyingSeg": segment,
+        "UnderlyingSeg": api_segment,
         "Expiry": expiry
     }
     data = safe_post(url, payload)
 
-    # ---- DEBUG: show raw response (remove after testing) ----
+    # Debug – show raw response
     st.write("### Option Chain Raw Response")
     st.json(data)
-    # ---------------------------------------------------------
 
     return data
