@@ -23,24 +23,24 @@ def safe_post(url, payload, retries=2):
             res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
             _last_call_time = time.time()
             data = res.json()
-            if not data:
+            if res.status_code != 200:
+                st.error(f"HTTP {res.status_code}: {data}")
                 return None
-            if data.get("status") == "failure":
+            if "808" in str(data):
+                st.error("Token expired / invalid")
                 return None
             return data
         except Exception as e:
-            print(f"safe_post attempt {attempt+1} failed: {e}")
-            continue
+            st.error(f"Request error: {e}")
+            return None
     return None
 
 def get_expiry_list(security_id, segment):
     url = f"{BASE_URL}/optionchain/expirylist"
-    payload = {
-        "UnderlyingScrip": int(security_id),
-        "UnderlyingSeg": segment
-    }
+    payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": segment}
     data = safe_post(url, payload)
     if not data or data.get("status") != "success":
+        st.error("Expiry list API failed")
         return []
     return data.get("data", [])
 
@@ -48,8 +48,10 @@ def get_option_chain(security_id, segment, expiry=None):
     if not expiry:
         expiries = get_expiry_list(security_id, segment)
         if not expiries:
+            st.error("No expiry dates available")
             return None
         expiry = sorted(expiries)[0]
+        st.info(f"Using nearest expiry: {expiry}")
 
     url = f"{BASE_URL}/optionchain"
     payload = {
@@ -59,8 +61,9 @@ def get_option_chain(security_id, segment, expiry=None):
     }
     data = safe_post(url, payload)
 
-    # Log the response for debugging
-    if data and data.get("status") != "success":
-        print("Option chain API error:", data)
-        st.error(f"Option chain error: {data.get('errorMessage', 'Unknown error')}")
+    # ---- DEBUG ----
+    st.write("### Option Chain Raw Response")
+    st.json(data)   # remove this after debugging
+    # ---------------
+
     return data
