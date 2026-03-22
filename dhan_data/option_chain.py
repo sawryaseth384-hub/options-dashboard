@@ -1,16 +1,10 @@
 import requests
 import streamlit as st
 import time
+from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
 _last_call_time = 0
-
-def get_headers():
-    return {
-        "access-token": st.secrets["ACCESS_TOKEN"],
-        "client-id": st.secrets["CLIENT_ID"],
-        "Content-Type": "application/json"
-    }
 
 def map_api_segment(segment):
     if segment in ["I", "IDX_I"]:
@@ -61,7 +55,6 @@ def get_option_chain(security_id, segment, expiry=None):
             return None
         expiry = sorted(expiries)[0]
         st.info(f"Using nearest expiry: {expiry}")
-
     url = f"{BASE_URL}/optionchain"
     api_segment = map_api_segment(segment)
     payload = {
@@ -69,14 +62,9 @@ def get_option_chain(security_id, segment, expiry=None):
         "UnderlyingSeg": api_segment,
         "Expiry": expiry
     }
-
-    # DEBUG – shows the actual JSON sent (must have commas)
     st.write("### Option Chain API Payload (sent)")
     st.json(payload)
-
     data = safe_post(url, payload)
-
     st.write("### Option Chain Raw Response")
     st.json(data)
-
     return data
