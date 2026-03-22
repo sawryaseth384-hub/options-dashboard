@@ -1,103 +1,34 @@
-import requests
-import streamlit as st
-import time
+rows = []
 
-BASE_URL = "https://api.dhan.co/v2"
+for strike, options in oc.items():
 
-_last_call_time = 0
+    try:
+        strike = float(strike)
 
+        ce = options.get("ce", {})
+        pe = options.get("pe", {})
 
-# =========================
-# 🔐 HEADERS
-# =========================
-def get_headers():
-    return {
-        "access-token": st.secrets["ACCESS_TOKEN"],
-        "client-id": st.secrets["CLIENT_ID"],
-        "Content-Type": "application/json"
-    }
+        rows.append({
+            "Strike": strike,
 
+            # CALL
+            "Call OI": ce.get("oi", 0),
+            "Call LTP": ce.get("last_price", 0),
+            "Call Delta": ce.get("greeks", {}).get("delta", 0),
+            "Call Theta": ce.get("greeks", {}).get("theta", 0),
+            "Call Gamma": ce.get("greeks", {}).get("gamma", 0),
+            "Call Vega": ce.get("greeks", {}).get("vega", 0),
+            "Call IV": ce.get("implied_volatility", 0),
 
-# =========================
-# ⚡ SAFE POST
-# =========================
-def safe_post(url, payload, retries=2):
-    global _last_call_time
+            # PUT
+            "Put OI": pe.get("oi", 0),
+            "Put LTP": pe.get("last_price", 0),
+            "Put Delta": pe.get("greeks", {}).get("delta", 0),
+            "Put Theta": pe.get("greeks", {}).get("theta", 0),
+            "Put Gamma": pe.get("greeks", {}).get("gamma", 0),
+            "Put Vega": pe.get("greeks", {}).get("vega", 0),
+            "Put IV": pe.get("implied_volatility", 0),
+        })
 
-    for attempt in range(retries):
-        now = time.time()
-        wait = max(0, 1 - (now - _last_call_time))  # 🔥 1 sec enough
-        if wait > 0:
-            time.sleep(wait)
-
-        try:
-            res = requests.post(
-                url,
-                headers=get_headers(),
-                json=payload,
-                timeout=10
-            )
-
-            _last_call_time = time.time()
-            data = res.json()
-
-            if not data:
-                return None
-
-            # ❌ failure case
-            if data.get("status") == "failure":
-                return None
-
-            return data
-
-        except Exception:
-            continue
-
-    return None
-
-
-# =========================
-# 📅 EXPIRY LIST
-# =========================
-def get_expiry_list(security_id, segment):
-
-    url = f"{BASE_URL}/optionchain/expirylist"
-
-    payload = {
-        "UnderlyingScrip": int(security_id),
-        "UnderlyingSeg": segment
-    }
-
-    data = safe_post(url, payload)
-
-    if not data or data.get("status") != "success":
-        return []
-
-    return data.get("data", [])
-
-
-# =========================
-# 📊 OPTION CHAIN
-# =========================
-def get_option_chain(security_id, segment, expiry=None):
-
-    # 🔥 get expiry if not given
-    if not expiry:
-        expiries = get_expiry_list(security_id, segment)
-
-        if not expiries:
-            return None
-
-        expiry = sorted(expiries)[0]
-
-    url = f"{BASE_URL}/optionchain"
-
-    payload = {
-        "UnderlyingScrip": int(security_id),
-        "UnderlyingSeg": segment,
-        "Expiry": expiry
-    }
-
-    data = safe_post(url, payload)
-
-    return data
+    except:
+        continue
