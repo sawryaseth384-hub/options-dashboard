@@ -13,6 +13,7 @@ def get_headers():
     }
 
 def map_api_segment(segment):
+    """Convert internal segment (e.g., 'I') to API‑expected segment (e.g., 'IDX_I')."""
     if segment in ["I", "IDX_I"]:
         return "IDX_I"
     elif segment in ["D", "NSE_FNO"]:
@@ -35,11 +36,13 @@ def get_expiry(security_id, segment):
         "UnderlyingSeg": api_segment
     }
 
+    # DEBUG: print payload
+    st.write("### Expiry API Payload")
+    st.json(payload)
+
     try:
         res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
         data = res.json()
-
-        # Debug – show raw response
         st.write("### Expiry API Response")
         st.json(data)
 
