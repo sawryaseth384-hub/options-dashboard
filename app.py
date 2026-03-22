@@ -16,16 +16,12 @@ from dhan_data.depth_feed import (
 )
 
 from dhan_data.market_quote import get_ltp
-from dhan_data.option_chain import get_option_chain  # 🔥 NEW
+from dhan_data.option_chain import get_option_chain
 
-# =========================
-# CONFIG
-# =========================
+# ================= CONFIG =================
 st.set_page_config(page_title="🔥 AI Trading System", layout="wide")
 
-# =========================
-# HEADER
-# =========================
+# ================= HEADER =================
 col1, col2, col3 = st.columns([2,4,2])
 
 with col1:
@@ -43,34 +39,25 @@ st.divider()
 if not symbol:
     st.stop()
 
-# =========================
-# FETCH DATA
-# =========================
+# ================= FETCH =================
 data = dhan_api.get_full_data(symbol)
 
 if not data or "error" in data:
     st.error("Invalid Symbol")
     st.stop()
 
-# =========================
-# WS START
-# =========================
+# ================= WS =================
 if "ws_started" not in st.session_state:
     start_live_feed()
     start_depth_feed()
     st.session_state.ws_started = True
 
-# =========================
-# 🔥 SEGMENT FIX
-# =========================
+# ================= SEGMENT FIX =================
 segment = data["segment"]
-
 if "IDX" in segment:
     segment = "NSE_FNO"
 
-# =========================
-# SUBSCRIBE
-# =========================
+# ================= SUBSCRIBE =================
 if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_symbol != symbol:
     try:
         subscribe_instrument(data["security_id"], segment)
@@ -79,9 +66,7 @@ if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_sy
     except Exception as e:
         st.error(f"Subscribe Error: {e}")
 
-# =========================
-# 🔥 LIVE PRICE FIX
-# =========================
+# ================= LTP =================
 live_price = get_live_ltp()
 
 if live_price == 0:
@@ -89,9 +74,7 @@ if live_price == 0:
 
 spot = live_price
 
-# =========================
-# TABS
-# =========================
+# ================= TABS =================
 tab1, tab2, tab3 = st.tabs(["📊 Option", "📈 Stock", "🧠 War Room"])
 
 # ============================================================
@@ -104,15 +87,13 @@ with tab1:
     col2.metric("Spot", spot)
     col3.metric("Segment", data.get("segment"))
 
-    st.write("Expiries:", data.get("expiries"))  # 🔥 DEBUG
-
     expiry = None
     if data.get("expiries"):
         expiry = st.selectbox("Expiry", data["expiries"])
 
     if expiry:
 
-        option_data = get_option_chain(   # 🔥 FIXED
+        option_data = get_option_chain(
             data["security_id"],
             data["segment"],
             expiry
@@ -128,37 +109,86 @@ with tab1:
             st.warning("Option Chain Empty")
             st.stop()
 
+        # ================= BUILD TABLE =================
         rows = []
 
-        for strike, val in oc.items():
+        for strike, options in oc.items():
             try:
                 strike = float(strike)
 
-                ce = val.get("ce", {})
-                pe = val.get("pe", {})
+                ce = options.get("ce", {})
+                pe = options.get("pe", {})
 
                 rows.append({
                     "Strike": strike,
+
+                    # CALL
                     "Call OI": ce.get("oi", 0),
                     "Call LTP": ce.get("last_price", 0),
+                    "Call Delta": ce.get("greeks", {}).get("delta", 0),
+                    "Call Theta": ce.get("greeks", {}).get("theta", 0),
+                    "Call Gamma": ce.get("greeks", {}).get("gamma", 0),
+                    "Call Vega": ce.get("greeks", {}).get("vega", 0),
+                    "Call IV": ce.get("implied_volatility", 0),
+
+                    # PUT
                     "Put OI": pe.get("oi", 0),
                     "Put LTP": pe.get("last_price", 0),
+                    "Put Delta": pe.get("greeks", {}).get("delta", 0),
+                    "Put Theta": pe.get("greeks", {}).get("theta", 0),
+                    "Put Gamma": pe.get("greeks", {}).get("gamma", 0),
+                    "Put Vega": pe.get("greeks", {}).get("vega", 0),
+                    "Put IV": pe.get("implied_volatility", 0),
                 })
+
             except:
                 continue
 
-        df = pd.DataFrame(rows).sort_values("Strike")
+        df = pd.DataFrame(rows)
 
-        st.dataframe(df, use_container_width=True)
+        if df.empty:
+            st.warning("No option data parsed")
+            st.stop()
+
+        df = df.sort_values("Strike")
+
+        # ================= ATM =================
+        atm = min(df["Strike"], key=lambda x: abs(x - spot))
+
+        def highlight(row):
+            if row["Strike"] == atm:
+                return ["background-color: #1e293b"] * len(row)
+            return [""] * len(row)
+
+        st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
+
+        # ================= AI SIGNAL =================
+        st.markdown("## 🤖 AI Signal")
+
+        call_oi = df["Call OI"].sum()
+        put_oi = df["Put OI"].sum()
+
+        if put_oi > call_oi:
+            st.success("📈 BUY CALL (Bullish)")
+        elif call_oi > put_oi:
+            st.error("📉 BUY PUT (Bearish)")
+        else:
+            st.warning("⚖️ WAIT")
 
     # ================= DEPTH =================
-    st.markdown("### Market Depth")
+    st.markdown("### 📊 Market Depth")
 
     depth = get_depth()
 
-    st.write("Bids:", depth.get("bids", []))
-    st.write("Asks:", depth.get("asks", []))
+    colA, colB = st.columns(2)
 
+    with colA:
+        st.subheader("Bids")
+        st.dataframe(depth.get("bids", []))
+
+    with colB:
+        st.subheader("Asks")
+        st.dataframe(depth.get("asks", []))
 
 # ============================================================
 # STOCK
@@ -178,8 +208,8 @@ with tab2:
             close=df_chart["close"]
         )])
 
+        fig.update_layout(template="plotly_dark")
         st.plotly_chart(fig, use_container_width=True)
-
 
 # ============================================================
 # WAR ROOM
