@@ -1,3 +1,4 @@
+# dhan_data/historical_data.py
 import requests
 from datetime import datetime, timedelta
 import streamlit as st
@@ -13,10 +14,18 @@ def get_headers():
         "Content-Type": "application/json"
     }
 
+def map_to_exchange(segment):
+    """Convert internal segment to exchangeSegment for intraday API."""
+    if segment in ["IDX_I", "I"]:
+        return "NSE_EQ"      # indices are under NSE_EQ
+    elif segment == "D":
+        return "NSE_EQ"      # stocks are under NSE_EQ
+    else:
+        return "NSE_FNO"
+
 def get_historical(security_id, segment):
     global _last_hist_call
 
-    # Rate limit (1 request per second)
     now = time.time()
     wait = max(0, 1 - (now - _last_hist_call))
     if wait > 0:
@@ -26,17 +35,14 @@ def get_historical(security_id, segment):
     url = f"{BASE_URL}/charts/intraday"
 
     to_date = datetime.now()
-    from_date = to_date - timedelta(days=1)   # last 1 day (enough for demo)
+    from_date = to_date - timedelta(days=1)
 
-    # Determine instrument type
-    if segment in ["IDX_I", "I"]:
-        instrument = "INDEX"
-    else:
-        instrument = "EQUITY"
+    exchange = map_to_exchange(segment)
+    instrument = "INDEX" if segment in ["IDX_I", "I"] else "EQUITY"
 
     payload = {
         "securityId": str(security_id),
-        "exchangeSegment": segment,
+        "exchangeSegment": exchange,
         "instrument": instrument,
         "interval": "5",
         "oi": False,
@@ -47,14 +53,11 @@ def get_historical(security_id, segment):
     try:
         res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
         data = res.json()
-
-        # 🔥 Check for nested "data"
         if "data" not in data:
             return []
         d = data["data"]
         if "open" not in d:
             return []
-
         result = []
         for i in range(len(d["timestamp"])):
             result.append({
@@ -65,7 +68,6 @@ def get_historical(security_id, segment):
                 "close": d["close"][i]
             })
         return result
-
     except Exception as e:
         st.error(f"Historical data error: {e}")
         return []
