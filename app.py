@@ -54,6 +54,7 @@ if "ws_started" not in st.session_state:
 
 # ================= SEGMENT FIX =================
 segment = data["segment"]
+
 if "IDX" in segment:
     segment = "NSE_FNO"
 
@@ -85,7 +86,7 @@ with tab1:
     col1, col2, col3 = st.columns(3)
     col1.metric("Symbol", data.get("symbol"))
     col2.metric("Spot", spot)
-    col3.metric("Segment", data.get("segment"))
+    col3.metric("Segment", segment)
 
     expiry = None
     if data.get("expiries"):
@@ -93,11 +94,15 @@ with tab1:
 
     if expiry:
 
+        # 🔥 FIXED (IMPORTANT)
         option_data = get_option_chain(
             data["security_id"],
-            data["segment"],
+            segment,
             expiry
         )
+
+        # 🔍 DEBUG (remove later)
+        st.write("Expiry:", expiry)
 
         if not option_data or "data" not in option_data:
             st.error("No option data")
@@ -153,10 +158,12 @@ with tab1:
         df = df.sort_values("Strike")
 
         # ================= ATM =================
-        atm = min(df["Strike"], key=lambda x: abs(x - spot))
+        atm = None
+        if spot > 0:
+            atm = min(df["Strike"], key=lambda x: abs(x - spot))
 
         def highlight(row):
-            if row["Strike"] == atm:
+            if atm and row["Strike"] == atm:
                 return ["background-color: #1e293b"] * len(row)
             return [""] * len(row)
 
