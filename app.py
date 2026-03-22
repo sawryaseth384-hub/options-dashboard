@@ -40,13 +40,16 @@ if not data or "error" in data:
 
 # ========== SEGMENT HANDLING ==========
 original_segment = data["segment"]               # e.g., "IDX_I" for NIFTY
-option_segment = "NSE_FNO" if original_segment in ["IDX_I", "D"] else original_segment
+# For option chain, always use the original segment (IDX_I for indices, D for stocks)
+option_segment = original_segment                # No conversion needed – Dhan expects "IDX_I" for index options
+
+# For spot price, we may need to map to NSE_EQ (handled inside get_ltp)
 
 # For debugging, show what we have
 with st.expander("🔍 Debug Info", expanded=False):
     st.write("Security ID:", data["security_id"])
-    st.write("Original Segment (spot):", original_segment)
-    st.write("Option Segment (NSE_FNO):", option_segment)
+    st.write("Original Segment:", original_segment)
+    st.write("Option Segment (will be used):", option_segment)
     st.write("Expiries:", data.get("expiries", []))
     st.write("Historical Data Count:", len(data.get("historical", [])))
 
@@ -81,25 +84,38 @@ with tab1:
     col1, col2, col3 = st.columns(3)
     col1.metric("Symbol", data.get("symbol"))
     col2.metric("Spot", spot)
-    col3.metric("Segment", option_segment)      # Show option segment used
+    col3.metric("Segment (Option)", option_segment)
 
+    # Get expiry list from data (already fetched)
     expiry = None
     if data.get("expiries"):
         expiry = st.selectbox("Expiry", data["expiries"])
+    else:
+        st.warning("No expiry dates available for this symbol.")
+        st.stop()
 
     if expiry:
-        # Fetch option chain using the option segment (NSE_FNO)
+        # Fetch option chain using the correct segment (original segment, e.g., "IDX_I")
         option_data = get_option_chain(data["security_id"], option_segment, expiry)
 
-        if not option_data or "data" not in option_data:
-            st.error("No option data")
+        # Check response
+        if not option_data:
+            st.error("No option data received from API")
             st.stop()
 
-        oc = option_data["data"].get("oc", {})
+        if "data" not in option_data:
+            st.error("Unexpected response format (missing 'data')")
+            st.stop()
+
+        oc = option_data["data"].get("oc")
         if not oc:
-            st.warning("Option Chain Empty")
+            st.warning("Option chain is empty. Possible reasons: market closed, invalid expiry, or no data for this instrument.")
+            # Optionally show the raw response for debugging
+            with st.expander("Raw API Response"):
+                st.json(option_data)
             st.stop()
 
+        # Parse strikes
         rows = []
         for strike, options in oc.items():
             try:
@@ -124,16 +140,17 @@ with tab1:
                     "Put IV": pe.get("implied_volatility", 0),
                 })
             except Exception as e:
-                print(f"Error parsing strike {strike}: {e}")
+                st.warning(f"Error parsing strike {strike}: {e}")
                 continue
 
         df = pd.DataFrame(rows)
         if df.empty:
-            st.warning("No option data parsed")
+            st.warning("No option data could be parsed.")
             st.stop()
 
         df = df.sort_values("Strike")
 
+        # Highlight ATM strike
         atm = None
         if spot > 0:
             atm = min(df["Strike"], key=lambda x: abs(x - spot))
