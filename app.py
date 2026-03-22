@@ -32,17 +32,25 @@ st.divider()
 if not symbol:
     st.stop()
 
+# Fetch symbol data
 data = dhan_api.get_full_data(symbol)
 if not data or "error" in data:
     st.error("Invalid Symbol")
     st.stop()
 
-# 🔥 FIX: Convert segment for option chain & depth
-segment = data["segment"]
-if segment in ["IDX_I", "D"]:
-    segment = "NSE_FNO"    # options always use NSE_FNO
+# ========== SEGMENT HANDLING ==========
+original_segment = data["segment"]               # e.g., "IDX_I" for NIFTY
+option_segment = "NSE_FNO" if original_segment in ["IDX_I", "D"] else original_segment
 
-# Start WebSockets if not started
+# For debugging, show what we have
+with st.expander("🔍 Debug Info", expanded=False):
+    st.write("Security ID:", data["security_id"])
+    st.write("Original Segment (spot):", original_segment)
+    st.write("Option Segment (NSE_FNO):", option_segment)
+    st.write("Expiries:", data.get("expiries", []))
+    st.write("Historical Data Count:", len(data.get("historical", [])))
+
+# ========== WEBSOCKET CONNECTION ==========
 if "ws_started" not in st.session_state:
     start_live_feed()
     start_depth_feed()
@@ -51,34 +59,37 @@ if "ws_started" not in st.session_state:
 # Subscribe only once per symbol
 if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_symbol != symbol:
     try:
-        # Use the converted segment for subscriptions
-        subscribe_instrument(data["security_id"], segment)
-        subscribe_depth(data["security_id"], segment)
+        # Subscribe to spot price (use original segment)
+        subscribe_instrument(data["security_id"], original_segment)
+        # Subscribe to depth (use original segment; depth for index may not work, but we'll try)
+        subscribe_depth(data["security_id"], original_segment)
         st.session_state.subscribed_symbol = symbol
     except Exception as e:
         st.error(f"Subscribe Error: {e}")
 
+# ========== GET SPOT PRICE ==========
 live_price = get_live_ltp()
 if live_price == 0:
-    live_price = get_ltp(data["security_id"], data["segment"])   # original segment for LTP
+    live_price = get_ltp(data["security_id"], original_segment)
 
 spot = live_price
 
+# ========== TABS ==========
 tab1, tab2, tab3 = st.tabs(["📊 Option", "📈 Stock", "🧠 War Room"])
 
 with tab1:
     col1, col2, col3 = st.columns(3)
     col1.metric("Symbol", data.get("symbol"))
     col2.metric("Spot", spot)
-    col3.metric("Segment", segment)
+    col3.metric("Segment", option_segment)      # Show option segment used
 
     expiry = None
     if data.get("expiries"):
         expiry = st.selectbox("Expiry", data["expiries"])
 
     if expiry:
-        # Use the converted segment (NSE_FNO) for option chain
-        option_data = get_option_chain(data["security_id"], segment, expiry)
+        # Fetch option chain using the option segment (NSE_FNO)
+        option_data = get_option_chain(data["security_id"], option_segment, expiry)
 
         if not option_data or "data" not in option_data:
             st.error("No option data")
@@ -112,7 +123,8 @@ with tab1:
                     "Put Vega": pe.get("greeks", {}).get("vega", 0),
                     "Put IV": pe.get("implied_volatility", 0),
                 })
-            except:
+            except Exception as e:
+                print(f"Error parsing strike {strike}: {e}")
                 continue
 
         df = pd.DataFrame(rows)
@@ -166,6 +178,8 @@ with tab2:
         )])
         fig.update_layout(template="plotly_dark")
         st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No historical data available for this symbol.")
 
 with tab3:
     st.write("War Room Active")
