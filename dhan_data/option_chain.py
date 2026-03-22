@@ -1,3 +1,4 @@
+# dhan_data/option_chain.py
 import requests
 import streamlit as st
 import time
@@ -70,13 +71,13 @@ def get_option_chain(security_id, segment, expiry=None):
         "Expiry": expiry
     }
 
-    # DEBUG: show payload
-    st.write("### Option Chain API Payload")
+    # Debug: show the actual payload being sent
+    st.write("### Option Chain API Payload (sent)")
     st.json(payload)
 
     data = safe_post(url, payload)
 
-    # DEBUG: show raw response
+    # Debug: show raw response
     st.write("### Option Chain Raw Response")
     st.json(data)
 
