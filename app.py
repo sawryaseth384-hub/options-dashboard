@@ -15,6 +15,8 @@ from dhan_data.depth_feed import (
     get_depth
 )
 
+from dhan_data.market_quote import get_ltp
+
 # =========================
 # CONFIG
 # =========================
@@ -125,10 +127,14 @@ if "subscribed_symbol" not in st.session_state or st.session_state.subscribed_sy
         pass
 
 # =========================
-# LIVE PRICE
+# LIVE PRICE FIX
 # =========================
 live_price = get_live_ltp()
-spot = live_price if live_price != 0 else data.get("ltp", 0)
+
+if live_price == 0:
+    live_price = get_ltp(data["security_id"], data["segment"])
+
+spot = live_price
 
 # =========================
 # TABS
@@ -159,37 +165,70 @@ with tab1:
                 expiry
             )
 
+            if not option_data or "data" not in option_data:
+                st.error("No option data")
+                st.stop()
+
+            oc = option_data["data"].get("oc", {})
+
+            if not oc:
+                st.warning("Option Chain Empty")
+                st.stop()
+
             rows = []
 
-            if option_data and "data" in option_data:
-                oc = option_data["data"].get("oc", {})
+            for strike, val in oc.items():
+                try:
+                    strike = float(strike)
 
-                for strike, val in oc.items():
                     ce = val.get("ce", {})
                     pe = val.get("pe", {})
 
                     rows.append({
-                        "Strike": float(strike),
+                        "Strike": strike,
                         "Call OI": ce.get("oi", 0),
                         "Call LTP": ce.get("last_price", 0),
+                        "Call Delta": ce.get("greeks", {}).get("delta", 0),
+                        "Call IV": ce.get("implied_volatility", 0),
+
                         "Put OI": pe.get("oi", 0),
-                        "Put LTP": pe.get("last_price", 0)
+                        "Put LTP": pe.get("last_price", 0),
+                        "Put Delta": pe.get("greeks", {}).get("delta", 0),
+                        "Put IV": pe.get("implied_volatility", 0),
                     })
 
-                df = pd.DataFrame(rows).sort_values("Strike")
+                except:
+                    continue
 
-                if "limit" not in st.session_state:
-                    st.session_state.limit = 10
+            df = pd.DataFrame(rows).sort_values("Strike")
 
-                if st.button("➕ Load More"):
-                    st.session_state.limit += 10
+            # 🔥 ATM Highlight
+            atm = min(df["Strike"], key=lambda x: abs(x - spot))
 
-                st.dataframe(df.head(st.session_state.limit), use_container_width=True)
+            def highlight(row):
+                if row["Strike"] == atm:
+                    return ["background-color: #1e293b"] * len(row)
+                return [""] * len(row)
+
+            st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
+
+            # 🔥 AI SIGNAL
+            st.markdown("## 🤖 AI Signal")
+
+            call_oi = df["Call OI"].sum()
+            put_oi = df["Put OI"].sum()
+
+            if put_oi > call_oi:
+                st.success("📈 BUY CALL")
+            elif call_oi > put_oi:
+                st.error("📉 BUY PUT")
+            else:
+                st.warning("⚖️ WAIT")
 
         except Exception as e:
             st.error(f"Option Error: {e}")
 
-    # 🔥 MARKET DEPTH (ADD BACK)
+    # 🔥 MARKET DEPTH
     st.markdown("### 📊 Market Depth")
 
     depth = get_depth()
@@ -222,18 +261,19 @@ with tab2:
         hist = data.get("historical", [])
 
         if hist:
-            df = pd.DataFrame(hist)
+            df_chart = pd.DataFrame(hist)
 
             fig = go.Figure(data=[go.Candlestick(
-                x=df["time"],
-                open=df["open"],
-                high=df["high"],
-                low=df["low"],
-                close=df["close"]
+                x=df_chart["time"],
+                open=df_chart["open"],
+                high=df_chart["high"],
+                low=df_chart["low"],
+                close=df_chart["close"]
             )])
 
             fig.update_layout(template="plotly_dark")
             st.plotly_chart(fig, use_container_width=True)
+
 
 # ============================================================
 # WAR ROOM
