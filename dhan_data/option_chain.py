@@ -70,13 +70,12 @@ def get_option_chain(security_id, segment, expiry=None):
         "Expiry": expiry
     }
 
-    # DEBUG: show the actual JSON being sent (will have commas)
+    # DEBUG – shows the actual JSON sent (must have commas)
     st.write("### Option Chain API Payload (sent)")
     st.json(payload)
 
     data = safe_post(url, payload)
 
-    # DEBUG: show raw response
     st.write("### Option Chain Raw Response")
     st.json(data)
 
