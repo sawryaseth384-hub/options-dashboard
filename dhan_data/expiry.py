@@ -1,7 +1,10 @@
 import requests
 import streamlit as st
+import time
 
 BASE_URL = "https://api.dhan.co/v2"
+
+_last_expiry_call = 0
 
 def get_headers():
     return {
@@ -11,6 +14,14 @@ def get_headers():
     }
 
 def get_expiry(security_id, segment):
+    global _last_expiry_call
+
+    now = time.time()
+    wait = max(0, 1 - (now - _last_expiry_call))
+    if wait > 0:
+        time.sleep(wait)
+    _last_expiry_call = time.time()
+
     try:
         url = f"{BASE_URL}/optionchain/expirylist"
 
@@ -19,22 +30,13 @@ def get_expiry(security_id, segment):
             "UnderlyingSeg": segment
         }
 
-        res = requests.post(
-            url,
-            headers=get_headers(),
-            json=payload,
-            timeout=10
-        )
-
+        res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
         data = res.json()
 
-        # ✅ IMPORTANT FIX
         if data.get("status") != "success":
             return []
 
         expiry_list = data.get("data", [])
-
-        # ensure list
         if isinstance(expiry_list, list):
             return expiry_list
 
