@@ -4,113 +4,68 @@ import threading
 import struct
 import streamlit as st
 
-# =========================
-# 🔐 CONFIG
-# =========================
 TOKEN = st.secrets["ACCESS_TOKEN"]
 CLIENT_ID = st.secrets["CLIENT_ID"]
-
 WS_URL = f"wss://api-feed.dhan.co?version=2&token={TOKEN}&clientId={CLIENT_ID}&authType=2"
 
-# =========================
-# 🔥 GLOBAL STORE
-# =========================
-latest_data = {
-    "ltp": 0,
-    "ltt": 0,
-    "volume": 0
-}
-
+latest_data = {"ltp": 0, "ltt": 0, "volume": 0}
 ws_app = None
 is_connected = False
 subscribed = set()
 
-# =========================
-# 🔄 SEGMENT MAP (IMPORTANT)
-# =========================
+# 🔥 FIX: Map segment to integer
 def map_ws_segment(segment):
-    if segment == "IDX_I":
-        return 1   # NSE_EQ
-    elif segment == "NSE_FNO":
-        return 2   # NSE_FNO
-    return 1
+    if segment == "NSE_FNO":
+        return 2
+    else:
+        return 1   # NSE_EQ (including indices)
 
-# =========================
-# 🔥 PARSE TICKER (Code 2)
-# =========================
 def parse_ticker(msg):
     try:
         ltp = struct.unpack('<f', msg[8:12])[0]
         ltt = struct.unpack('<i', msg[12:16])[0]
-
         latest_data["ltp"] = round(ltp, 2)
         latest_data["ltt"] = ltt
-
     except Exception as e:
         print("Ticker Parse Error:", e)
 
-# =========================
-# 🔥 PARSE QUOTE (Code 4)
-# =========================
 def parse_quote(msg):
     try:
         ltp = struct.unpack('<f', msg[8:12])[0]
         volume = struct.unpack('<i', msg[22:26])[0]
-
         latest_data["ltp"] = round(ltp, 2)
         latest_data["volume"] = volume
-
     except Exception as e:
         print("Quote Parse Error:", e)
 
-# =========================
-# 📡 ON MESSAGE
-# =========================
 def on_message(ws, message):
     try:
         if isinstance(message, bytes):
             code = message[0]
-
             if code == 2:
                 parse_ticker(message)
-
             elif code == 4:
                 parse_quote(message)
-
     except Exception as e:
         print("Message Error:", e)
 
-# =========================
-# ❌ ERROR
-# =========================
 def on_error(ws, error):
     print("WS ERROR:", error)
 
-# =========================
-# 🔌 CLOSE
-# =========================
 def on_close(ws, close_status_code, close_msg):
     global is_connected
     is_connected = False
     print("WS CLOSED")
 
-# =========================
-# ✅ OPEN
-# =========================
 def on_open(ws):
     global is_connected
     is_connected = True
     print("✅ LIVE CONNECTED")
 
-# =========================
-# 🚀 START WEBSOCKET
-# =========================
 def start_live_feed():
     global ws_app
-
     if ws_app is not None:
         return
-
     ws_app = websocket.WebSocketApp(
         WS_URL,
         on_open=on_open,
@@ -118,17 +73,12 @@ def start_live_feed():
         on_error=on_error,
         on_close=on_close
     )
-
     thread = threading.Thread(target=ws_app.run_forever)
     thread.daemon = True
     thread.start()
 
-# =========================
-# 📡 SUBSCRIBE (FIXED)
-# =========================
 def subscribe_instrument(security_id, segment):
     global ws_app, is_connected, subscribed
-
     if ws_app is None or not is_connected:
         print("WS not ready")
         return
@@ -139,6 +89,7 @@ def subscribe_instrument(security_id, segment):
 
     subscribed.add(key)
 
+    # 🔥 Use integer segment
     payload = {
         "RequestCode": 15,
         "InstrumentCount": 1,
@@ -155,8 +106,5 @@ def subscribe_instrument(security_id, segment):
     except Exception as e:
         print("Subscribe Error:", e)
 
-# =========================
-# 💰 GET LIVE LTP
-# =========================
 def get_live_ltp():
     return latest_data.get("ltp", 0)
