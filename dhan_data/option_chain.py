@@ -61,9 +61,9 @@ def get_option_chain(security_id, segment, expiry=None):
     }
     data = safe_post(url, payload)
 
-    # ---- DEBUG ----
+    # ---- DEBUG: show raw response (remove after testing) ----
     st.write("### Option Chain Raw Response")
-    st.json(data)   # remove this after debugging
-    # ---------------
+    st.json(data)
+    # ---------------------------------------------------------
 
     return data
