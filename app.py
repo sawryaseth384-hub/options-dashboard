@@ -51,7 +51,9 @@ if st.button("🔄 Refresh"):
 @st.cache_data(ttl=300)
 def fetch_chain(sec_id, exp):
     data = get_option_chain(sec_id, exp)
-    inner = data.get("data", {})
+    if not data or "data" not in data:
+        return {}
+    inner = data["data"]
     if isinstance(inner, dict) and "data" in inner:
         inner = inner["data"]
     return inner
@@ -62,6 +64,10 @@ spot = data.get("last_price", 0)
 st.success(f"📍 Spot: {spot}")
 
 oc = data.get("oc", {})
+
+if not oc:
+    st.error("No Option Chain Data")
+    st.stop()
 
 # =========================
 # DATAFRAME
@@ -74,59 +80,24 @@ for strike, val in oc.items():
 
     rows.append({
         "Strike": int(float(strike)),
-
         "CE OI": ce.get("oi", 0),
         "CE LTP": ce.get("last_price", 0),
         "CE Delta": ce.get("greeks", {}).get("delta", 0),
-
         "PE OI": pe.get("oi", 0),
         "PE LTP": pe.get("last_price", 0),
         "PE Delta": pe.get("greeks", {}).get("delta", 0),
     })
 
-df = pd.DataFrame(rows).sort_values("Strike")
-# =========================
-# PRICE CHANGE (IMPORTANT)
-# =========================
-df["CE Price Change"] = df["CE LTP"].diff()
-df["PE Price Change"] = df["PE LTP"].diff()
+df = pd.DataFrame(rows)
 
-df["CE OI Change"] = df["CE OI"].diff()
-df["PE OI Change"] = df["PE OI"].diff()
+if df.empty:
+    st.error("No Data")
+    st.stop()
+
+df = df.sort_values("Strike")
 
 # =========================
-# BUILD-UP LOGIC
-# =========================
-def get_signal(row):
-    if row["CE Price Change"] > 0 and row["CE OI Change"] > 0:
-        return "🚀 CE Long Build-up"
-    elif row["PE Price Change"] > 0 and row["PE OI Change"] > 0:
-        return "🚀 PE Long Build-up"
-    elif row["CE Price Change"] < 0 and row["CE OI Change"] > 0:
-        return "📉 CE Short Build-up"
-    elif row["PE Price Change"] < 0 and row["PE OI Change"] > 0:
-        return "📉 PE Short Build-up"
-    else:
-        return ""
-
-df["BuildUp"] = df.apply(get_signal, axis=1)
-# =========================
-# FINAL TRADE SIGNAL
-# =========================
-df["Final Signal"] = df.apply(lambda x:
-    "🟢 BUY CE" if pcr > 1 and x["CE Delta"] > 0.5 else
-    "🔴 BUY PE" if pcr < 0.7 and x["PE Delta"] < -0.5 else
-    "",
-axis=1)
-
-# =========================
-# ATM
-# =========================
-atm = min(df["Strike"], key=lambda x: abs(x - spot))
-st.success(f"🎯 ATM: {atm}")
-
-# =========================
-# PCR
+# PCR (FIXED POSITION)
 # =========================
 total_ce = df["CE OI"].sum()
 total_pe = df["PE OI"].sum()
@@ -135,14 +106,45 @@ pcr = total_pe / total_ce if total_ce else 0
 st.metric("📊 PCR", round(pcr, 2))
 
 # =========================
+# PRICE + OI CHANGE
+# =========================
+df["CE Price Change"] = df["CE LTP"].diff()
+df["PE Price Change"] = df["PE LTP"].diff()
+df["CE OI Change"] = df["CE OI"].diff()
+df["PE OI Change"] = df["PE OI"].diff()
+
+# =========================
+# BUILD-UP LOGIC (UPGRADED)
+# =========================
+def buildup(row):
+    if row["CE Price Change"] > 0 and row["CE OI Change"] > 0:
+        return "🚀 CE Long"
+    elif row["PE Price Change"] > 0 and row["PE OI Change"] > 0:
+        return "🚀 PE Long"
+    elif row["CE Price Change"] < 0 and row["CE OI Change"] > 0:
+        return "📉 CE Short"
+    elif row["PE Price Change"] < 0 and row["PE OI Change"] > 0:
+        return "📉 PE Short"
+    else:
+        return ""
+
+df["BuildUp"] = df.apply(buildup, axis=1)
+
+# =========================
+# ATM
+# =========================
+atm = min(df["Strike"], key=lambda x: abs(x - spot))
+st.success(f"🎯 ATM: {atm}")
+
+# =========================
 # MARKET BIAS
 # =========================
 if pcr > 1:
-    st.success("📈 Bullish")
+    st.success("📈 Bullish Market")
 elif pcr < 0.7:
-    st.error("📉 Bearish")
+    st.error("📉 Bearish Market")
 else:
-    st.warning("⚖️ Sideways")
+    st.warning("⚖️ Sideways Market")
 
 # =========================
 # SUPPORT / RESISTANCE
@@ -156,45 +158,39 @@ st.success(f"🟢 Support: {support}")
 # =========================
 # MAX PAIN
 # =========================
-pain_list = []
-
+pain = []
 for strike in df["Strike"]:
-    pain = (
+    val = (
         ((df["Strike"] - strike).clip(lower=0) * df["CE OI"]).sum() +
         ((strike - df["Strike"]).clip(lower=0) * df["PE OI"]).sum()
     )
-    pain_list.append((strike, pain))
+    pain.append((strike, val))
 
-max_pain = min(pain_list, key=lambda x: x[1])[0]
+max_pain = min(pain, key=lambda x: x[1])[0]
 st.info(f"🎯 Max Pain: {max_pain}")
 
 # =========================
-# SMART STRIKE
+# SMART STRIKE (DELTA BASED)
 # =========================
-best_strike = df.loc[df["CE Delta"].sub(0.5).abs().idxmin(), "Strike"]
+best = df.iloc[(df["CE Delta"] - 0.5).abs().argsort()[:1]]
+best_strike = int(best["Strike"].values[0])
+
 st.info(f"🔥 Best Strike: {best_strike}")
 
 # =========================
-# BUILD-UP + TRAP
+# FINAL SIGNAL (SMART)
 # =========================
-df["CE BuildUp"] = df["CE OI"] > df["CE OI"].shift(1)
-df["PE BuildUp"] = df["PE OI"] > df["PE OI"].shift(1)
+def final_signal(row):
+    if pcr > 1 and row["CE Delta"] > 0.5:
+        return "🟢 BUY CE"
+    elif pcr < 0.7 and row["PE Delta"] < -0.5:
+        return "🔴 BUY PE"
+    return ""
 
-df["Trap"] = df.apply(lambda x:
-    "⚠️ Call Trap" if x["CE OI"] > x["PE OI"] and pcr < 0.7 else
-    "⚠️ Put Trap" if x["PE OI"] > x["CE OI"] and pcr > 1 else "",
-axis=1)
-
-# =========================
-# SIGNAL SYSTEM
-# =========================
-df["Signal"] = df.apply(lambda x:
-    "🟢 BUY CE" if x["CE Delta"] > 0.5 and pcr > 1 else
-    "🔴 BUY PE" if x["PE Delta"] < -0.5 and pcr < 0.7 else "",
-axis=1)
+df["Final Signal"] = df.apply(final_signal, axis=1)
 
 # =========================
-# FILTER
+# STRIKE FILTER
 # =========================
 min_s, max_s = st.slider(
     "Strike Range",
@@ -206,7 +202,7 @@ min_s, max_s = st.slider(
 df = df[(df["Strike"] >= min_s) & (df["Strike"] <= max_s)]
 
 # =========================
-# TABLE
+# TABLE (FIXED FORMAT)
 # =========================
 st.dataframe(
     df.style.format({
@@ -214,10 +210,11 @@ st.dataframe(
         "PE OI": "{:,.0f}",
         "CE LTP": "{:.2f}",
         "PE LTP": "{:.2f}",
+        "BuildUp": "{}",
+        "Final Signal": "{}"
     }),
     use_container_width=True
 )
-
 
 # =========================
 # OI CHART
@@ -226,7 +223,7 @@ fig = px.bar(df, x="Strike", y=["CE OI", "PE OI"], barmode="group")
 st.plotly_chart(fig, use_container_width=True)
 
 # =========================
-# LTP CHART
+# LTP CHART (ENHANCED)
 # =========================
 atm_range = st.slider("ATM Range", 100, 1000, 300)
 
@@ -243,6 +240,7 @@ fig2 = px.line(
     markers=True
 )
 
+# ATM LINE
 fig2.add_vline(x=atm, line_dash="dash", line_color="yellow")
 
 st.plotly_chart(fig2, use_container_width=True)
