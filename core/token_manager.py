@@ -1,5 +1,3 @@
-# core/token_manager.py
-
 import streamlit as st
 import requests
 import time
@@ -25,28 +23,28 @@ def get_token():
         st.session_state.dhan_token = None
         st.session_state.token_expiry = 0
 
-    if (
-        st.session_state.dhan_token is None
-        or time.time() > st.session_state.token_expiry
-    ):
+    if st.session_state.dhan_token is None or time.time() > st.session_state.token_expiry:
         _refresh_token()
 
     return st.session_state.dhan_token
 
-
 def _refresh_token():
     try:
-        totp = pyotp.TOTP(TOTP_SECRET).now()
+        # 🔥 Generate TOTP
+        totp = pyotp.TOTP(TOTP_SECRET.strip())
+        current_totp = totp.now()
 
-        params = {
+        payload = {
             "dhanClientId": CLIENT_ID,
             "pin": PIN,
-            "totp": totp
+            "totp": current_totp
         }
 
-        resp = requests.post(AUTH_URL, params=params, timeout=10)
+        # 🔥 IMPORTANT FIX → data= (NOT params)
+        resp = requests.post(AUTH_URL, data=payload)
 
-        print("RAW TOKEN RESPONSE:", resp.text)  # debug
+        print("STATUS:", resp.status_code)
+        print("RAW:", resp.text)
 
         data = resp.json()
 
@@ -54,17 +52,18 @@ def _refresh_token():
             st.session_state.dhan_token = data["accessToken"]
 
             expiry_time = data.get("expiryTime")
-
             if expiry_time:
                 expiry_dt = datetime.fromisoformat(expiry_time)
                 st.session_state.token_expiry = expiry_dt.timestamp() - 60
             else:
-                st.session_state.token_expiry = time.time() + 23 * 3600
+                st.session_state.token_expiry = time.time() + (23 * 60 * 60)
+
+            st.success("✅ Token Generated Successfully")
 
         else:
             st.error(f"❌ Token failed: {data}")
             st.stop()
 
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        st.error(f"❌ Error refreshing token: {e}")
         st.stop()
