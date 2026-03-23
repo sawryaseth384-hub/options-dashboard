@@ -51,16 +51,15 @@ st.subheader("📊 Option Chain (OI + Greeks)")
 
 option_data = get_option_chain(SECURITY_ID, expiry)
 
-# DEBUG
-st.write("RAW:", option_data)
-
 # =========================
 # SAFE EXTRACTION
 # =========================
 try:
-    oc = option_data["data"]["data"]["oc"]
+    main_data = option_data["data"]["data"]
+    oc = main_data["oc"]
+    spot = main_data["last_price"]
 except:
-    st.error("❌ OC data not found")
+    st.error("❌ Data structure issue")
     st.stop()
 
 rows = []
@@ -70,32 +69,60 @@ for strike, values in oc.items():
     ce = values.get("ce", {})
     pe = values.get("pe", {})
 
-    ce_greeks = ce.get("greeks", {})
-    pe_greeks = pe.get("greeks", {})
+    ce_g = ce.get("greeks", {})
+    pe_g = pe.get("greeks", {})
 
     rows.append({
+        "Strike": float(strike),
+
         # CE
         "CE OI": ce.get("oi", 0),
         "CE LTP": ce.get("last_price", 0),
-        "CE Delta": ce_greeks.get("delta", 0),
-        "CE Theta": ce_greeks.get("theta", 0),
-        "CE IV": ce.get("implied_volatility", 0),
-
-        # Strike
-        "Strike": float(strike),
+        "CE Delta": ce_g.get("delta", 0),
+        "CE Theta": ce_g.get("theta", 0),
 
         # PE
-        "PE IV": pe.get("implied_volatility", 0),
-        "PE Theta": pe_greeks.get("theta", 0),
-        "PE Delta": pe_greeks.get("delta", 0),
         "PE LTP": pe.get("last_price", 0),
         "PE OI": pe.get("oi", 0),
+        "PE Delta": pe_g.get("delta", 0),
+        "PE Theta": pe_g.get("theta", 0),
     })
 
-df = pd.DataFrame(rows).sort_values("Strike")
+df = pd.DataFrame(rows)
 
-# 🔥 Highlight max OI
-df["CE Signal"] = df["CE OI"].apply(lambda x: "🔥" if x == df["CE OI"].max() else "")
-df["PE Signal"] = df["PE OI"].apply(lambda x: "🔥" if x == df["PE OI"].max() else "")
+# =========================
+# FILTER (REMOVE USELESS)
+# =========================
+df = df[
+    (df["CE OI"] > 0) | 
+    (df["PE OI"] > 0)
+]
+
+# =========================
+# ATM RANGE FILTER 🔥
+# =========================
+df = df[
+    (df["Strike"] > spot - 500) &
+    (df["Strike"] < spot + 500)
+]
+
+# =========================
+# SORT
+# =========================
+df = df.sort_values("Strike")
+
+# =========================
+# HIGHLIGHT OI 🔥
+# =========================
+max_ce = df["CE OI"].max()
+max_pe = df["PE OI"].max()
+
+df["CE 🔥"] = df["CE OI"].apply(lambda x: "🔥" if x == max_ce else "")
+df["PE 🔥"] = df["PE OI"].apply(lambda x: "🔥" if x == max_pe else "")
+
+# =========================
+# DISPLAY
+# =========================
+st.success(f"📍 Spot Price: {spot}")
 
 st.dataframe(df, use_container_width=True)
