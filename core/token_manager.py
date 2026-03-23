@@ -24,7 +24,7 @@ def get_token():
     if st.session_state.token and time.time() < st.session_state.expiry:
         return st.session_state.token
 
-    # prevent 2 min violation
+    # avoid 2 min violation
     if time.time() - st.session_state.last_call < 120:
         return st.session_state.token
 
