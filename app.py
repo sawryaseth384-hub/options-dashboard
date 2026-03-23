@@ -193,8 +193,15 @@ st.plotly_chart(fig, use_container_width=True)
 # =========================
 # LTP CHART
 # =========================
-st.subheader("📈 LTP Chart")
+# =========================
+# LTP CHART FIX
+# =========================
 
-chart_df = df[["Strike", "CE LTP", "PE LTP"]].set_index("Strike")
+st.subheader("📈 LTP Chart (ATM Focus)")
+
+# 🔥 ATM range filter (important)
+ltp_df = df[(df["Strike"] > spot - 500) & (df["Strike"] < spot + 500)]
+
+chart_df = ltp_df[["Strike", "CE LTP", "PE LTP"]].set_index("Strike")
 
 st.line_chart(chart_df)
