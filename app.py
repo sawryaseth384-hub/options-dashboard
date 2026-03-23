@@ -4,14 +4,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Fix import
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from dhan_data.expiry import get_expiry
 from dhan_data.option_chain import get_option_chain
 
-st.set_page_config(page_title="Dhan Options Dashboard", layout="wide")
-st.title("📊 Dhan Options Dashboard")
+st.set_page_config(page_title="🔥 Smart Options Dashboard", layout="wide")
+st.title("🔥 Smart Options Dashboard")
 
 # =========================
 # SYMBOL
@@ -20,13 +19,7 @@ symbol = st.text_input("Symbol", "NIFTY")
 SECURITY_ID = 13
 
 # =========================
-# SESSION STATE (ATM FIX)
-# =========================
-if "atm_mode" not in st.session_state:
-    st.session_state.atm_mode = False
-
-# =========================
-# FETCH EXPIRY (CACHE)
+# CACHE EXPIRY
 # =========================
 @st.cache_data(ttl=3600)
 def fetch_expiry(sec_id):
@@ -40,47 +33,38 @@ def fetch_expiry(sec_id):
 expiry_list = fetch_expiry(SECURITY_ID)
 
 if not expiry_list:
-    st.error("❌ No expiry data")
+    st.error("No expiry")
     st.stop()
 
-expiry = st.selectbox("Select Expiry", expiry_list)
+expiry = st.selectbox("Expiry", expiry_list)
 
 # =========================
-# REFRESH BUTTON
+# REFRESH
 # =========================
-if st.button("🔄 Refresh Data"):
+if st.button("🔄 Refresh"):
     st.cache_data.clear()
     st.rerun()
 
 # =========================
-# FETCH OPTION CHAIN (CACHE)
+# FETCH OPTION CHAIN
 # =========================
 @st.cache_data(ttl=300)
-def fetch_option_chain(sec_id, exp):
+def fetch_chain(sec_id, exp):
     data = get_option_chain(sec_id, exp)
-    if not data or "data" not in data:
-        return {"error": "Invalid API"}
-    inner = data["data"]
+    inner = data.get("data", {})
     if isinstance(inner, dict) and "data" in inner:
         inner = inner["data"]
     return inner
 
-oc_data = fetch_option_chain(SECURITY_ID, expiry)
+data = fetch_chain(SECURITY_ID, expiry)
 
-if "error" in oc_data:
-    st.error(oc_data["error"])
-    st.stop()
+spot = data.get("last_price", 0)
+st.success(f"📍 Spot: {spot}")
 
-spot = oc_data.get("last_price", 0)
-st.success(f"📍 Spot Price: {spot}")
-
-oc = oc_data.get("oc", {})
-if not oc:
-    st.error("❌ No option chain data")
-    st.stop()
+oc = data.get("oc", {})
 
 # =========================
-# BUILD DATAFRAME
+# DATAFRAME
 # =========================
 rows = []
 
@@ -100,123 +84,103 @@ for strike, val in oc.items():
         "PE Delta": pe.get("greeks", {}).get("delta", 0),
     })
 
-df = pd.DataFrame(rows)
-
-if df.empty:
-    st.error("❌ No data")
-    st.stop()
-
-df = df.sort_values("Strike")
+df = pd.DataFrame(rows).sort_values("Strike")
 
 # =========================
-# ATM STRIKE
+# ATM
 # =========================
-atm_strike = min(df["Strike"], key=lambda x: abs(x - spot))
-st.success(f"🎯 Suggested ATM Strike: {atm_strike}")
-
-df["ATM"] = df["Strike"].apply(lambda x: "🎯" if x == atm_strike else "")
+atm = min(df["Strike"], key=lambda x: abs(x - spot))
+st.success(f"🎯 ATM: {atm}")
 
 # =========================
 # PCR
 # =========================
 total_ce = df["CE OI"].sum()
 total_pe = df["PE OI"].sum()
-
 pcr = total_pe / total_ce if total_ce else 0
+
 st.metric("📊 PCR", round(pcr, 2))
 
-# =========================
-# ATM PCR
-# =========================
-atm_df = df[(df["Strike"] > spot - 100) & (df["Strike"] < spot + 100)]
-
-atm_ce = atm_df["CE OI"].sum()
-atm_pe = atm_df["PE OI"].sum()
-
-atm_pcr = atm_pe / atm_ce if atm_ce else 0
-st.metric("🎯 ATM PCR", round(atm_pcr, 2))
-
-# =========================
-# SUPPORT / RESISTANCE
-# =========================
-top_ce = df.nlargest(2, "CE OI")["Strike"].tolist()
-top_pe = df.nlargest(2, "PE OI")["Strike"].tolist()
-
-st.error(f"🔴 Resistance: {top_ce}")
-st.success(f"🟢 Support: {top_pe}")
 # =========================
 # MARKET BIAS
 # =========================
 if pcr > 1:
-    st.success("📈 Market Bullish")
+    st.success("📈 Bullish")
 elif pcr < 0.7:
-    st.error("📉 Market Bearish")
+    st.error("📉 Bearish")
 else:
-    st.warning("⚖️ Sideways Market")
+    st.warning("⚖️ Sideways")
+
+# =========================
+# SUPPORT / RESISTANCE
+# =========================
+resistance = df.nlargest(2, "CE OI")["Strike"].tolist()
+support = df.nlargest(2, "PE OI")["Strike"].tolist()
+
+st.error(f"🔴 Resistance: {resistance}")
+st.success(f"🟢 Support: {support}")
 
 # =========================
 # MAX PAIN
 # =========================
-pain_data = []
+pain_list = []
 
 for strike in df["Strike"]:
     pain = (
         ((df["Strike"] - strike).clip(lower=0) * df["CE OI"]).sum() +
         ((strike - df["Strike"]).clip(lower=0) * df["PE OI"]).sum()
     )
-    pain_data.append((strike, pain))
+    pain_list.append((strike, pain))
 
-max_pain = min(pain_data, key=lambda x: x[1])[0]
+max_pain = min(pain_list, key=lambda x: x[1])[0]
 st.info(f"🎯 Max Pain: {max_pain}")
 
 # =========================
-# STRIKE FILTER
+# SMART STRIKE
 # =========================
-min_strike, max_strike = st.slider(
+best_strike = df.loc[df["CE Delta"].sub(0.5).abs().idxmin(), "Strike"]
+st.info(f"🔥 Best Strike: {best_strike}")
+
+# =========================
+# BUILD-UP + TRAP
+# =========================
+df["CE BuildUp"] = df["CE OI"] > df["CE OI"].shift(1)
+df["PE BuildUp"] = df["PE OI"] > df["PE OI"].shift(1)
+
+df["Trap"] = df.apply(lambda x:
+    "⚠️ Call Trap" if x["CE OI"] > x["PE OI"] and pcr < 0.7 else
+    "⚠️ Put Trap" if x["PE OI"] > x["CE OI"] and pcr > 1 else "",
+axis=1)
+
+# =========================
+# SIGNAL SYSTEM
+# =========================
+df["Signal"] = df.apply(lambda x:
+    "🟢 BUY CE" if x["CE Delta"] > 0.5 and pcr > 1 else
+    "🔴 BUY PE" if x["PE Delta"] < -0.5 and pcr < 0.7 else "",
+axis=1)
+
+# =========================
+# FILTER
+# =========================
+min_s, max_s = st.slider(
     "Strike Range",
     int(df["Strike"].min()),
     int(df["Strike"].max()),
     (int(df["Strike"].min()), int(df["Strike"].max()))
 )
 
-filtered_df = df[(df["Strike"] >= min_strike) & (df["Strike"] <= max_strike)]
-# =========================
-# SMART STRIKE
-# =========================
-best_strike = df.loc[df["CE Delta"].sub(0.5).abs().idxmin(), "Strike"]
-st.info(f"🔥 Best Strike (Delta Based): {best_strike}")
-
-# =========================
-# ATM MODE BUTTON (FIXED)
-# =========================
-if st.button("🎯 Focus ATM"):
-    st.session_state.atm_mode = not st.session_state.atm_mode
-
-if st.session_state.atm_mode:
-    filtered_df = df[
-        (df["Strike"] > spot - 300) &
-        (df["Strike"] < spot + 300)
-    ]
-    # =========================
-# SIGNAL SYSTEM
-# =========================
-df["Signal"] = df.apply(lambda row:
-    "🟢 BUY CE" if row["CE Delta"] > 0.5 and pcr > 1 else
-    "🔴 BUY PE" if row["PE Delta"] < -0.5 and pcr < 0.7 else
-    "",
-axis=1)
+df = df[(df["Strike"] >= min_s) & (df["Strike"] <= max_s)]
 
 # =========================
 # TABLE
 # =========================
 st.dataframe(
-    filtered_df.style.format({
+    df.style.format({
         "CE OI": "{:,.0f}",
         "PE OI": "{:,.0f}",
         "CE LTP": "{:.2f}",
         "PE LTP": "{:.2f}",
-        "CE Delta": "{:.3f}",
-        "PE Delta": "{:.3f}",
     }),
     use_container_width=True
 )
@@ -224,39 +188,27 @@ st.dataframe(
 # =========================
 # OI CHART
 # =========================
-st.subheader("📊 OI Chart")
-
-fig_oi = px.bar(
-    filtered_df,
-    x="Strike",
-    y=["CE OI", "PE OI"],
-    barmode="group"
-)
-
-st.plotly_chart(fig_oi, use_container_width=True)
+fig = px.bar(df, x="Strike", y=["CE OI", "PE OI"], barmode="group")
+st.plotly_chart(fig, use_container_width=True)
 
 # =========================
-# LTP CHART (FIXED)
+# LTP CHART
 # =========================
-st.subheader("📈 Smart LTP Chart")
-
-atm_range_slider = st.slider("ATM Range", 100, 1000, 300)
+atm_range = st.slider("ATM Range", 100, 1000, 300)
 
 ltp_df = df[
-    (df["Strike"] > spot - atm_range_slider) &
-    (df["Strike"] < spot + atm_range_slider)
+    (df["Strike"] > spot - atm_range) &
+    (df["Strike"] < spot + atm_range)
 ]
 
-if not ltp_df.empty:
-    fig = px.line(
-        ltp_df.melt(id_vars="Strike", value_vars=["CE LTP", "PE LTP"]),
-        x="Strike",
-        y="value",
-        color="variable",
-        markers=True
-    )
+fig2 = px.line(
+    ltp_df.melt(id_vars="Strike", value_vars=["CE LTP", "PE LTP"]),
+    x="Strike",
+    y="value",
+    color="variable",
+    markers=True
+)
 
-    # 🔥 ATM LINE
-    fig.add_vline(x=atm_strike, line_dash="dash", line_color="yellow")
+fig2.add_vline(x=atm, line_dash="dash", line_color="yellow")
 
-    st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig2, use_container_width=True)
