@@ -1,8 +1,18 @@
 import pyotp
 import streamlit as st
 
-# ✅ Correct key
-TOTP_SECRET = st.secrets["DJUQ7WLHTV2ZVFHOTOORRT3VGHQJCMLV"]
-
 def get_totp():
-    return pyotp.TOTP(TOTP_SECRET).now()
+    try:
+        # ✅ Get secret from Streamlit secrets
+        totp_secret = st.secrets["DJUQ7WLHTV2ZVFHOTOORRT3VGHQJCMLV"]
+
+        # ✅ Generate TOTP
+        return pyotp.TOTP(totp_secret).now()
+
+    except KeyError:
+        st.error("❌ TOTP_SECRET missing in Streamlit secrets")
+        return None
+
+    except Exception as e:
+        st.error(f"❌ TOTP Error: {e}")
+        return None
