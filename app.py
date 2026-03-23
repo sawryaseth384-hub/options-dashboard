@@ -1,14 +1,16 @@
 import requests
-from core.token_manager import get_headers
 
-BASE_URL = "https://api.dhan.co/v2"
+url = "https://api.dhan.co/v2/optionchain/optionchain"
 
-def get_expiry(security_id):
-    url = f"{BASE_URL}/optionchain/expirylist"
+payload = {
+    "UnderlyingScrip": 13,
+    "UnderlyingSeg": "IDX_I",
+    "Expiry": expiry
+}
 
-    payload = {
-        "UnderlyingScrip": int(security_id),
-        "UnderlyingSeg": "IDX_I"
-    }
+res = requests.post(url, headers=get_headers(), json=payload)
 
-    res = requests.post(url
+data = res.json()
+
+st.write("Option Chain Raw Response")
+st.json(data)
