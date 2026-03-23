@@ -72,10 +72,12 @@ def subscribe_to_symbol(symbol):
         st.error(f"Symbol {symbol} not found")
 
 # =============================================================================
-# DATA FETCHING (cached)
+# DATA FETCHING (cached with validation)
 # =============================================================================
 @st.cache_data(ttl=3600)
 def fetch_expiry(sec_id):
+    if sec_id is None:
+        return []
     data = get_expiry(sec_id)
     if isinstance(data, list):
         return data
@@ -85,6 +87,8 @@ def fetch_expiry(sec_id):
 
 @st.cache_data(ttl=300)
 def fetch_chain(sec_id, exp):
+    if sec_id is None or not exp:
+        return {}
     data = get_option_chain(sec_id, exp)
     if not data or "data" not in data:
         return {}
@@ -197,12 +201,15 @@ def compute_oi_velocity(df, prev_df):
     return df
 
 def compute_oi_divergence(df):
-    # Simple divergence: price direction vs OI direction (using ATM proxy)
-    # We'll use the middle strike as reference for price direction
+    # Simple divergence: sign of OI change vs price change
     df["CE OI Divergence"] = np.sign(df["CE OI Change"]) * np.sign(df["CE Price Change"])
     df["PE OI Divergence"] = np.sign(df["PE OI Change"]) * np.sign(df["PE Price Change"])
-    df["CE OI Divergence"] = df["CE OI Divergence"].apply(lambda x: "Bullish" if x == 1 else ("Bearish" if x == -1 else "Neutral"))
-    df["PE OI Divergence"] = df["PE OI Divergence"].apply(lambda x: "Bullish" if x == 1 else ("Bearish" if x == -1 else "Neutral"))
+    df["CE OI Divergence"] = df["CE OI Divergence"].apply(
+        lambda x: "Bullish" if x == 1 else ("Bearish" if x == -1 else "Neutral")
+    )
+    df["PE OI Divergence"] = df["PE OI Divergence"].apply(
+        lambda x: "Bullish" if x == 1 else ("Bearish" if x == -1 else "Neutral")
+    )
     return df
 
 def compute_oi_shift(df, prev_df):
@@ -268,14 +275,12 @@ def generate_signals(df, spot, pcr_total, pcr_atm, net_delta):
     df["Signal"] = "Neutral"
     df["Signal Reason"] = ""
     for idx, row in df.iterrows():
-        # Basic signal
         if pcr_total > 1 and row["CE Delta"] > 0.5:
             df.at[idx, "Signal"] = "BUY CE"
             df.at[idx, "Signal Reason"] = "PCR >1 + high CE delta"
         elif pcr_total < 0.7 and row["PE Delta"] < -0.5:
             df.at[idx, "Signal"] = "BUY PE"
             df.at[idx, "Signal Reason"] = "PCR <0.7 + high PE delta"
-        # Strong signal (with buildup)
         if row["CE BuildUp"] == "CE Long Build-up" and pcr_total > 1:
             df.at[idx, "Signal"] = "STRONG BUY CE"
             df.at[idx, "Signal Reason"] = "Long build-up + bullish PCR"
@@ -292,9 +297,9 @@ def select_best_strike(df, spot):
     return best_ce, best_pe
 
 def get_oi_history(sec_id, strike, segment):
-    # Use historical_data to get OI for a specific strike (requires custom fetch)
+    # Placeholder: implement if you have historical OI for a specific strike
     # For now return mock data
-    return [1000, 1200, 1400, 1600, 1800]  # mock
+    return [1000, 1200, 1400, 1600, 1800]
 
 # =============================================================================
 # SIDEBAR
@@ -304,21 +309,27 @@ with st.sidebar:
     symbol = st.text_input("Symbol", value=st.session_state.symbol)
     if symbol != st.session_state.symbol:
         st.session_state.symbol = symbol
-        st.session_state.sec_id, st.session_state.segment = get_symbol_data(symbol)
+        sec_id, segment = get_symbol_data(symbol)
+        st.session_state.sec_id = sec_id
+        st.session_state.segment = segment
         if st.session_state.sec_id:
-            st.success(f"Symbol ID: {st.session_state.sec_id}")
+            st.success(f"✅ Symbol ID: {st.session_state.sec_id}")
         else:
-            st.error("Symbol not found")
-            st.stop()
-    # Get expiry list
+            st.error(f"❌ Symbol '{symbol}' not found. Please enter a valid symbol (e.g., NIFTY, BANKNIFTY).")
+            st.stop()   # Stop to avoid errors
+
+    # Get expiry list only if sec_id is valid
     if st.session_state.sec_id:
         expiry_list = fetch_expiry(st.session_state.sec_id)
         if expiry_list:
             expiry = st.selectbox("Expiry", expiry_list, index=0 if st.session_state.expiry is None else expiry_list.index(st.session_state.expiry) if st.session_state.expiry in expiry_list else 0)
             st.session_state.expiry = expiry
         else:
-            st.error("No expiry data")
+            st.error("No expiry data. Check your connection or token.")
             st.stop()
+    else:
+        st.stop()
+
     refresh = st.button("🔄 Refresh Data")
     if refresh:
         st.cache_data.clear()
@@ -335,12 +346,24 @@ with st.sidebar:
         st.write("**Asks**")
         st.dataframe(pd.DataFrame(depth["asks"][:5]), use_container_width=True)
 
-# Start websockets after we have sec_id
+# =============================================================================
+# START WEBSOCKETS (if symbol is valid)
+# =============================================================================
 if st.session_state.sec_id:
     start_websockets()
     subscribe_to_symbol(st.session_state.symbol)
 
-# Fetch data
+# =============================================================================
+# FETCH AND PROCESS DATA (with guards)
+# =============================================================================
+if st.session_state.sec_id is None:
+    st.error("No valid symbol selected. Check the sidebar.")
+    st.stop()
+
+if not st.session_state.expiry:
+    st.error("No expiry selected. Please choose an expiry from the dropdown.")
+    st.stop()
+
 raw_data = fetch_chain(st.session_state.sec_id, st.session_state.expiry)
 if not raw_data:
     st.error("No data from API. Check connection or token.")
@@ -375,7 +398,7 @@ st.session_state.previous_data = df.copy()
 # LAYERED UI
 # =============================================================================
 
-# Level 1 – Decision Bar (always on top)
+# Level 1 – Decision Bar
 st.markdown("---")
 col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 col1.metric("📍 Spot Price", f"{st.session_state.live_ltp:.2f}" if st.session_state.live_ltp else f"{spot:.2f}")
@@ -397,7 +420,7 @@ with st.container():
     c4.info(f"📊 ATM PCR: {pcr_atm:.2f}" if not np.isnan(pcr_atm) else "ATM PCR: N/A")
     c5.info(f"🔥 OI Strength: {'High' if pcr_total > 1.2 or pcr_total < 0.8 else 'Moderate'}")
 
-# Level 3 – Option Chain Table (scrollable)
+# Level 3 – Option Chain Table
 st.subheader("📋 Option Chain + Advanced OI")
 display_cols = [
     "Strike", "CE OI", "PE OI", "CE OI Change", "PE OI Change",
@@ -408,7 +431,6 @@ display_cols = [
     "CE OI Shift", "PE OI Shift",
     "CE Action", "PE Action"
 ]
-# Ensure columns exist
 available_cols = [c for c in display_cols if c in df.columns]
 st.dataframe(df[available_cols].style.format({
     "CE OI": "{:,.0f}",
@@ -423,11 +445,10 @@ st.dataframe(df[available_cols].style.format({
     "PE OI Velocity": "{:,.0f}",
 }), use_container_width=True, height=500)
 
-# Level 4 – Charts (side by side)
+# Level 4 – Charts
 st.subheader("📈 Charts")
 chart_col1, chart_col2 = st.columns(2)
 with chart_col1:
-    # OI Bar Chart
     fig_oi = px.bar(df, x="Strike", y=["CE OI", "PE OI"], barmode="group", title="Open Interest by Strike")
     for s in support[:2]:
         fig_oi.add_vline(x=s, line_dash="dash", line_color="green", annotation_text="Support")
@@ -436,13 +457,12 @@ with chart_col1:
     fig_oi.add_vline(x=spot, line_dash="dot", line_color="yellow", annotation_text="Spot")
     st.plotly_chart(fig_oi, use_container_width=True)
 with chart_col2:
-    # LTP Chart (premiums)
     ltp_df = df.melt(id_vars="Strike", value_vars=["CE LTP", "PE LTP"], var_name="Option", value_name="LTP")
     fig_ltp = px.line(ltp_df, x="Strike", y="LTP", color="Option", title="Option Premiums", markers=True)
     fig_ltp.add_vline(x=spot, line_dash="dot", line_color="yellow")
     st.plotly_chart(fig_ltp, use_container_width=True)
 
-# Candlestick Chart (from chart.py)
+# Candlestick Chart (if available)
 if st.session_state.sec_id:
     try:
         df_candle = get_candle_data(st.session_state.sec_id, st.session_state.segment)
@@ -472,7 +492,7 @@ if selected_strike:
         st.write(f"**PE BuildUp**: {row['PE BuildUp']}")
         st.write(f"**PE Action**: {row['PE Action']}")
 
-    # OI History (mock, but we can fetch from historical_data)
+    # OI History Graph
     st.write("**OI Velocity Graph** (last 5 intervals)")
     history_ce = get_oi_history(st.session_state.sec_id, selected_strike, "CE")
     history_pe = get_oi_history(st.session_state.sec_id, selected_strike, "PE")
@@ -485,10 +505,10 @@ if selected_strike:
 # Level 6 – Pro Insights
 st.subheader("🚀 Pro Insights")
 pro1, pro2, pro3, pro4 = st.columns(4)
-pro1.metric("FII Net Position (cr)", "1,240")  # placeholder
-pro2.metric("DII Net Position (cr)", "-320")   # placeholder
-pro3.metric("IV (ATM)", "14.8%")              # placeholder
-pro4.metric("Gamma Exposure", "₹4.2 Lakh / pt") # placeholder
+pro1.metric("FII Net Position (cr)", "1,240")  # Placeholder
+pro2.metric("DII Net Position (cr)", "-320")   # Placeholder
+pro3.metric("IV (ATM)", "14.8%")              # Placeholder
+pro4.metric("Gamma Exposure", "₹4.2 Lakh / pt") # Placeholder
 st.write(f"**Delta Exposure:** {net_delta:,.0f}")
 
 # Auto-refresh every 5 seconds (for live data)
