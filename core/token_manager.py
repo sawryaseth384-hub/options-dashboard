@@ -10,34 +10,39 @@ def get_headers():
     token = get_token()
     return {
         "access-token": token,
-        "client-id": st.secrets["1106299230"],
+        "client-id": st.secrets["1106299230"],   # ✅ सही
         "Content-Type": "application/json"
     }
 
 def get_token():
-    # 🔥 Already token hai → reuse karo
-    if "token" in st.session_state and time.time() < st.session_state.get("expiry", 0):
+    if "token" not in st.session_state:
+        st.session_state.token = None
+        st.session_state.expiry = 0
+        st.session_state.last_token_time = 0
+
+    # 🔥 reuse existing token
+    if st.session_state.token and time.time() < st.session_state.expiry:
         return st.session_state.token
 
-    # 🔥 warna naya generate karo
     return refresh_token()
 
 def refresh_token():
     try:
-        # 🛑 RATE LIMIT PROTECTION
-        last_gen = st.session_state.get("last_token_time", 0)
-        if time.time() - last_gen < 120:
-            st.warning("⏳ Wait 2 min before generating new token")
-            return st.session_state.get("token", None)
+        # 🛑 Rate limit (2 min)
+        if time.time() - st.session_state.last_token_time < 120:
+            st.warning("⏳ Wait 2 minutes before generating new token")
+            return st.session_state.token
 
-        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"].strip()).now()
+        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"].strip())
+        current_totp = totp.now()
 
         payload = {
             "dhanClientId": st.secrets["CLIENT_ID"],
             "pin": st.secrets["PIN"],
-            "totp": totp
+            "totp": current_totp
         }
 
+        # ✅ IMPORTANT FIX
         res = requests.post(AUTH_URL, data=payload)
 
         data = res.json()
@@ -60,7 +65,7 @@ def refresh_token():
             return token
 
         else:
-            st.error(f"❌ Token Failed: {data}")
+            st.error(f"❌ Token failed: {data}")
             return None
 
     except Exception as e:
