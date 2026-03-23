@@ -1,9 +1,12 @@
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 import streamlit as st
-from core.token_manager import get_headers
+import pandas as pd
+import plotly.express as px
+
+# ✅ FIX IMPORT ISSUE (Streamlit Cloud)
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from dhan_data.expiry import get_expiry
 from dhan_data.option_chain import get_option_chain
 
@@ -12,7 +15,7 @@ st.set_page_config(page_title="Dhan Options Dashboard", layout="wide")
 st.title("📊 Dhan Options Dashboard")
 
 # =========================
-# Symbol
+# SYMBOL
 # =========================
 symbol = st.text_input("Symbol", "NIFTY")
 SECURITY_ID = 13
@@ -20,109 +23,141 @@ SECURITY_ID = 13
 st.write(f"🔍 {symbol} security ID:", SECURITY_ID)
 
 # =========================
-# Expiry
+# EXPIRY
 # =========================
 expiry_list = []
 
 try:
     expiry_data = get_expiry(SECURITY_ID)
-    st.write("📦 Expiry Raw:", expiry_data)
 
-    if isinstance(expiry_data, list):
-        expiry_list = expiry_data
-    elif isinstance(expiry_data, dict) and "data" in expiry_data:
+    if expiry_data and "data" in expiry_data:
         expiry_list = expiry_data["data"]
 
 except Exception as e:
-    st.error(f"❌ Expiry Error: {e}")
+    st.error(f"Expiry Error: {e}")
 
-if not expiry_list:
-    st.warning("⚠️ No expiry found")
+if expiry_list:
+    expiry = st.selectbox("Select Expiry", expiry_list)
+else:
+    st.warning("No expiry data found")
     st.stop()
 
-expiry = st.selectbox("Select Expiry", expiry_list)
-
 # =========================
-# Option Chain
+# OPTION CHAIN
 # =========================
-import pandas as pd
-
 st.subheader("📊 Option Chain (OI + Greeks)")
 
 option_data = get_option_chain(SECURITY_ID, expiry)
 
-# =========================
-# SAFE EXTRACTION
-# =========================
-try:
-    main_data = option_data["data"]["data"]
-    oc = main_data["oc"]
-    spot = main_data["last_price"]
-except:
-    st.error("❌ Data structure issue")
+if not option_data or "data" not in option_data:
+    st.error("❌ No Data")
     st.stop()
 
+data = option_data["data"]
+
+spot = data.get("last_price", 0)
+st.success(f"📍 Spot Price: {spot}")
+
+oc = data.get("oc", {})
+
+# =========================
+# BUILD DATAFRAME
+# =========================
 rows = []
 
-for strike, values in oc.items():
-
-    ce = values.get("ce", {})
-    pe = values.get("pe", {})
-
-    ce_g = ce.get("greeks", {})
-    pe_g = pe.get("greeks", {})
+for strike, val in oc.items():
+    ce = val.get("ce", {})
+    pe = val.get("pe", {})
 
     rows.append({
         "Strike": float(strike),
 
-        # CE
         "CE OI": ce.get("oi", 0),
         "CE LTP": ce.get("last_price", 0),
-        "CE Delta": ce_g.get("delta", 0),
-        "CE Theta": ce_g.get("theta", 0),
+        "CE Delta": ce.get("greeks", {}).get("delta", 0),
+        "CE Theta": ce.get("greeks", {}).get("theta", 0),
 
-        # PE
         "PE LTP": pe.get("last_price", 0),
         "PE OI": pe.get("oi", 0),
-        "PE Delta": pe_g.get("delta", 0),
-        "PE Theta": pe_g.get("theta", 0),
+        "PE Delta": pe.get("greeks", {}).get("delta", 0),
+        "PE Theta": pe.get("greeks", {}).get("theta", 0),
     })
 
 df = pd.DataFrame(rows)
-
-# =========================
-# FILTER (REMOVE USELESS)
-# =========================
-df = df[
-    (df["CE OI"] > 0) | 
-    (df["PE OI"] > 0)
-]
-
-# =========================
-# ATM RANGE FILTER 🔥
-# =========================
-df = df[
-    (df["Strike"] > spot - 500) &
-    (df["Strike"] < spot + 500)
-]
-
-# =========================
-# SORT
-# =========================
 df = df.sort_values("Strike")
 
 # =========================
-# HIGHLIGHT OI 🔥
+# ATM MARK
 # =========================
-max_ce = df["CE OI"].max()
-max_pe = df["PE OI"].max()
-
-df["CE 🔥"] = df["CE OI"].apply(lambda x: "🔥" if x == max_ce else "")
-df["PE 🔥"] = df["PE OI"].apply(lambda x: "🔥" if x == max_pe else "")
+df["ATM"] = df["Strike"].apply(lambda x: "⭐" if abs(x - spot) < 50 else "")
 
 # =========================
-# DISPLAY
+# CE / PE STRENGTH
 # =========================
-st.success(f"📍 Spot Price: {spot}")
+df["CE 🔥"] = df["CE OI"] > df["PE OI"]
+df["PE 🔥"] = df["PE OI"] > df["CE OI"]
 
-st.dataframe(df, use_container_width=True)
+df["CE 🔥"] = df["CE 🔥"].apply(lambda x: "🔥" if x else "")
+df["PE 🔥"] = df["PE 🔥"].apply(lambda x: "🔥" if x else "")
+
+# =========================
+# PCR
+# =========================
+total_ce = df["CE OI"].sum()
+total_pe = df["PE OI"].sum()
+
+pcr = total_pe / total_ce if total_ce != 0 else 0
+
+st.metric("📊 PCR", round(pcr, 2))
+
+# =========================
+# FILTER
+# =========================
+min_strike, max_strike = st.slider(
+    "Strike Range",
+    int(df["Strike"].min()),
+    int(df["Strike"].max()),
+    (int(df["Strike"].min()), int(df["Strike"].max()))
+)
+
+df = df[(df["Strike"] >= min_strike) & (df["Strike"] <= max_strike)]
+
+# =========================
+# TABLE
+# =========================
+st.dataframe(
+    df.style.format({
+        "CE OI": "{:,.0f}",
+        "PE OI": "{:,.0f}",
+        "CE LTP": "{:.2f}",
+        "PE LTP": "{:.2f}",
+        "CE Delta": "{:.3f}",
+        "PE Delta": "{:.3f}",
+        "CE Theta": "{:.2f}",
+        "PE Theta": "{:.2f}",
+    }),
+    use_container_width=True
+)
+
+# =========================
+# OI CHART
+# =========================
+st.subheader("📊 OI Chart")
+
+fig = px.bar(
+    df,
+    x="Strike",
+    y=["CE OI", "PE OI"],
+    barmode="group"
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# =========================
+# LTP CHART
+# =========================
+st.subheader("📈 LTP Chart")
+
+chart_df = df[["Strike", "CE LTP", "PE LTP"]].set_index("Strike")
+
+st.line_chart(chart_df)
