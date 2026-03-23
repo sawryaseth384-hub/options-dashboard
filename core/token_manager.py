@@ -6,23 +6,29 @@ from datetime import datetime
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
+def get_headers():
+    token = get_token()
+    return {
+        "access-token": token,
+        "client-id": st.secrets["CLIENT_ID"],
+        "Content-Type": "application/json"
+    }
+
 def get_token():
     if "token" not in st.session_state:
         st.session_state.token = None
         st.session_state.expiry = 0
         st.session_state.last_call = 0
 
-    # ✅ STEP 1: agar token valid hai → reuse
+    # reuse valid token
     if st.session_state.token and time.time() < st.session_state.expiry:
         return st.session_state.token
 
-    # ✅ STEP 2: agar 2 min ke andar ho → force reuse
+    # prevent 2 min violation
     if time.time() - st.session_state.last_call < 120:
         return st.session_state.token
 
-    # ✅ STEP 3: warna naya token lo
     return refresh_token()
-
 
 def refresh_token():
     try:
@@ -35,7 +41,6 @@ def refresh_token():
             "totp": current_totp
         }
 
-        # ✅ IMPORTANT FIX
         res = requests.post(AUTH_URL, params=payload)
         data = res.json()
 
