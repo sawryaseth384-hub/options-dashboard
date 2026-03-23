@@ -12,7 +12,6 @@ st.title("📊 Dhan Options Dashboard")
 # =========================
 symbol = st.text_input("Symbol", "NIFTY")
 
-# For now fixed (NIFTY)
 SECURITY_ID = 13
 st.write(f"🔍 {symbol} security ID:", SECURITY_ID)
 
@@ -24,14 +23,18 @@ expiry_list = []
 try:
     expiry_data = get_expiry(SECURITY_ID)
 
-    # Debug
+    # DEBUG
     st.write("📦 Expiry Raw:", expiry_data)
 
-    if expiry_data and "data" in expiry_data:
+    # ✅ FIX (list + dict both handle)
+    if isinstance(expiry_data, list):
+        expiry_list = expiry_data
+
+    elif isinstance(expiry_data, dict) and "data" in expiry_data:
         expiry_list = expiry_data["data"]
 
 except Exception as e:
-    st.error(f"Expiry Error: {e}")
+    st.error(f"❌ Expiry Error: {e}")
 
 # =========================
 # Step 3: Select Expiry
@@ -39,7 +42,7 @@ except Exception as e:
 if expiry_list:
     expiry = st.selectbox("Select Expiry", expiry_list)
 else:
-    st.warning("No expiry data found")
+    st.warning("⚠️ No expiry data found")
     st.stop()
 
 # =========================
@@ -50,22 +53,20 @@ st.subheader("📊 Option Chain")
 try:
     option_data = get_option_chain(SECURITY_ID, expiry)
 
-    # 🔥 RAW DEBUG (MOST IMPORTANT)
+    # DEBUG
     st.write("📦 Raw API Response:", option_data)
 
     # =========================
-    # Handle Response
+    # Safe Handling
     # =========================
     if option_data is None:
         st.error("❌ No response from API")
 
-    elif "error" in option_data:
+    elif isinstance(option_data, dict) and "error" in option_data:
         st.error(f"❌ Error: {option_data['error']}")
 
-    elif "data" in option_data:
+    elif isinstance(option_data, dict) and "data" in option_data:
         st.success("✅ Option Chain Loaded")
-
-        # Show raw data
         st.json(option_data["data"])
 
     else:
