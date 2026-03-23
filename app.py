@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.path.abspath("."))
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 import streamlit as st
 from core.token_manager import get_headers
@@ -27,13 +27,10 @@ expiry_list = []
 try:
     expiry_data = get_expiry(SECURITY_ID)
 
-    # DEBUG
     st.write("📦 Expiry Raw:", expiry_data)
 
-    # ✅ FIX: handle both list & dict
     if isinstance(expiry_data, list):
         expiry_list = expiry_data
-
     elif isinstance(expiry_data, dict) and "data" in expiry_data:
         expiry_list = expiry_data["data"]
 
@@ -57,12 +54,8 @@ st.subheader("📊 Option Chain")
 try:
     option_data = get_option_chain(SECURITY_ID, expiry)
 
-    # DEBUG
     st.write("📦 Raw API Response:", option_data)
 
-    # =========================
-    # Safe Handling
-    # =========================
     if option_data is None:
         st.error("❌ No response from API")
 
