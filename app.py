@@ -45,9 +45,11 @@ if "segment" not in st.session_state:
     st.session_state.segment = None
 if "expiry" not in st.session_state:
     st.session_state.expiry = None
+if "error" not in st.session_state:
+    st.session_state.error = None
 
 # =============================================================================
-# START WEBSOCKETS (once)
+# WEBSOCKET HELPERS
 # =============================================================================
 def start_websockets():
     if not st.session_state.ws_started:
@@ -56,7 +58,7 @@ def start_websockets():
             start_depth_feed()
             st.session_state.ws_started = True
         except Exception as e:
-            st.error(f"WebSocket start error: {e}")
+            st.session_state.error = f"WebSocket start error: {e}"
 
 def subscribe_to_symbol(symbol):
     sec_id, segment = get_symbol_data(symbol)
@@ -67,12 +69,12 @@ def subscribe_to_symbol(symbol):
             subscribe_instrument(sec_id, segment)
             subscribe_depth(sec_id, segment)
         except Exception as e:
-            st.error(f"Subscribe error: {e}")
+            st.session_state.error = f"Subscribe error: {e}"
     else:
-        st.error(f"Symbol {symbol} not found")
+        st.session_state.error = f"Symbol {symbol} not found"
 
 # =============================================================================
-# DATA FETCHING (cached with validation)
+# DATA FETCHING (cached)
 # =============================================================================
 @st.cache_data(ttl=3600)
 def fetch_expiry(sec_id):
@@ -91,6 +93,8 @@ def fetch_chain(sec_id, exp):
         return {}
     data = get_option_chain(sec_id, exp)
     if not data or "data" not in data:
+        if data.get("error"):
+            st.session_state.error = f"Option chain error: {data['error']}"
         return {}
     inner = data["data"]
     if isinstance(inner, dict) and "data" in inner:
@@ -98,7 +102,7 @@ def fetch_chain(sec_id, exp):
     return inner
 
 # =============================================================================
-# PROCESS OPTION CHAIN
+# DATA PROCESSING FUNCTIONS
 # =============================================================================
 def process_option_chain(raw_data):
     spot = raw_data.get("last_price", 0)
@@ -297,12 +301,11 @@ def select_best_strike(df, spot):
     return best_ce, best_pe
 
 def get_oi_history(sec_id, strike, segment):
-    # Placeholder: implement if you have historical OI for a specific strike
-    # For now return mock data
+    # Placeholder – you can replace with actual historical OI fetch
     return [1000, 1200, 1400, 1600, 1800]
 
 # =============================================================================
-# SIDEBAR
+# SIDEBAR (no st.stop())
 # =============================================================================
 with st.sidebar:
     st.header("⚙️ Controls")
@@ -316,7 +319,6 @@ with st.sidebar:
             st.success(f"✅ Symbol ID: {st.session_state.sec_id}")
         else:
             st.error(f"❌ Symbol '{symbol}' not found. Please enter a valid symbol (e.g., NIFTY, BANKNIFTY).")
-            st.stop()   # Stop to avoid errors
 
     # Get expiry list only if sec_id is valid
     if st.session_state.sec_id:
@@ -325,17 +327,16 @@ with st.sidebar:
             expiry = st.selectbox("Expiry", expiry_list, index=0 if st.session_state.expiry is None else expiry_list.index(st.session_state.expiry) if st.session_state.expiry in expiry_list else 0)
             st.session_state.expiry = expiry
         else:
-            st.error("No expiry data. Check your connection or token.")
-            st.stop()
+            st.warning("No expiry data. Check your connection or token.")
     else:
-        st.stop()
+        st.info("Enter a valid symbol to load expiry dates.")
 
     refresh = st.button("🔄 Refresh Data")
     if refresh:
         st.cache_data.clear()
         st.rerun()
 
-    # Depth display
+    # Depth display (optional)
     st.divider()
     st.subheader("📊 Depth (Bid/Ask)")
     depth = get_depth()
@@ -347,170 +348,159 @@ with st.sidebar:
         st.dataframe(pd.DataFrame(depth["asks"][:5]), use_container_width=True)
 
 # =============================================================================
-# START WEBSOCKETS (if symbol is valid)
+# MAIN APP – only if we have valid data
 # =============================================================================
-if st.session_state.sec_id:
+if st.session_state.sec_id and st.session_state.expiry:
+    # Start websockets
     start_websockets()
     subscribe_to_symbol(st.session_state.symbol)
 
-# =============================================================================
-# FETCH AND PROCESS DATA (with guards)
-# =============================================================================
-if st.session_state.sec_id is None:
-    st.error("No valid symbol selected. Check the sidebar.")
-    st.stop()
+    # Fetch option chain
+    raw_data = fetch_chain(st.session_state.sec_id, st.session_state.expiry)
+    if not raw_data:
+        st.error("No data received from API. Check your connection or token.")
+    else:
+        # Process data
+        df, spot = process_option_chain(raw_data)
+        prev_df = st.session_state.previous_data
 
-if not st.session_state.expiry:
-    st.error("No expiry selected. Please choose an expiry from the dropdown.")
-    st.stop()
+        # Add derived columns
+        df = add_oi_change(df, prev_df)
+        df = detect_buildup(df)
+        df = detect_writing_vs_buying(df)
+        df = compute_oi_velocity(df, prev_df)
+        df = compute_oi_divergence(df)
+        df = compute_oi_shift(df, prev_df)
 
-raw_data = fetch_chain(st.session_state.sec_id, st.session_state.expiry)
-if not raw_data:
-    st.error("No data from API. Check connection or token.")
-    st.stop()
+        # Key indicators
+        atm_strike = df.iloc[(df["Strike"] - spot).abs().argsort()[:1]]["Strike"].values[0]
+        pcr_total, pcr_atm = compute_pcr(df, atm_strike)
+        resistance, support = compute_support_resistance(df)
+        max_pain = compute_max_pain(df, spot)
+        net_delta = compute_delta_exposure(df)
+        call_trap, put_trap = detect_traps(df, pcr_total, spot)
+        best_ce, best_pe = select_best_strike(df, spot)
+        df = generate_signals(df, spot, pcr_total, pcr_atm, net_delta)
 
-# Process data
-df, spot = process_option_chain(raw_data)
-prev_df = st.session_state.previous_data
+        # Save for next run
+        st.session_state.previous_data = df.copy()
 
-# Add derived columns
-df = add_oi_change(df, prev_df)
-df = detect_buildup(df)
-df = detect_writing_vs_buying(df)
-df = compute_oi_velocity(df, prev_df)
-df = compute_oi_divergence(df)
-df = compute_oi_shift(df, prev_df)
+        # ========== LAYERED UI ==========
+        # Level 1 – Decision Bar
+        st.markdown("---")
+        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+        col1.metric("📍 Spot Price", f"{st.session_state.live_ltp:.2f}" if st.session_state.live_ltp else f"{spot:.2f}")
+        col2.metric("📊 PCR", f"{pcr_total:.2f}")
+        col3.metric("🧠 Market Bias", "🟢 Bullish" if pcr_total > 1 else ("🔴 Bearish" if pcr_total < 0.7 else "⚪ Neutral"))
+        col4.metric("🎯 ATM Strike", f"{atm_strike}")
+        col5.metric("🔥 Best Strike", f"{best_ce} CE")
+        col6.metric("🚀 Final Signal", df[df["Signal"] != "Neutral"]["Signal"].iloc[0] if not df[df["Signal"] != "Neutral"].empty else "Neutral")
+        col7.metric("⚠️ Trap Alert", "Call Trap" if call_trap else ("Put Trap" if put_trap else "No Trap"))
+        st.markdown("---")
 
-# ATM strike
-atm_strike = df.iloc[(df["Strike"] - spot).abs().argsort()[:1]]["Strike"].values[0]
-pcr_total, pcr_atm = compute_pcr(df, atm_strike)
-resistance, support = compute_support_resistance(df)
-max_pain = compute_max_pain(df, spot)
-net_delta = compute_delta_exposure(df)
-call_trap, put_trap = detect_traps(df, pcr_total, spot)
-best_ce, best_pe = select_best_strike(df, spot)
-df = generate_signals(df, spot, pcr_total, pcr_atm, net_delta)
+        # Level 2 – Core Analysis
+        with st.container():
+            st.subheader("📌 Core Analysis")
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.success(f"🟢 Support: {support[0] if support else 'N/A'}")
+            c2.error(f"🔴 Resistance: {resistance[0] if resistance else 'N/A'}")
+            c3.info(f"🎯 Max Pain: {max_pain}")
+            c4.info(f"📊 ATM PCR: {pcr_atm:.2f}" if not np.isnan(pcr_atm) else "ATM PCR: N/A")
+            c5.info(f"🔥 OI Strength: {'High' if pcr_total > 1.2 or pcr_total < 0.8 else 'Moderate'}")
 
-# Update session state for next run
-st.session_state.previous_data = df.copy()
+        # Level 3 – Option Chain Table
+        st.subheader("📋 Option Chain + Advanced OI")
+        display_cols = [
+            "Strike", "CE OI", "PE OI", "CE OI Change", "PE OI Change",
+            "CE LTP", "PE LTP", "CE Delta", "PE Delta",
+            "CE BuildUp", "PE BuildUp", "Signal",
+            "CE OI Velocity", "PE OI Velocity",
+            "CE OI Divergence", "PE OI Divergence",
+            "CE OI Shift", "PE OI Shift",
+            "CE Action", "PE Action"
+        ]
+        available_cols = [c for c in display_cols if c in df.columns]
+        st.dataframe(df[available_cols].style.format({
+            "CE OI": "{:,.0f}",
+            "PE OI": "{:,.0f}",
+            "CE OI Change": "{:,.0f}",
+            "PE OI Change": "{:,.0f}",
+            "CE LTP": "{:.2f}",
+            "PE LTP": "{:.2f}",
+            "CE Delta": "{:.3f}",
+            "PE Delta": "{:.3f}",
+            "CE OI Velocity": "{:,.0f}",
+            "PE OI Velocity": "{:,.0f}",
+        }), use_container_width=True, height=500)
 
-# =============================================================================
-# LAYERED UI
-# =============================================================================
+        # Level 4 – Charts
+        st.subheader("📈 Charts")
+        chart_col1, chart_col2 = st.columns(2)
+        with chart_col1:
+            fig_oi = px.bar(df, x="Strike", y=["CE OI", "PE OI"], barmode="group", title="Open Interest by Strike")
+            for s in support[:2]:
+                fig_oi.add_vline(x=s, line_dash="dash", line_color="green", annotation_text="Support")
+            for r in resistance[:2]:
+                fig_oi.add_vline(x=r, line_dash="dash", line_color="red", annotation_text="Resistance")
+            fig_oi.add_vline(x=spot, line_dash="dot", line_color="yellow", annotation_text="Spot")
+            st.plotly_chart(fig_oi, use_container_width=True)
+        with chart_col2:
+            ltp_df = df.melt(id_vars="Strike", value_vars=["CE LTP", "PE LTP"], var_name="Option", value_name="LTP")
+            fig_ltp = px.line(ltp_df, x="Strike", y="LTP", color="Option", title="Option Premiums", markers=True)
+            fig_ltp.add_vline(x=spot, line_dash="dot", line_color="yellow")
+            st.plotly_chart(fig_ltp, use_container_width=True)
 
-# Level 1 – Decision Bar
-st.markdown("---")
-col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-col1.metric("📍 Spot Price", f"{st.session_state.live_ltp:.2f}" if st.session_state.live_ltp else f"{spot:.2f}")
-col2.metric("📊 PCR", f"{pcr_total:.2f}")
-col3.metric("🧠 Market Bias", "🟢 Bullish" if pcr_total > 1 else ("🔴 Bearish" if pcr_total < 0.7 else "⚪ Neutral"))
-col4.metric("🎯 ATM Strike", f"{atm_strike}")
-col5.metric("🔥 Best Strike", f"{best_ce} CE")
-col6.metric("🚀 Final Signal", df[df["Signal"] != "Neutral"]["Signal"].iloc[0] if not df[df["Signal"] != "Neutral"].empty else "Neutral")
-col7.metric("⚠️ Trap Alert", "Call Trap" if call_trap else ("Put Trap" if put_trap else "No Trap"))
-st.markdown("---")
+        # Candlestick Chart (if available)
+        if st.session_state.sec_id:
+            try:
+                df_candle = get_candle_data(st.session_state.sec_id, st.session_state.segment)
+                if df_candle is not None:
+                    fig_candle, trend = plot_candle(df_candle)
+                    st.subheader(f"🕯️ Candlestick (Spot) — Trend: {trend}")
+                    st.plotly_chart(fig_candle, use_container_width=True)
+            except Exception as e:
+                st.warning(f"Candlestick error: {e}")
 
-# Level 2 – Core Analysis
-with st.container():
-    st.subheader("📌 Core Analysis")
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.success(f"🟢 Support: {support[0] if support else 'N/A'}")
-    c2.error(f"🔴 Resistance: {resistance[0] if resistance else 'N/A'}")
-    c3.info(f"🎯 Max Pain: {max_pain}")
-    c4.info(f"📊 ATM PCR: {pcr_atm:.2f}" if not np.isnan(pcr_atm) else "ATM PCR: N/A")
-    c5.info(f"🔥 OI Strength: {'High' if pcr_total > 1.2 or pcr_total < 0.8 else 'Moderate'}")
+        # Level 5 – Strike Analysis
+        st.subheader("🔍 Strike Analysis")
+        selected_strike = st.selectbox("Select Strike", df["Strike"].tolist())
+        if selected_strike:
+            row = df[df["Strike"] == selected_strike].iloc[0]
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.write(f"**CE OI**: {row['CE OI']:,.0f}")
+                st.write(f"**CE LTP**: {row['CE LTP']:.2f}")
+                st.write(f"**CE Delta**: {row['CE Delta']:.3f}")
+                st.write(f"**CE BuildUp**: {row['CE BuildUp']}")
+                st.write(f"**CE Action**: {row['CE Action']}")
+            with col_b:
+                st.write(f"**PE OI**: {row['PE OI']:,.0f}")
+                st.write(f"**PE LTP**: {row['PE LTP']:.2f}")
+                st.write(f"**PE Delta**: {row['PE Delta']:.3f}")
+                st.write(f"**PE BuildUp**: {row['PE BuildUp']}")
+                st.write(f"**PE Action**: {row['PE Action']}")
 
-# Level 3 – Option Chain Table
-st.subheader("📋 Option Chain + Advanced OI")
-display_cols = [
-    "Strike", "CE OI", "PE OI", "CE OI Change", "PE OI Change",
-    "CE LTP", "PE LTP", "CE Delta", "PE Delta",
-    "CE BuildUp", "PE BuildUp", "Signal",
-    "CE OI Velocity", "PE OI Velocity",
-    "CE OI Divergence", "PE OI Divergence",
-    "CE OI Shift", "PE OI Shift",
-    "CE Action", "PE Action"
-]
-available_cols = [c for c in display_cols if c in df.columns]
-st.dataframe(df[available_cols].style.format({
-    "CE OI": "{:,.0f}",
-    "PE OI": "{:,.0f}",
-    "CE OI Change": "{:,.0f}",
-    "PE OI Change": "{:,.0f}",
-    "CE LTP": "{:.2f}",
-    "PE LTP": "{:.2f}",
-    "CE Delta": "{:.3f}",
-    "PE Delta": "{:.3f}",
-    "CE OI Velocity": "{:,.0f}",
-    "PE OI Velocity": "{:,.0f}",
-}), use_container_width=True, height=500)
+            st.write("**OI Velocity Graph** (last 5 intervals)")
+            history_ce = get_oi_history(st.session_state.sec_id, selected_strike, "CE")
+            history_pe = get_oi_history(st.session_state.sec_id, selected_strike, "PE")
+            fig_hist = go.Figure()
+            fig_hist.add_trace(go.Scatter(y=history_ce, name="CE OI", mode="lines+markers"))
+            fig_hist.add_trace(go.Scatter(y=history_pe, name="PE OI", mode="lines+markers"))
+            fig_hist.update_layout(title="OI History (Mock)", height=300)
+            st.plotly_chart(fig_hist, use_container_width=True)
 
-# Level 4 – Charts
-st.subheader("📈 Charts")
-chart_col1, chart_col2 = st.columns(2)
-with chart_col1:
-    fig_oi = px.bar(df, x="Strike", y=["CE OI", "PE OI"], barmode="group", title="Open Interest by Strike")
-    for s in support[:2]:
-        fig_oi.add_vline(x=s, line_dash="dash", line_color="green", annotation_text="Support")
-    for r in resistance[:2]:
-        fig_oi.add_vline(x=r, line_dash="dash", line_color="red", annotation_text="Resistance")
-    fig_oi.add_vline(x=spot, line_dash="dot", line_color="yellow", annotation_text="Spot")
-    st.plotly_chart(fig_oi, use_container_width=True)
-with chart_col2:
-    ltp_df = df.melt(id_vars="Strike", value_vars=["CE LTP", "PE LTP"], var_name="Option", value_name="LTP")
-    fig_ltp = px.line(ltp_df, x="Strike", y="LTP", color="Option", title="Option Premiums", markers=True)
-    fig_ltp.add_vline(x=spot, line_dash="dot", line_color="yellow")
-    st.plotly_chart(fig_ltp, use_container_width=True)
+        # Level 6 – Pro Insights
+        st.subheader("🚀 Pro Insights")
+        pro1, pro2, pro3, pro4 = st.columns(4)
+        pro1.metric("FII Net Position (cr)", "1,240")  # Placeholder
+        pro2.metric("DII Net Position (cr)", "-320")   # Placeholder
+        pro3.metric("IV (ATM)", "14.8%")              # Placeholder
+        pro4.metric("Gamma Exposure", "₹4.2 Lakh / pt") # Placeholder
+        st.write(f"**Delta Exposure:** {net_delta:,.0f}")
 
-# Candlestick Chart (if available)
-if st.session_state.sec_id:
-    try:
-        df_candle = get_candle_data(st.session_state.sec_id, st.session_state.segment)
-        if df_candle is not None:
-            fig_candle, trend = plot_candle(df_candle)
-            st.subheader(f"🕯️ Candlestick (Spot) — Trend: {trend}")
-            st.plotly_chart(fig_candle, use_container_width=True)
-    except Exception as e:
-        st.warning(f"Candlestick error: {e}")
+        # Optional auto-refresh (uncomment after everything works)
+        # time.sleep(5)
+        # st.rerun()
 
-# Level 5 – Strike Analysis
-st.subheader("🔍 Strike Analysis")
-selected_strike = st.selectbox("Select Strike", df["Strike"].tolist())
-if selected_strike:
-    row = df[df["Strike"] == selected_strike].iloc[0]
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.write(f"**CE OI**: {row['CE OI']:,.0f}")
-        st.write(f"**CE LTP**: {row['CE LTP']:.2f}")
-        st.write(f"**CE Delta**: {row['CE Delta']:.3f}")
-        st.write(f"**CE BuildUp**: {row['CE BuildUp']}")
-        st.write(f"**CE Action**: {row['CE Action']}")
-    with col_b:
-        st.write(f"**PE OI**: {row['PE OI']:,.0f}")
-        st.write(f"**PE LTP**: {row['PE LTP']:.2f}")
-        st.write(f"**PE Delta**: {row['PE Delta']:.3f}")
-        st.write(f"**PE BuildUp**: {row['PE BuildUp']}")
-        st.write(f"**PE Action**: {row['PE Action']}")
-
-    # OI History Graph
-    st.write("**OI Velocity Graph** (last 5 intervals)")
-    history_ce = get_oi_history(st.session_state.sec_id, selected_strike, "CE")
-    history_pe = get_oi_history(st.session_state.sec_id, selected_strike, "PE")
-    fig_hist = go.Figure()
-    fig_hist.add_trace(go.Scatter(y=history_ce, name="CE OI", mode="lines+markers"))
-    fig_hist.add_trace(go.Scatter(y=history_pe, name="PE OI", mode="lines+markers"))
-    fig_hist.update_layout(title="OI History (Mock)", height=300)
-    st.plotly_chart(fig_hist, use_container_width=True)
-
-# Level 6 – Pro Insights
-st.subheader("🚀 Pro Insights")
-pro1, pro2, pro3, pro4 = st.columns(4)
-pro1.metric("FII Net Position (cr)", "1,240")  # Placeholder
-pro2.metric("DII Net Position (cr)", "-320")   # Placeholder
-pro3.metric("IV (ATM)", "14.8%")              # Placeholder
-pro4.metric("Gamma Exposure", "₹4.2 Lakh / pt") # Placeholder
-st.write(f"**Delta Exposure:** {net_delta:,.0f}")
-
-# Auto-refresh every 5 seconds (for live data)
-time.sleep(5)
-st.rerun()
+else:
+    st.info("Please select a valid symbol and expiry to see the dashboard.")
