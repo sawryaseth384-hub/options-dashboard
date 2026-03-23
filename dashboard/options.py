@@ -6,7 +6,6 @@ BASE_URL = "https://api.dhan.co/v2"
 def get_option_chain(security_id, expiry):
 
     url = f"{BASE_URL}/optionchain/optionchain"
-
     headers = get_headers()
 
     payload = {
@@ -16,17 +15,19 @@ def get_option_chain(security_id, expiry):
     }
 
     try:
-        # ✅ IMPORTANT CHANGE (json= NOT data=)
         res = requests.post(url, headers=headers, json=payload)
 
-        # Debug print
-        print("Status:", res.status_code)
-        print("Response:", res.text)
+        # ✅ DEBUG (IMPORTANT)
+        print("STATUS:", res.status_code)
+        print("RAW RESPONSE:", res.text)
 
-        if res.status_code == 200:
-            return res.json()
-        else:
+        # ✅ SAFE JSON PARSE
+        try:
+            data = res.json()
+        except:
             return {"error": res.text}
+
+        return data
 
     except Exception as e:
         return {"error": str(e)}
