@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
 from core.token_manager import get_headers
@@ -12,21 +12,20 @@ st.set_page_config(page_title="Dhan Options Dashboard", layout="wide")
 st.title("📊 Dhan Options Dashboard")
 
 # =========================
-# Step 1: Symbol
+# Symbol
 # =========================
 symbol = st.text_input("Symbol", "NIFTY")
-
 SECURITY_ID = 13
+
 st.write(f"🔍 {symbol} security ID:", SECURITY_ID)
 
 # =========================
-# Step 2: Get Expiry
+# Expiry
 # =========================
 expiry_list = []
 
 try:
     expiry_data = get_expiry(SECURITY_ID)
-
     st.write("📦 Expiry Raw:", expiry_data)
 
     if isinstance(expiry_data, list):
@@ -37,38 +36,34 @@ try:
 except Exception as e:
     st.error(f"❌ Expiry Error: {e}")
 
-# =========================
-# Step 3: Select Expiry
-# =========================
-if expiry_list:
-    expiry = st.selectbox("Select Expiry", expiry_list)
-else:
-    st.warning("⚠️ No expiry data found")
+if not expiry_list:
+    st.warning("⚠️ No expiry found")
     st.stop()
 
+expiry = st.selectbox("Select Expiry", expiry_list)
+
 # =========================
-# Step 4: Option Chain
+# Option Chain
 # =========================
 st.subheader("📊 Option Chain")
 
 try:
     option_data = get_option_chain(SECURITY_ID, expiry)
-
     st.write("📦 Raw API Response:", option_data)
 
     if option_data is None:
-        st.error("❌ No response from API")
+        st.error("❌ No response")
 
     elif isinstance(option_data, dict) and "error" in option_data:
-        st.error(f"❌ Error: {option_data['error']}")
+        st.error(option_data["error"])
 
     elif isinstance(option_data, dict) and "data" in option_data:
         st.success("✅ Option Chain Loaded")
         st.json(option_data["data"])
 
     else:
-        st.warning("⚠️ Unexpected response format")
+        st.warning("⚠️ Unexpected format")
         st.write(option_data)
 
 except Exception as e:
-    st.error(f"❌ Option Chain Error: {e}")
+    st.error(f"❌ Option Error: {e}")
