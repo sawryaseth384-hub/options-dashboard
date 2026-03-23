@@ -1,32 +1,33 @@
 import requests
 from core.token_manager import get_headers
 
-BASE_URL = "https://api.dhan.co/v2"
+URL = "https://api.dhan.co/v2/optionchain"
 
 def get_option_chain(security_id, expiry):
-
-    # ✅ CORRECT ENDPOINT
-    url = f"{BASE_URL}/optionchain"
 
     headers = get_headers()
 
     payload = {
-        "UnderlyingScrip": security_id,
+        "UnderlyingScrip": int(security_id),
         "UnderlyingSeg": "IDX_I",
-        "Expiry": expiry
+        "Expiry": expiry   # 🔥 string hi rehne do
     }
 
     try:
-        res = requests.post(url, headers=headers, json=payload)
+        response = requests.post(
+            URL,
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
 
-        # 🔥 DEBUG
-        print("STATUS:", res.status_code)
-        print("RAW:", res.text)
+        data = response.json()
 
-        try:
-            return res.json()
-        except:
-            return {"error": res.text}
+        # 🔥 DEBUG (Streamlit me dikhao)
+        return {
+            "status_code": response.status_code,
+            "data": data
+        }
 
     except Exception as e:
         return {"error": str(e)}
