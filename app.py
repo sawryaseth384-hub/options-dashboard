@@ -1,39 +1,33 @@
 import streamlit as st
-import requests
-import pandas as pd
 from core.token_manager import get_headers
-from dhan_data.instruments import get_symbol_data
-from dhan_data.option_chain import get_option_chain
+from expiry import get_expiry
+from option_chain import get_option_chain
 
-st.set_page_config(page_title="Dhan Options", layout="wide")
+st.title("📊 Dhan Options Dashboard")
 
-symbol = st.text_input("Symbol", value="NIFTY").upper()
-if not symbol:
-    st.stop()
+symbol = st.text_input("Symbol", "NIFTY")
 
-security_id, segment = get_symbol_data(symbol)
-if security_id is None:
-    st.error("Invalid symbol")
-    st.stop()
+# ✅ fixed ID
+SECURITY_ID = 13
 
-# Fetch expiry list
-url = "https://api.dhan.co/v2/optionchain/expirylist"
-payload = {"UnderlyingScrip": security_id, "UnderlyingSeg": "IDX_I"}
-resp = requests.post(url, headers=get_headers(), json=payload)
-if resp.status_code != 200 or resp.json().get("status") != "success":
-    st.error("Expiry list failed")
-    st.stop()
+st.write("🔍 NIFTY security ID:", SECURITY_ID)
 
-expiries = resp.json().get("data", [])
-if not expiries:
-    st.error("No expiry dates")
-    st.stop()
+# 🔥 Step 1: Expiry
+expiry_list = get_expiry(SECURITY_ID)
 
-expiry = st.selectbox("Expiry", expiries)
-option_data = get_option_chain(security_id, segment, expiry)
+if expiry_list:
+    expiry = st.selectbox("Select Expiry", expiry_list)
 
-if option_data and "data" in option_data and "oc" in option_data["data"]:
-    oc = option_data["data"]["oc"]
-    st.json(oc)
+    # 🔥 Step 2: Option Chain
+    data = get_option_chain(SECURITY_ID, expiry)
+
+    st.subheader("Option Chain Raw Response")
+    st.json(data)
+
+    if "data" in data:
+        st.success("✅ Option Chain Loaded")
+    else:
+        st.warning("Option chain empty")
+
 else:
-    st.warning("Option chain empty")
+    st.error("❌ Expiry not loaded")
