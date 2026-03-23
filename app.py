@@ -1,16 +1,27 @@
-import requests
+import streamlit as st
+from dhan_data.expiry import get_expiry
+from dhan_data.option_chain import get_option_chain
 
-url = "https://api.dhan.co/v2/optionchain/optionchain"
+st.title("Dhan Options Dashboard")
 
-payload = {
-    "UnderlyingScrip": 13,
-    "UnderlyingSeg": "IDX_I",
-    "Expiry": expiry
-}
+# Fixed NIFTY ID
+security_id = 13
 
-res = requests.post(url, headers=get_headers(), json=payload)
+st.write(f"🔍 NIFTY security ID: {security_id}")
 
-data = res.json()
+# ✅ Step 1: expiry fetch
+expiry_list = get_expiry(security_id)
 
-st.write("Option Chain Raw Response")
-st.json(data)
+if expiry_list:
+    
+    # ✅ Step 2: user select
+    expiry = st.selectbox("Select Expiry", expiry_list)
+
+    # ✅ Step 3: API call (expiry now defined)
+    data = get_option_chain(security_id, expiry)
+
+    st.write("Option Chain Raw Response")
+    st.json(data)
+
+else:
+    st.error("❌ No expiry found")
