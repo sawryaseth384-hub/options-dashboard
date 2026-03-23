@@ -10,7 +10,7 @@ def get_headers():
     token = get_token()
     return {
         "access-token": token,
-        "client-id": st.secrets["1106299230"],   # ✅ सही
+        "client-id": st.secrets["1106299230"],   # ✅ FIXED
         "Content-Type": "application/json"
     }
 
@@ -20,7 +20,7 @@ def get_token():
         st.session_state.expiry = 0
         st.session_state.last_token_time = 0
 
-    # 🔥 reuse existing token
+    # ✅ reuse existing token
     if st.session_state.token and time.time() < st.session_state.expiry:
         return st.session_state.token
 
@@ -28,12 +28,11 @@ def get_token():
 
 def refresh_token():
     try:
-        # 🛑 Rate limit (2 min)
+        # 🛑 Rate limit fix
         if time.time() - st.session_state.last_token_time < 120:
-            st.warning("⏳ Wait 2 minutes before generating new token")
             return st.session_state.token
 
-        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"].strip())
+        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"])
         current_totp = totp.now()
 
         payload = {
@@ -42,15 +41,11 @@ def refresh_token():
             "totp": current_totp
         }
 
-        # ✅ IMPORTANT FIX
         res = requests.post(AUTH_URL, data=payload)
-
         data = res.json()
 
         if res.status_code == 200 and "accessToken" in data:
-            token = data["accessToken"]
-
-            st.session_state.token = token
+            st.session_state.token = data["accessToken"]
             st.session_state.last_token_time = time.time()
 
             expiry = data.get("expiryTime")
@@ -62,7 +57,7 @@ def refresh_token():
 
             st.success("✅ Token Generated")
 
-            return token
+            return st.session_state.token
 
         else:
             st.error(f"❌ Token failed: {data}")
