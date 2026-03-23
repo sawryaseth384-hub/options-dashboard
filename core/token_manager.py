@@ -15,36 +15,38 @@ def get_headers():
     }
 
 def get_token():
-    if "token" not in st.session_state:
-        st.session_state.token = None
-        st.session_state.expiry = 0
+    # 🔥 Already token hai → reuse karo
+    if "token" in st.session_state and time.time() < st.session_state.get("expiry", 0):
+        return st.session_state.token
 
-    if st.session_state.token is None or time.time() > st.session_state.expiry:
-        refresh_token()
-
-    return st.session_state.token
+    # 🔥 warna naya generate karo
+    return refresh_token()
 
 def refresh_token():
     try:
-        # 🔥 TOTP generate
-        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"].strip())
-        current_totp = totp.now()
+        # 🛑 RATE LIMIT PROTECTION
+        last_gen = st.session_state.get("last_token_time", 0)
+        if time.time() - last_gen < 120:
+            st.warning("⏳ Wait 2 min before generating new token")
+            return st.session_state.get("token", None)
+
+        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"].strip()).now()
 
         payload = {
             "dhanClientId": st.secrets["CLIENT_ID"],
             "pin": st.secrets["PIN"],
-            "totp": current_totp
+            "totp": totp
         }
 
-        # 🔥 IMPORTANT → data (not params)
         res = requests.post(AUTH_URL, data=payload)
-
-        print("RAW:", res.text)
 
         data = res.json()
 
         if res.status_code == 200 and "accessToken" in data:
-            st.session_state.token = data["accessToken"]
+            token = data["accessToken"]
+
+            st.session_state.token = token
+            st.session_state.last_token_time = time.time()
 
             expiry = data.get("expiryTime")
             if expiry:
@@ -55,10 +57,12 @@ def refresh_token():
 
             st.success("✅ Token Generated")
 
+            return token
+
         else:
             st.error(f"❌ Token Failed: {data}")
-            st.stop()
+            return None
 
     except Exception as e:
         st.error(f"❌ Error: {e}")
-        st.stop()
+        return None
