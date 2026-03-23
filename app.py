@@ -85,6 +85,39 @@ for strike, val in oc.items():
     })
 
 df = pd.DataFrame(rows).sort_values("Strike")
+# =========================
+# PRICE CHANGE (IMPORTANT)
+# =========================
+df["CE Price Change"] = df["CE LTP"].diff()
+df["PE Price Change"] = df["PE LTP"].diff()
+
+df["CE OI Change"] = df["CE OI"].diff()
+df["PE OI Change"] = df["PE OI"].diff()
+
+# =========================
+# BUILD-UP LOGIC
+# =========================
+def get_signal(row):
+    if row["CE Price Change"] > 0 and row["CE OI Change"] > 0:
+        return "🚀 CE Long Build-up"
+    elif row["PE Price Change"] > 0 and row["PE OI Change"] > 0:
+        return "🚀 PE Long Build-up"
+    elif row["CE Price Change"] < 0 and row["CE OI Change"] > 0:
+        return "📉 CE Short Build-up"
+    elif row["PE Price Change"] < 0 and row["PE OI Change"] > 0:
+        return "📉 PE Short Build-up"
+    else:
+        return ""
+
+df["BuildUp"] = df.apply(get_signal, axis=1)
+# =========================
+# FINAL TRADE SIGNAL
+# =========================
+df["Final Signal"] = df.apply(lambda x:
+    "🟢 BUY CE" if pcr > 1 and x["CE Delta"] > 0.5 else
+    "🔴 BUY PE" if pcr < 0.7 and x["PE Delta"] < -0.5 else
+    "",
+axis=1)
 
 # =========================
 # ATM
@@ -184,6 +217,8 @@ st.dataframe(
     }),
     use_container_width=True
 )
+"BuildUp": "{}",
+"Final Signal": "{}",
 
 # =========================
 # OI CHART
