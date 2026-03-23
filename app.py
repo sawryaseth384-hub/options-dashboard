@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# ✅ FIX IMPORT ISSUE (Streamlit Cloud)
+# ✅ IMPORT FIX (Streamlit Cloud)
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from dhan_data.expiry import get_expiry
@@ -23,42 +23,74 @@ SECURITY_ID = 13
 st.write(f"🔍 {symbol} security ID:", SECURITY_ID)
 
 # =========================
-# EXPIRY
+# EXPIRY FETCH
 # =========================
 expiry_list = []
 
 try:
     expiry_data = get_expiry(SECURITY_ID)
 
-    if expiry_data and "data" in expiry_data:
+    st.write("📦 Expiry Raw:", expiry_data)
+
+    # ✅ HANDLE BOTH CASES
+    if isinstance(expiry_data, list):
+        expiry_list = expiry_data
+
+    elif isinstance(expiry_data, dict) and "data" in expiry_data:
         expiry_list = expiry_data["data"]
 
 except Exception as e:
     st.error(f"Expiry Error: {e}")
 
-if expiry_list:
-    expiry = st.selectbox("Select Expiry", expiry_list)
-else:
+if not expiry_list:
     st.warning("No expiry data found")
     st.stop()
 
+expiry = st.selectbox("Select Expiry", expiry_list)
+
 # =========================
-# OPTION CHAIN
+# OPTION CHAIN FETCH
 # =========================
 st.subheader("📊 Option Chain (OI + Greeks)")
 
 option_data = get_option_chain(SECURITY_ID, expiry)
 
-if not option_data or "data" not in option_data:
-    st.error("❌ No Data")
+# =========================
+# SAFE DATA EXTRACTION
+# =========================
+if not option_data:
+    st.error("❌ No API response")
     st.stop()
 
-data = option_data["data"]
+if "error" in option_data:
+    st.error(option_data["error"])
+    st.stop()
 
+if "data" not in option_data:
+    st.error("❌ Invalid API format")
+    st.write(option_data)
+    st.stop()
+
+# 🔥 HANDLE NESTED DATA
+data_layer = option_data["data"]
+
+if isinstance(data_layer, dict) and "data" in data_layer:
+    data = data_layer["data"]
+else:
+    data = data_layer
+
+# =========================
+# SPOT + OC
+# =========================
 spot = data.get("last_price", 0)
 st.success(f"📍 Spot Price: {spot}")
 
 oc = data.get("oc", {})
+
+if not oc:
+    st.error("❌ No option chain data")
+    st.write(data)
+    st.stop()
 
 # =========================
 # BUILD DATAFRAME
@@ -84,6 +116,11 @@ for strike, val in oc.items():
     })
 
 df = pd.DataFrame(rows)
+
+if df.empty:
+    st.error("❌ DataFrame empty")
+    st.stop()
+
 df = df.sort_values("Strike")
 
 # =========================
@@ -111,7 +148,7 @@ pcr = total_pe / total_ce if total_ce != 0 else 0
 st.metric("📊 PCR", round(pcr, 2))
 
 # =========================
-# FILTER
+# STRIKE FILTER
 # =========================
 min_strike, max_strike = st.slider(
     "Strike Range",
@@ -123,7 +160,7 @@ min_strike, max_strike = st.slider(
 df = df[(df["Strike"] >= min_strike) & (df["Strike"] <= max_strike)]
 
 # =========================
-# TABLE
+# TABLE DISPLAY
 # =========================
 st.dataframe(
     df.style.format({
