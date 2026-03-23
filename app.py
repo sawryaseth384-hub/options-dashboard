@@ -102,7 +102,7 @@ for strike, val in oc.items():
     pe = val.get("pe", {})
 
     rows.append({
-        "Strike": float(strike),
+        "Strike": int(float(strike)),
 
         "CE OI": ce.get("oi", 0),
         "CE LTP": ce.get("last_price", 0),
