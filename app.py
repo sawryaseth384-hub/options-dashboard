@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath("."))
+
 import streamlit as st
 from core.token_manager import get_headers
 from dhan_data.expiry import get_expiry
@@ -26,7 +30,7 @@ try:
     # DEBUG
     st.write("📦 Expiry Raw:", expiry_data)
 
-    # ✅ FIX (list + dict both handle)
+    # ✅ FIX: handle both list & dict
     if isinstance(expiry_data, list):
         expiry_list = expiry_data
 
