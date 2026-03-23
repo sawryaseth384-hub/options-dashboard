@@ -45,25 +45,57 @@ expiry = st.selectbox("Select Expiry", expiry_list)
 # =========================
 # Option Chain
 # =========================
-st.subheader("📊 Option Chain")
+import pandas as pd
 
-try:
-    option_data = get_option_chain(SECURITY_ID, expiry)
-    st.write("📦 Raw API Response:", option_data)
+st.subheader("📊 Option Chain (OI + Greeks)")
 
-    if option_data is None:
-        st.error("❌ No response")
+option_data = get_option_chain(SECURITY_ID, expiry)
 
-    elif isinstance(option_data, dict) and "error" in option_data:
-        st.error(option_data["error"])
+if not option_data or "data" not in option_data:
+    st.error("❌ No data")
+    st.stop()
 
-    elif isinstance(option_data, dict) and "data" in option_data:
-        st.success("✅ Option Chain Loaded")
-        st.json(option_data["data"])
+data = option_data["data"]
+oc = data["oc"]
 
-    else:
-        st.warning("⚠️ Unexpected format")
-        st.write(option_data)
+rows = []
 
-except Exception as e:
-    st.error(f"❌ Option Error: {e}")
+for strike, values in oc.items():
+
+    ce = values.get("ce", {})
+    pe = values.get("pe", {})
+
+    rows.append({
+
+        # CE SIDE
+        "CE OI": ce.get("oi", 0),
+        "CE LTP": ce.get("last_price", 0),
+        "CE Delta": ce.get("delta", 0),
+        "CE Theta": ce.get("theta", 0),
+        "CE IV": ce.get("implied_volatility", 0),
+
+        # STRIKE
+        "Strike": float(strike),
+
+        # PE SIDE
+        "PE IV": pe.get("implied_volatility", 0),
+        "PE Theta": pe.get("theta", 0),
+        "PE Delta": pe.get("delta", 0),
+        "PE LTP": pe.get("last_price", 0),
+        "PE OI": pe.get("oi", 0),
+    })
+
+df = pd.DataFrame(rows)
+
+# Sort by strike
+df = df.sort_values("Strike")
+
+# 🔥 Highlight max OI
+max_ce = df["CE OI"].max()
+max_pe = df["PE OI"].max()
+
+df["CE Signal"] = df["CE OI"].apply(lambda x: "🔥" if x == max_ce else "")
+df["PE Signal"] = df["PE OI"].apply(lambda x: "🔥" if x == max_pe else "")
+
+# Show table
+st.dataframe(df, use_container_width=True)
