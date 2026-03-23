@@ -8,7 +8,7 @@ AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
 # Use these KEY names exactly as in secrets
 CLIENT_ID = st.secrets["1106299230"]
-PIN = st.secrets["009988"]
+PIN = st.secrets["210519"]
 TOTP_SECRET = st.secrets["DJUQ7WLHTV2ZVFHOTOORRT3VGHQJCMLV"]
 
 def get_headers():
