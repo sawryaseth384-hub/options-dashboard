@@ -217,8 +217,7 @@ st.dataframe(
     }),
     use_container_width=True
 )
-"BuildUp": "{}",
-"Final Signal": "{}",
+
 
 # =========================
 # OI CHART
