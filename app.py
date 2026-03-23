@@ -144,6 +144,15 @@ top_pe = df.nlargest(2, "PE OI")["Strike"].tolist()
 
 st.error(f"🔴 Resistance: {top_ce}")
 st.success(f"🟢 Support: {top_pe}")
+# =========================
+# MARKET BIAS
+# =========================
+if pcr > 1:
+    st.success("📈 Market Bullish")
+elif pcr < 0.7:
+    st.error("📉 Market Bearish")
+else:
+    st.warning("⚖️ Sideways Market")
 
 # =========================
 # MAX PAIN
@@ -171,6 +180,11 @@ min_strike, max_strike = st.slider(
 )
 
 filtered_df = df[(df["Strike"] >= min_strike) & (df["Strike"] <= max_strike)]
+# =========================
+# SMART STRIKE
+# =========================
+best_strike = df.loc[df["CE Delta"].sub(0.5).abs().idxmin(), "Strike"]
+st.info(f"🔥 Best Strike (Delta Based): {best_strike}")
 
 # =========================
 # ATM MODE BUTTON (FIXED)
@@ -183,6 +197,14 @@ if st.session_state.atm_mode:
         (df["Strike"] > spot - 300) &
         (df["Strike"] < spot + 300)
     ]
+    # =========================
+# SIGNAL SYSTEM
+# =========================
+df["Signal"] = df.apply(lambda row:
+    "🟢 BUY CE" if row["CE Delta"] > 0.5 and pcr > 1 else
+    "🔴 BUY PE" if row["PE Delta"] < -0.5 and pcr < 0.7 else
+    "",
+axis=1)
 
 # =========================
 # TABLE
@@ -216,22 +238,25 @@ st.plotly_chart(fig_oi, use_container_width=True)
 # =========================
 # LTP CHART (FIXED)
 # =========================
-st.subheader("📈 LTP Chart")
+st.subheader("📈 Smart LTP Chart")
 
-atm_range_slider = st.slider("ATM Range", 100, 1000, 500, step=50)
+atm_range_slider = st.slider("ATM Range", 100, 1000, 300)
 
-ltp_df = filtered_df[
-    (filtered_df["Strike"] > spot - atm_range_slider) &
-    (filtered_df["Strike"] < spot + atm_range_slider)
+ltp_df = df[
+    (df["Strike"] > spot - atm_range_slider) &
+    (df["Strike"] < spot + atm_range_slider)
 ]
 
 if not ltp_df.empty:
-    fig_ltp = px.line(
+    fig = px.line(
         ltp_df.melt(id_vars="Strike", value_vars=["CE LTP", "PE LTP"]),
         x="Strike",
         y="value",
-        color="variable"
+        color="variable",
+        markers=True
     )
-    st.plotly_chart(fig_ltp, use_container_width=True)
-else:
-    st.warning("No data in selected range")
+
+    # 🔥 ATM LINE
+    fig.add_vline(x=atm_strike, line_dash="dash", line_color="yellow")
+
+    st.plotly_chart(fig, use_container_width=True)
