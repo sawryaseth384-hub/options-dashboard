@@ -12,9 +12,12 @@ def get_expiry(security_id):
     }
 
     res = requests.post(url, headers=get_headers(), json=payload)
-    data = res.json()
 
-    if data.get("status") == "success":
-        return data.get("data", [])
-    else:
+    try:
+        data = res.json()
+        if data.get("status") == "success":
+            return data.get("data", [])
+        else:
+            return []
+    except:
         return []
