@@ -1,7 +1,7 @@
 import pyotp
 import streamlit as st
 
-# ✅ Correct (key name use करो)
+# ✅ Correct key
 TOTP_SECRET = st.secrets["DJUQ7WLHTV2ZVFHOTOORRT3VGHQJCMLV"]
 
 def get_totp():
