@@ -10,7 +10,7 @@ def get_headers():
     token = get_token()
     return {
         "access-token": token,
-        "client-id": st.secrets["CLIENT_ID"],   # ✅ FIXED
+        "client-id": st.secrets["CLIENT_ID"],
         "Content-Type": "application/json"
     }
 
@@ -19,9 +19,11 @@ def get_token():
         st.session_state.token = None
         st.session_state.expiry = 0
         st.session_state.last_call = 0
+        st.session_state.generated_at = None   # 🆕 add
 
-    # reuse token
+    # ✅ reuse token
     if st.session_state.token and time.time() < st.session_state.expiry:
+        show_token_status()   # 🆕 show info
         return st.session_state.token
 
     return refresh_token()
@@ -30,6 +32,7 @@ def refresh_token():
     try:
         # 🔥 rate limit fix
         if time.time() - st.session_state.last_call < 120:
+            show_token_status()
             return st.session_state.token
 
         totp = pyotp.TOTP(st.secrets["TOTP_SECRET"])
@@ -48,6 +51,9 @@ def refresh_token():
             st.session_state.token = data["accessToken"]
             st.session_state.last_call = time.time()
 
+            # 🆕 store generation time
+            st.session_state.generated_at = datetime.now()
+
             expiry = data.get("expiryTime")
             if expiry:
                 dt = datetime.fromisoformat(expiry)
@@ -56,12 +62,31 @@ def refresh_token():
                 st.session_state.expiry = time.time() + 23 * 3600
 
             st.success("✅ Token Generated")
+
+            show_token_status()  # 🆕 show info
+
             return st.session_state.token
 
         else:
-            st.error(f"Token failed: {data}")
+            st.error(f"❌ Token failed: {data}")
             return None
 
     except Exception as e:
-        st.error(f"Token Error: {e}")
+        st.error(f"❌ Token Error: {e}")
         return None
+
+
+# 🔥 NEW FUNCTION (IMPORTANT)
+def show_token_status():
+    if st.session_state.generated_at:
+        gen_time = st.session_state.generated_at.strftime("%H:%M:%S")
+        expiry_time = datetime.fromtimestamp(st.session_state.expiry).strftime("%H:%M:%S")
+
+        remaining = int(st.session_state.expiry - time.time())
+        minutes = remaining // 60
+
+        st.info(f"""
+🕒 Token Generated: {gen_time}  
+⏳ Expires At: {expiry_time}  
+⌛ Remaining: {minutes} min
+""")
