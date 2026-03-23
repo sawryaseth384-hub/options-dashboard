@@ -51,7 +51,7 @@ st.subheader("📊 Option Chain (OI + Greeks)")
 
 option_data = get_option_chain(SECURITY_ID, expiry)
 
-# 🔥 DEBUG
+# DEBUG
 st.write("RAW:", option_data)
 
 # =========================
@@ -60,7 +60,7 @@ st.write("RAW:", option_data)
 try:
     oc = option_data["data"]["data"]["oc"]
 except:
-    st.error("❌ 'oc' data not found")
+    st.error("❌ OC data not found")
     st.stop()
 
 rows = []
@@ -70,18 +70,24 @@ for strike, values in oc.items():
     ce = values.get("ce", {})
     pe = values.get("pe", {})
 
+    ce_greeks = ce.get("greeks", {})
+    pe_greeks = pe.get("greeks", {})
+
     rows.append({
+        # CE
         "CE OI": ce.get("oi", 0),
         "CE LTP": ce.get("last_price", 0),
-        "CE Delta": ce.get("greeks", {}).get("delta", 0),
-        "CE Theta": ce.get("greeks", {}).get("theta", 0),
+        "CE Delta": ce_greeks.get("delta", 0),
+        "CE Theta": ce_greeks.get("theta", 0),
         "CE IV": ce.get("implied_volatility", 0),
 
+        # Strike
         "Strike": float(strike),
 
+        # PE
         "PE IV": pe.get("implied_volatility", 0),
-        "PE Theta": pe.get("greeks", {}).get("theta", 0),
-        "PE Delta": pe.get("greeks", {}).get("delta", 0),
+        "PE Theta": pe_greeks.get("theta", 0),
+        "PE Delta": pe_greeks.get("delta", 0),
         "PE LTP": pe.get("last_price", 0),
         "PE OI": pe.get("oi", 0),
     })
