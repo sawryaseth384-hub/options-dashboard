@@ -15,9 +15,6 @@ def get_expiry(security_id):
 
     try:
         data = res.json()
-        if data.get("status") == "success":
-            return data.get("data", [])
-        else:
-            return []
+        return data.get("data", [])
     except:
         return []
