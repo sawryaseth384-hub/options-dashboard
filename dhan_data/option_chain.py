@@ -9,14 +9,12 @@ def get_option_chain(security_id, expiry):
     payload = {
         "UnderlyingScrip": int(security_id),
         "UnderlyingSeg": "IDX_I",
-        "Expiry": expiry   # string
+        "Expiry": expiry
     }
 
     res = requests.post(url, headers=get_headers(), json=payload)
 
     try:
-        data = res.json()
+        return res.json()
     except:
-        return {"error": res.text}
-
-    return data
+        return {"error": "Invalid response"}
