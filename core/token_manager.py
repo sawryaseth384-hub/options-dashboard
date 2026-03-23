@@ -10,10 +10,9 @@ def get_headers():
     token = get_token()
     return {
         "access-token": token,
-        "client-id": st.secrets["1106299230"],   # ✅ FIXED
+        "client-id": st.secrets["CLIENT_ID"],   # ✅ FIXED
         "Content-Type": "application/json"
     }
-
 def get_token():
     if "token" not in st.session_state:
         st.session_state.token = None
