@@ -51,12 +51,17 @@ st.subheader("📊 Option Chain (OI + Greeks)")
 
 option_data = get_option_chain(SECURITY_ID, expiry)
 
-if not option_data or "data" not in option_data:
-    st.error("❌ No data")
-    st.stop()
+# 🔥 DEBUG
+st.write("RAW:", option_data)
 
-data = option_data["data"]
-oc = data["oc"]
+# =========================
+# SAFE EXTRACTION
+# =========================
+try:
+    oc = option_data["data"]["data"]["oc"]
+except:
+    st.error("❌ 'oc' data not found")
+    st.stop()
 
 rows = []
 
@@ -66,36 +71,25 @@ for strike, values in oc.items():
     pe = values.get("pe", {})
 
     rows.append({
-
-        # CE SIDE
         "CE OI": ce.get("oi", 0),
         "CE LTP": ce.get("last_price", 0),
-        "CE Delta": ce.get("delta", 0),
-        "CE Theta": ce.get("theta", 0),
+        "CE Delta": ce.get("greeks", {}).get("delta", 0),
+        "CE Theta": ce.get("greeks", {}).get("theta", 0),
         "CE IV": ce.get("implied_volatility", 0),
 
-        # STRIKE
         "Strike": float(strike),
 
-        # PE SIDE
         "PE IV": pe.get("implied_volatility", 0),
-        "PE Theta": pe.get("theta", 0),
-        "PE Delta": pe.get("delta", 0),
+        "PE Theta": pe.get("greeks", {}).get("theta", 0),
+        "PE Delta": pe.get("greeks", {}).get("delta", 0),
         "PE LTP": pe.get("last_price", 0),
         "PE OI": pe.get("oi", 0),
     })
 
-df = pd.DataFrame(rows)
-
-# Sort by strike
-df = df.sort_values("Strike")
+df = pd.DataFrame(rows).sort_values("Strike")
 
 # 🔥 Highlight max OI
-max_ce = df["CE OI"].max()
-max_pe = df["PE OI"].max()
+df["CE Signal"] = df["CE OI"].apply(lambda x: "🔥" if x == df["CE OI"].max() else "")
+df["PE Signal"] = df["PE OI"].apply(lambda x: "🔥" if x == df["PE OI"].max() else "")
 
-df["CE Signal"] = df["CE OI"].apply(lambda x: "🔥" if x == max_ce else "")
-df["PE Signal"] = df["PE OI"].apply(lambda x: "🔥" if x == max_pe else "")
-
-# Show table
 st.dataframe(df, use_container_width=True)
