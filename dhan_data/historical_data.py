@@ -15,11 +15,10 @@ def get_historical(security_id, segment):
         time.sleep(wait)
     _last_hist_call = time.time()
 
-    # Use NSE_EQ for all (the chart endpoint works with NSE_EQ for both indices and stocks)
     exchange = "NSE_EQ"
     instrument = "INDEX" if segment in ["IDX_I", "I"] else "EQUITY"
     to_date = datetime.now()
-    from_date = to_date - timedelta(days=1)
+    from_date = to_date - timedelta(days=5)   # increase range
     payload = {
         "securityId": str(security_id),
         "exchangeSegment": exchange,
