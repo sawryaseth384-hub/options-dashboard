@@ -1,537 +1,95 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
 from dhan_data.instruments import get_symbol_data
 from dhan_data.expiry import get_expiry
 from dhan_data.option_chain import get_option_chain
 from dhan_data.market_quote import get_ltp
-from core.token_manager import get_headers
-
-# =========================
-# SAFE IMPORTS FOR LIVE FEEDS (fallback if modules missing)
-# =========================
-try:
-    from dhan_data.live_market_feed import start_live_feed, subscribe_instrument, get_live_ltp
-    from dhan_data.depth_feed import start_depth_feed, subscribe_depth, get_depth
-    feeds_available = True
-except ImportError as e:
-    st.warning(f"Live feed modules not available: {e}. Using static data only.")
-    # Dummy functions
-    def start_live_feed(): pass
-    def start_depth_feed(): pass
-    def subscribe_instrument(*args, **kwargs): pass
-    def subscribe_depth(*args, **kwargs): pass
-    def get_live_ltp(): return 0
-    def get_depth(): return {"bids": [], "asks": []}
-    feeds_available = False
+from dhan_data.historical_data import get_historical
+from dhan_data.chart import get_candle_data, plot_candle
+from dhan_data.live_market_feed import start_live_feed, subscribe_instrument, get_live_ltp
+from dhan_data.depth_feed import start_depth_feed, subscribe_depth, get_depth
+from core.token_manager import get_token
+import pandas as pd
 
 st.set_page_config(layout="wide")
-st.markdown("""
-    <style>
-        body {background-color: #0A0F18; color: white;}
-        .block-container {padding-top: 1rem;}
-        div[data-testid="metric-container"] {
-            background: #111827;
-            border-radius: 10px;
-            padding: 12px;
-            border: 1px solid #1F2937;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            min-width: 130px;
-        }
-        .stDataFrame {font-size: 0.8rem;}
-        .stSelectbox {margin-bottom: 1rem;}
-        hr {margin: 0.5rem 0;}
-    </style>
-""", unsafe_allow_html=True)
+st.title("🔬 Full Dhan Modules Scan")
 
-st.title("🧠 Smart Money Options Dashboard — Institutional Grade")
+# 1. Token
+st.subheader("1. Token")
+token = get_token()
+st.write(f"Token: {'✅' if token else '❌'}")
 
-# =========================
-# SESSION STATE
-# =========================
-if "previous_data" not in st.session_state:
-    st.session_state.previous_data = None
-if "sec_id" not in st.session_state:
-    st.session_state.sec_id = None
-if "segment" not in st.session_state:
-    st.session_state.segment = None
-if "expiry" not in st.session_state:
-    st.session_state.expiry = None
-if "symbol" not in st.session_state:
-    st.session_state.symbol = "NIFTY"
-if "feeds_started" not in st.session_state:
-    st.session_state.feeds_started = False
-
-# =========================
-# HARDCODED FALLBACKS FOR INDICES AND POPULAR STOCKS
-# =========================
-HARDCODED_IDS = {
-    "NIFTY": (13, "IDX_I"),
-    "BANKNIFTY": (25, "IDX_I"),
-    "FINNIFTY": (27, "IDX_I"),
-    "RELIANCE": (2885, "NSE_FNO"),
-    "TCS": (11536, "NSE_FNO"),
-    "HDFCBANK": (1333, "NSE_FNO"),
-    "INFY": (4083, "NSE_FNO"),
-    "ICICIBANK": (495, "NSE_FNO"),
-}
-
-def resolve_symbol(symbol):
-    sec_id, seg = get_symbol_data(symbol)
+# 2. Symbol resolution for all symbols
+st.subheader("2. Symbol Resolution")
+symbols = ["NIFTY", "BANKNIFTY", "FINNIFTY", "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK"]
+for sym in symbols:
+    sec_id, seg = get_symbol_data(sym)
     if sec_id is None:
-        if symbol in HARDCODED_IDS:
-            sec_id, seg = HARDCODED_IDS[symbol]
-            st.sidebar.info(f"Using fallback for {symbol}")
-        else:
-            st.sidebar.error(f"Symbol '{symbol}' not found.")
-    return sec_id, seg
+        # fallback
+        HARD = {
+            "NIFTY": (13, "IDX_I"),
+            "BANKNIFTY": (25, "IDX_I"),
+            "FINNIFTY": (27, "IDX_I"),
+            "RELIANCE": (2885, "NSE_FNO"),
+            "TCS": (11536, "NSE_FNO"),
+            "HDFCBANK": (1333, "NSE_FNO"),
+            "INFY": (4083, "NSE_FNO"),
+            "ICICIBANK": (495, "NSE_FNO"),
+        }
+        sec_id, seg = HARD.get(sym, (None, None))
+    st.write(f"{sym}: sec_id={sec_id}, segment={seg}")
 
-def get_next_thursday():
-    today = datetime.now()
-    days_ahead = (3 - today.weekday() + 7) % 7
-    if days_ahead == 0:
-        days_ahead = 7
-    next_thu = today + timedelta(days=days_ahead)
-    return next_thu.strftime("%Y-%m-%d")
+# 3. Expiry list for NIFTY
+st.subheader("3. Expiry List (NIFTY)")
+nifty_sec, nifty_seg = get_symbol_data("NIFTY") or (13, "IDX_I")
+exp_list = get_expiry(nifty_sec, nifty_seg)
+st.write(f"NIFTY expiry list (first 5): {exp_list[:5] if exp_list else 'empty'}")
 
-def get_spot_for(symbol):
-    sec_id, seg = resolve_symbol(symbol)
-    if sec_id:
-        try:
-            return get_ltp(sec_id, seg)
-        except:
-            return 0
-    return 0
-
-# =========================
-# DIAGNOSTIC FUNCTION
-# =========================
-def run_diagnostic():
-    st.subheader("🔬 Diagnostic Output")
-    # Token
-    from core.token_manager import get_token
-    token = get_token()
-    st.write(f"**Token:** {'✅' if token else '❌'}")
-
-    # Symbol resolution for all symbols
-    st.write("**Symbol Resolution:**")
-    sym_data = {}
-    for sym in HARDCODED_IDS.keys():
-        sec_id, seg = resolve_symbol(sym)
-        sym_data[sym] = (sec_id, seg)
-        st.write(f"{sym}: sec_id={sec_id}, segment={seg}")
-
-    # Expiry lists
-    st.write("**Expiry Lists (first 3):**")
-    for sym, (sec_id, seg) in sym_data.items():
-        if sec_id:
-            try:
-                exp_list = get_expiry(sec_id, seg)
-                st.write(f"{sym}: {exp_list[:3] if exp_list else 'empty'}")
-            except Exception as e:
-                st.write(f"{sym}: error - {e}")
-
-    # Option chain sample (first expiry)
-    st.write("**Option Chain Sample (first expiry):**")
-    for sym, (sec_id, seg) in sym_data.items():
-        if sec_id:
-            exp_list = get_expiry(sec_id, seg)
-            if exp_list:
-                expiry = exp_list[0]
-                data = get_option_chain(sec_id, expiry, seg)
-                if data and "data" in data:
-                    spot = data["data"].get("last_price")
-                    oc = data["data"].get("oc", {})
-                    strikes = sorted([int(float(s)) for s in oc.keys()])
-                    st.write(f"{sym} expiry {expiry}: spot={spot}, strikes={len(strikes)}")
-                    if strikes:
-                        st.write(f"  First 5: {strikes[:5]}, Last 5: {strikes[-5:]}")
-                        if spot:
-                            near = [s for s in strikes if abs(s - spot) <= 500]
-                            st.write(f"  Near spot {spot}: {near[:5]}")
-                else:
-                    st.write(f"{sym}: option chain fetch failed")
-            else:
-                st.write(f"{sym}: no expiry list")
-    st.info("Diagnostic complete. Scroll up to see all details.")
-
-# =========================
-# SIDEBAR CONTROLS
-# =========================
-with st.sidebar:
-    st.header("⚙️ Controls")
-    show_diagnostic = st.checkbox("🔍 Show Diagnostic Info", value=False)
-
-    symbol_list = list(HARDCODED_IDS.keys())
-    symbol = st.selectbox("Symbol", symbol_list, index=symbol_list.index(st.session_state.symbol) if st.session_state.symbol in symbol_list else 0)
-    if symbol != st.session_state.symbol:
-        st.session_state.symbol = symbol
-        sec_id, seg = resolve_symbol(symbol)
-        st.session_state.sec_id = sec_id
-        st.session_state.segment = seg
-        if sec_id:
-            st.success(f"✅ {symbol} → ID: {sec_id}, Segment: {seg}")
-        else:
-            st.error(f"❌ Symbol '{symbol}' not found.")
-            st.session_state.sec_id = None
-            st.session_state.expiry = None
-
-    # Force initial resolution if sec_id is still None
-    if st.session_state.sec_id is None:
-        sec_id, seg = resolve_symbol(st.session_state.symbol)
-        st.session_state.sec_id = sec_id
-        st.session_state.segment = seg
-        if sec_id:
-            st.success(f"✅ {st.session_state.symbol} → ID: {sec_id}, Segment: {seg}")
-
-    if st.session_state.sec_id:
-        expiry_list = []
-        try:
-            exp_data = get_expiry(st.session_state.sec_id, st.session_state.segment)
-            if isinstance(exp_data, list):
-                expiry_list = exp_data
-            elif isinstance(exp_data, dict) and "data" in exp_data:
-                expiry_list = exp_data["data"]
-        except Exception as e:
-            st.warning(f"Expiry fetch error: {e}")
-
-        if expiry_list:
-            if st.session_state.expiry not in expiry_list:
-                st.session_state.expiry = expiry_list[0]
-            expiry = st.selectbox("Expiry", expiry_list, index=expiry_list.index(st.session_state.expiry))
-            st.session_state.expiry = expiry
-        else:
-            fallback = get_next_thursday()
-            st.warning(f"No expiry from API. Using fallback: {fallback}")
-            st.session_state.expiry = fallback
-            st.write(f"Using expiry: {st.session_state.expiry}")
-
-    if st.button("🔄 Refresh"):
-        st.cache_data.clear()
-        st.rerun()
-
-    # Depth display (optional)
-    st.divider()
-    st.subheader("📊 Depth (Bid/Ask)")
-    depth = get_depth()
-    if depth["bids"]:
-        st.write("**Bids**")
-        st.dataframe(pd.DataFrame(depth["bids"][:5]), use_container_width=True)
-    if depth["asks"]:
-        st.write("**Asks**")
-        st.dataframe(pd.DataFrame(depth["asks"][:5]), use_container_width=True)
-
-# =========================
-# DIAGNOSTIC OUTPUT (if toggled)
-# =========================
-if show_diagnostic:
-    run_diagnostic()
-    st.markdown("---")
-
-# =========================
-# TOP BAR – NIFTY & BANKNIFTY SPOT PRICES (static fallback)
-# =========================
-nifty_spot = get_spot_for("NIFTY")
-banknifty_spot = get_spot_for("BANKNIFTY")
-col1, col2 = st.columns(2)
-col1.metric("🇮🇳 NIFTY", f"{nifty_spot:,.2f}" if nifty_spot else "N/A")
-col2.metric("🏦 BANKNIFTY", f"{banknifty_spot:,.2f}" if banknifty_spot else "N/A")
-st.markdown("---")
-
-# =========================
-# MAIN DASHBOARD (only if data available)
-# =========================
-if st.session_state.sec_id and st.session_state.expiry:
-    # Start live feeds only once and only if available
-    if feeds_available and not st.session_state.feeds_started:
-        start_live_feed()
-        start_depth_feed()
-        st.session_state.feeds_started = True
-    if feeds_available:
-        subscribe_instrument(st.session_state.sec_id, st.session_state.segment)
-        subscribe_depth(st.session_state.sec_id, st.session_state.segment)
-
-    @st.cache_data(ttl=60)
-    def fetch_chain(sec_id, expiry, segment):
-        return get_option_chain(sec_id, expiry, segment)
-
-    data = fetch_chain(st.session_state.sec_id, st.session_state.expiry, st.session_state.segment)
-    if not data or "data" not in data:
-        st.error("No option chain data. Check symbol/expiry.")
-        st.stop()
-
-    # Process raw data
-    raw = data["data"]
-    spot = raw.get("last_price", 0)
-    oc = raw.get("oc", {})
-
-    rows = []
-    for strike, val in oc.items():
-        ce = val.get("ce", {})
-        pe = val.get("pe", {})
-        rows.append({
-            "Strike": int(float(strike)),
-            "CE OI": ce.get("oi", 0),
-            "CE LTP": ce.get("last_price", 0),
-            "CE Delta": ce.get("greeks", {}).get("delta", 0),
-            "CE Gamma": ce.get("greeks", {}).get("gamma", 0),
-            "CE Theta": ce.get("greeks", {}).get("theta", 0),
-            "CE Vega": ce.get("greeks", {}).get("vega", 0),
-            "PE OI": pe.get("oi", 0),
-            "PE LTP": pe.get("last_price", 0),
-            "PE Delta": pe.get("greeks", {}).get("delta", 0),
-            "PE Gamma": pe.get("greeks", {}).get("gamma", 0),
-            "PE Theta": pe.get("greeks", {}).get("theta", 0),
-            "PE Vega": pe.get("greeks", {}).get("vega", 0),
-        })
-    df = pd.DataFrame(rows).sort_values("Strike")
-    prev_df = st.session_state.previous_data
-
-    # Advanced indicators (OI change, etc.) – same as before
-    if prev_df is not None:
-        merged = df.merge(prev_df, on="Strike", suffixes=("", "_prev"))
-        df["CE OI Change"] = merged["CE OI"] - merged["CE OI_prev"]
-        df["PE OI Change"] = merged["PE OI"] - merged["PE OI_prev"]
-        df["CE Price Change"] = merged["CE LTP"] - merged["CE LTP_prev"]
-        df["PE Price Change"] = merged["PE LTP"] - merged["PE LTP_prev"]
+# 4. Option chain for NIFTY (first expiry)
+st.subheader("4. Option Chain (NIFTY, first expiry)")
+if exp_list:
+    expiry = exp_list[0]
+    oc_data = get_option_chain(nifty_sec, expiry, nifty_seg)
+    if oc_data and "data" in oc_data:
+        spot = oc_data["data"].get("last_price")
+        oc = oc_data["data"].get("oc", {})
+        strikes = sorted([int(float(s)) for s in oc.keys()])
+        st.write(f"Expiry {expiry}: spot={spot}, strikes={len(strikes)}")
+        st.write(f"First 5 strikes: {strikes[:5]}, Last 5: {strikes[-5:]}")
     else:
-        df["CE OI Change"] = 0
-        df["PE OI Change"] = 0
-        df["CE Price Change"] = 0
-        df["PE Price Change"] = 0
+        st.error(f"Option chain fetch failed: {oc_data}")
 
-    def classify_buildup(row):
-        if row["CE OI Change"] > 0 and row["CE Price Change"] > 0:
-            ce_type = "CE Long Build-up"
-        elif row["CE OI Change"] > 0 and row["CE Price Change"] < 0:
-            ce_type = "CE Short Build-up"
-        elif row["CE OI Change"] < 0 and row["CE Price Change"] > 0:
-            ce_type = "CE Short Covering"
-        elif row["CE OI Change"] < 0 and row["CE Price Change"] < 0:
-            ce_type = "CE Long Unwinding"
-        else:
-            ce_type = "CE Neutral"
-        if row["PE OI Change"] > 0 and row["PE Price Change"] > 0:
-            pe_type = "PE Long Build-up"
-        elif row["PE OI Change"] > 0 and row["PE Price Change"] < 0:
-            pe_type = "PE Short Build-up"
-        elif row["PE OI Change"] < 0 and row["PE Price Change"] > 0:
-            pe_type = "PE Short Covering"
-        elif row["PE OI Change"] < 0 and row["PE Price Change"] < 0:
-            pe_type = "PE Long Unwinding"
-        else:
-            pe_type = "PE Neutral"
-        return ce_type, pe_type
+# 5. Live LTP
+st.subheader("5. Live LTP (WebSocket)")
+start_live_feed()
+subscribe_instrument(nifty_sec, nifty_seg)
+ltp = get_live_ltp()
+st.write(f"Live LTP: {ltp} (should be non‑zero after a few seconds)")
 
-    df[["CE BuildUp", "PE BuildUp"]] = df.apply(lambda r: pd.Series(classify_buildup(r)), axis=1)
+# 6. Depth feed
+st.subheader("6. Depth Feed")
+start_depth_feed()
+subscribe_depth(nifty_sec, nifty_seg)
+depth = get_depth()
+st.write(f"Depth bids: {depth['bids'][:2] if depth['bids'] else 'empty'}")
+st.write(f"Depth asks: {depth['asks'][:2] if depth['asks'] else 'empty'}")
 
-    def classify_action(row):
-        ce_action = "Writing" if (row["CE OI Change"] > 0 and row["CE Price Change"] < 0) else ("Buying" if (row["CE OI Change"] > 0 and row["CE Price Change"] > 0) else "Neutral")
-        pe_action = "Writing" if (row["PE OI Change"] > 0 and row["PE Price Change"] < 0) else ("Buying" if (row["PE OI Change"] > 0 and row["PE Price Change"] > 0) else "Neutral")
-        return ce_action, pe_action
+# 7. Historical data
+st.subheader("7. Historical Data (5‑minute)")
+hist = get_historical(nifty_sec, nifty_seg)
+st.write(f"Historical data points: {len(hist) if hist else 0}")
 
-    df[["CE Action", "PE Action"]] = df.apply(lambda r: pd.Series(classify_action(r)), axis=1)
-
-    def writers_vs_buyers(row):
-        ce_val = 1 if row["CE Action"] == "Buying" else (-1 if row["CE Action"] == "Writing" else 0)
-        pe_val = 1 if row["PE Action"] == "Buying" else (-1 if row["PE Action"] == "Writing" else 0)
-        net = ce_val + pe_val
-        if net >= 2:
-            return "🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢"
-        elif net == 1:
-            return "🟢🟢🟢🟢🟢⚪⚪⚪⚪⚪"
-        elif net == 0:
-            return "⚪⚪⚪⚪⚪⚪⚪⚪⚪⚪"
-        elif net == -1:
-            return "🔴🔴🔴🔴🔴⚪⚪⚪⚪⚪"
-        else:
-            return "🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴"
-    df["Writers vs Buyers"] = df.apply(writers_vs_buyers, axis=1)
-
-    if prev_df is not None:
-        df["CE OI Velocity"] = df["CE OI"] - prev_df["CE OI"]
-        df["PE OI Velocity"] = df["PE OI"] - prev_df["PE OI"]
-    else:
-        df["CE OI Velocity"] = 0
-        df["PE OI Velocity"] = 0
-
-    df["CE OI Divergence"] = np.sign(df["CE OI Change"]) * np.sign(df["CE Price Change"])
-    df["PE OI Divergence"] = np.sign(df["PE OI Change"]) * np.sign(df["PE Price Change"])
-    df["CE OI Divergence"] = df["CE OI Divergence"].apply(lambda x: "Bullish" if x == 1 else ("Bearish" if x == -1 else "Neutral"))
-    df["PE OI Divergence"] = df["PE OI Divergence"].apply(lambda x: "Bullish" if x == 1 else ("Bearish" if x == -1 else "Neutral"))
-
-    if prev_df is not None:
-        max_ce_prev = prev_df.loc[prev_df["CE OI"].idxmax(), "Strike"]
-        max_ce_curr = df.loc[df["CE OI"].idxmax(), "Strike"]
-        max_pe_prev = prev_df.loc[prev_df["PE OI"].idxmax(), "Strike"]
-        max_pe_curr = df.loc[df["PE OI"].idxmax(), "Strike"]
-        df["CE OI Shift"] = max_ce_curr - max_ce_prev
-        df["PE OI Shift"] = max_pe_curr - max_pe_prev
-    else:
-        df["CE OI Shift"] = 0
-        df["PE OI Shift"] = 0
-
-    st.session_state.previous_data = df.copy()
-
-    # Key Metrics
-    total_ce = df["CE OI"].sum()
-    total_pe = df["PE OI"].sum()
-    pcr = total_pe / total_ce if total_ce else 0
-    atm_idx = (df["Strike"] - spot).abs().argsort()[0]
-    atm_strike = df.iloc[atm_idx]["Strike"]
-    support = df.nlargest(3, "PE OI")["Strike"].tolist()
-    resistance = df.nlargest(3, "CE OI")["Strike"].tolist()
-
-    strikes = df["Strike"].values
-    pain_values = []
-    for strike in strikes:
-        ce_pain = ((df["Strike"] - strike).clip(lower=0) * df["CE OI"]).sum()
-        pe_pain = ((strike - df["Strike"]).clip(lower=0) * df["PE OI"]).sum()
-        pain_values.append((strike, ce_pain + pe_pain))
-    max_pain = min(pain_values, key=lambda x: x[1])[0]
-
-    df["CE Delta Exposure"] = df["CE Delta"] * df["CE OI"]
-    df["PE Delta Exposure"] = -df["PE Delta"] * df["PE OI"]
-    net_delta = df["CE Delta Exposure"].sum() + df["PE Delta Exposure"].sum()
-
-    max_ce_strike = df.loc[df["CE OI"].idxmax(), "Strike"]
-    max_pe_strike = df.loc[df["PE OI"].idxmax(), "Strike"]
-    call_trap = (spot > max_ce_strike) and (pcr < 0.7)
-    put_trap = (spot < max_pe_strike) and (pcr > 1.3)
-
-    best_ce = df.loc[df["CE Delta"].sub(0.5).abs().idxmin(), "Strike"]
-    best_pe = df.loc[df["PE Delta"].add(0.5).abs().idxmin(), "Strike"]
-
-    df["Signal"] = "Neutral"
-    for idx, row in df.iterrows():
-        if pcr > 1 and row["CE Delta"] > 0.5:
-            df.at[idx, "Signal"] = "BUY CE"
-        elif pcr < 0.7 and row["PE Delta"] < -0.5:
-            df.at[idx, "Signal"] = "BUY PE"
-        if row["CE BuildUp"] == "CE Long Build-up" and pcr > 1:
-            df.at[idx, "Signal"] = "STRONG BUY CE"
-        if row["PE BuildUp"] == "PE Long Build-up" and pcr < 0.7:
-            df.at[idx, "Signal"] = "STRONG BUY PE"
-    final_signal = df[df["Signal"] != "Neutral"]["Signal"].iloc[0] if not df[df["Signal"] != "Neutral"].empty else "Neutral"
-
-    atm_pcr = df.loc[df['Strike']==atm_strike, 'PE OI'].values[0] / df.loc[df['Strike']==atm_strike, 'CE OI'].values[0] if atm_strike in df['Strike'].values else 0
-
-    # =========================
-    # LAYERED UI
-    # =========================
-    st.markdown("---")
-    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-    live_price = get_live_ltp() if feeds_available else 0
-    col1.metric("📍 Spot", f"{live_price:.2f}" if live_price else f"{spot:.2f}")
-    col2.metric("📊 PCR", f"{pcr:.2f}")
-    col3.metric("🧠 Bias", "Bullish" if pcr > 1 else ("Bearish" if pcr < 0.7 else "Neutral"))
-    col4.metric("🎯 ATM", f"{atm_strike}")
-    col5.metric("🔥 Best", f"{best_ce} CE")
-    col6.metric("🚀 Signal", final_signal)
-    col7.metric("⚠️ Trap", "Call Trap" if call_trap else ("Put Trap" if put_trap else "No"))
-    st.markdown("---")
-
-    st.subheader("📌 Core Analysis")
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.success(f"🟢 Support: {support[0] if support else 'N/A'}")
-    c2.error(f"🔴 Resistance: {resistance[0] if resistance else 'N/A'}")
-    c3.info(f"🎯 Max Pain: {max_pain}")
-    c4.info(f"📊 ATM PCR: {atm_pcr:.2f}" if atm_pcr else "N/A")
-    c5.info(f"🔥 OI Strength: {'High' if pcr > 1.2 or pcr < 0.8 else 'Moderate'}")
-
-    # Option Chain Table with a helpful note to scroll
-    st.subheader("📋 Option Chain + Advanced OI")
-    st.info("👉 **Scroll down inside the table to see ATM strikes** (the real action is lower down).")
-    display_cols = [
-        "Strike", "CE OI", "PE OI", "CE OI Change", "PE OI Change",
-        "CE LTP", "PE LTP", "CE Delta", "PE Delta",
-        "CE BuildUp", "PE BuildUp", "Signal",
-        "CE OI Velocity", "PE OI Velocity",
-        "CE OI Divergence", "PE OI Divergence",
-        "CE OI Shift", "PE OI Shift",
-        "CE Action", "PE Action", "Writers vs Buyers"
-    ]
-    available = [c for c in display_cols if c in df.columns]
-    st.dataframe(df[available].style.format({
-        "CE OI": "{:,.0f}", "PE OI": "{:,.0f}",
-        "CE OI Change": "{:,.0f}", "PE OI Change": "{:,.0f}",
-        "CE LTP": "{:.2f}", "PE LTP": "{:.2f}",
-        "CE Delta": "{:.3f}", "PE Delta": "{:.3f}",
-        "CE OI Velocity": "{:,.0f}", "PE OI Velocity": "{:,.0f}",
-    }), height=500, use_container_width=True)
-
-    st.subheader("📈 Charts")
-    chart_col1, chart_col2 = st.columns(2)
-    with chart_col1:
-        fig_oi = px.bar(df, x="Strike", y=["CE OI", "PE OI"], barmode="group", title="OI & Volume")
-        for s in support[:2]:
-            fig_oi.add_vline(x=s, line_dash="dash", line_color="green")
-        for r in resistance[:2]:
-            fig_oi.add_vline(x=r, line_dash="dash", line_color="red")
-        fig_oi.add_vline(x=spot, line_dash="dot", line_color="yellow")
-        st.plotly_chart(fig_oi, use_container_width=True)
-    with chart_col2:
-        ltp_df = df.melt(id_vars="Strike", value_vars=["CE LTP", "PE LTP"], var_name="Option", value_name="LTP")
-        fig_ltp = px.line(ltp_df, x="Strike", y="LTP", color="Option", title="CE LTP vs PE LTP", markers=True)
-        fig_ltp.add_vline(x=spot, line_dash="dot", line_color="yellow")
-        st.plotly_chart(fig_ltp, use_container_width=True)
-
-    st.subheader("🕯️ Candlestick (Spot)")
-    from dhan_data.chart import get_candle_data, plot_candle
-    try:
-        df_candle = get_candle_data(st.session_state.sec_id, st.session_state.segment)
-        if df_candle is not None:
-            fig_candle, trend = plot_candle(df_candle)
-            st.write(f"Trend: {trend}")
-            st.plotly_chart(fig_candle, use_container_width=True)
-        else:
-            st.warning("Candlestick data not available.")
-    except Exception as e:
-        st.warning(f"Candlestick error: {e}")
-
-    # Strike Analysis – default to ATM strike
-    st.subheader("🔍 Strike Analysis")
-    strikes_list = df["Strike"].tolist()
-    try:
-        atm_index = strikes_list.index(atm_strike)
-    except ValueError:
-        atm_index = 0
-    selected_strike = st.selectbox("Select Strike", strikes_list, index=atm_index)
-    if selected_strike:
-        row = df[df["Strike"] == selected_strike].iloc[0]
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.write(f"**CE OI**: {row['CE OI']:,.0f}")
-            st.write(f"**CE LTP**: {row['CE LTP']:.2f}")
-            st.write(f"**CE Delta**: {row['CE Delta']:.3f}")
-            st.write(f"**CE BuildUp**: {row['CE BuildUp']}")
-            st.write(f"**CE Action**: {row['CE Action']}")
-        with col_b:
-            st.write(f"**PE OI**: {row['PE OI']:,.0f}")
-            st.write(f"**PE LTP**: {row['PE LTP']:.2f}")
-            st.write(f"**PE Delta**: {row['PE Delta']:.3f}")
-            st.write(f"**PE BuildUp**: {row['PE BuildUp']}")
-            st.write(f"**PE Action**: {row['PE Action']}")
-
-        st.write("**OI Velocity Graph** (last 5 intervals)")
-        history_ce = [1000, 1200, 1400, 1600, 1800]
-        history_pe = [800, 950, 1100, 1250, 1400]
-        fig_hist = go.Figure()
-        fig_hist.add_trace(go.Scatter(y=history_ce, name="CE OI", mode="lines+markers"))
-        fig_hist.add_trace(go.Scatter(y=history_pe, name="PE OI", mode="lines+markers"))
-        fig_hist.update_layout(title="OI History (Mock)", height=300)
-        st.plotly_chart(fig_hist, use_container_width=True)
-
-    st.subheader("🚀 Pro Insights")
-    pro1, pro2, pro3, pro4 = st.columns(4)
-    pro1.metric("FII Net Position (cr)", "1,240")
-    pro2.metric("DII Net Position (cr)", "-320")
-    pro3.metric("IV (ATM)", "14.8%")
-    pro4.metric("Gamma Exposure", "₹4.2 Lakh / pt")
-    st.write(f"**Delta Exposure:** {net_delta:,.0f}")
-
+# 8. Candlestick data
+st.subheader("8. Candlestick Data")
+candle_df = get_candle_data(nifty_sec, nifty_seg)
+if candle_df is not None:
+    st.write(f"Candles: {len(candle_df)}")
+    st.dataframe(candle_df.tail(5))
 else:
-    st.info("Select a symbol from the sidebar to load data.")
+    st.error("Candlestick data returned None")
+
+# 9. Market quote (static LTP)
+st.subheader("9. Market Quote (static LTP)")
+ltp_static = get_ltp(nifty_sec, nifty_seg)
+st.write(f"Static LTP: {ltp_static}")
+
+st.info("Scan complete. Scroll up to see all results.")
