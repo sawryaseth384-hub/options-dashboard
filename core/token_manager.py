@@ -1,59 +1,48 @@
 import requests
 import time
-import json
-import os
 import pyotp
 from datetime import datetime
 import streamlit as st
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
-TOKEN_FILE = "token.json"
 
 
 # =========================
-# SAVE TOKEN
+# GLOBAL TOKEN STORE (CLOUD SAFE)
 # =========================
-def save_token(token, expiry):
-    with open(TOKEN_FILE, "w") as f:
-        json.dump({
-            "token": token,
-            "expiry": expiry
-        }, f)
-
-
-# =========================
-# LOAD TOKEN
-# =========================
-def load_token():
-    if not os.path.exists(TOKEN_FILE):
-        return None, 0
-
-    try:
-        with open(TOKEN_FILE, "r") as f:
-            data = json.load(f)
-            return data.get("token"), data.get("expiry", 0)
-    except:
-        return None, 0
+@st.cache_resource
+def token_store():
+    return {
+        "token": None,
+        "expiry": 0
+    }
 
 
 # =========================
-# GET TOKEN
+# GET TOKEN (MAIN)
 # =========================
 def get_token():
-    token, expiry = load_token()
+    store = token_store()
 
-    # ✅ valid token → reuse
-    if token and time.time() < expiry:
-        return token
+    # ✅ अगर valid token है → reuse
+    if store["token"] and time.time() < store["expiry"]:
+        return store["token"]
 
-    # 🔁 generate new token
+    # ❌ Dhan restriction: 2 min block avoid
+    if "last_call" in st.session_state:
+        if time.time() - st.session_state.last_call < 120:
+            return store["token"]
+
+    # 🔁 नया token generate
     token, expiry = refresh_token()
 
     if token:
-        save_token(token, expiry)
+        store["token"] = token
+        store["expiry"] = expiry
+        st.session_state.last_call = time.time()
         return token
 
-    raise Exception("❌ Unable to get token")
+    return None
 
 
 # =========================
@@ -83,7 +72,10 @@ def refresh_token():
             else:
                 expiry_ts = time.time() + 23 * 3600
 
-            st.success("✅ New Token Generated")
+            # show only once
+            if "token_shown" not in st.session_state:
+                st.success("✅ Token Generated")
+                st.session_state.token_shown = True
 
             return data["accessToken"], expiry_ts
 
@@ -101,6 +93,9 @@ def refresh_token():
 # =========================
 def get_headers():
     token = get_token()
+
+    if not token:
+        raise Exception("❌ Token not available")
 
     return {
         "access-token": token,
