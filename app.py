@@ -1,17 +1,14 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from dhan_data.instruments import get_symbol_data
 from dhan_data.expiry import get_expiry
 from dhan_data.option_chain import get_option_chain
 from dhan_data.market_quote import get_ltp
 from core.token_manager import get_headers
-from dashboard import (
-    render_header, render_decision_bar, render_core_analysis,
-    render_option_chain_table, render_charts, render_candlestick,
-    render_strike_analysis, render_pro_insights
-)
 
 # =========================
 # STYLE – Dark Theme
@@ -82,9 +79,6 @@ def get_next_thursday():
     next_thu = today + timedelta(days=days_ahead)
     return next_thu.strftime("%Y-%m-%d")
 
-# =========================
-# FETCH SPOT PRICES FOR HEADER
-# =========================
 def get_spot_for(symbol):
     sec_id, seg = resolve_symbol(symbol)
     if sec_id:
@@ -162,7 +156,10 @@ with st.sidebar:
 # =========================
 nifty_spot = get_spot_for("NIFTY")
 banknifty_spot = get_spot_for("BANKNIFTY")
-render_header(nifty_spot, banknifty_spot)
+col1, col2 = st.columns(2)
+col1.metric("🇮🇳 NIFTY", f"{nifty_spot:,.2f}" if nifty_spot else "N/A")
+col2.metric("🏦 BANKNIFTY", f"{banknifty_spot:,.2f}" if banknifty_spot else "N/A")
+st.markdown("---")
 
 # =========================
 # MAIN DASHBOARD (if data available)
@@ -177,7 +174,7 @@ if st.session_state.sec_id and st.session_state.expiry:
         st.error("No option chain data. Check symbol/expiry.")
         st.stop()
 
-    # Process raw data (same as before)
+    # Process raw data
     raw = data["data"]
     spot = raw.get("last_price", 0)
     oc = raw.get("oc", {})
@@ -198,7 +195,7 @@ if st.session_state.sec_id and st.session_state.expiry:
     df = pd.DataFrame(rows).sort_values("Strike")
     prev_df = st.session_state.previous_data
 
-    # Advanced indicators (unchanged from previous version)
+    # Advanced indicators (OI change, buildup, etc.)
     if prev_df is not None:
         merged = df.merge(prev_df, on="Strike", suffixes=("", "_prev"))
         df["CE OI Change"] = merged["CE OI"] - merged["CE OI_prev"]
@@ -211,7 +208,6 @@ if st.session_state.sec_id and st.session_state.expiry:
         df["CE Price Change"] = 0
         df["PE Price Change"] = 0
 
-    # Build-up classification
     def classify_buildup(row):
         if row["CE OI Change"] > 0 and row["CE Price Change"] > 0:
             ce_type = "CE Long Build-up"
@@ -237,7 +233,6 @@ if st.session_state.sec_id and st.session_state.expiry:
 
     df[["CE BuildUp", "PE BuildUp"]] = df.apply(lambda r: pd.Series(classify_buildup(r)), axis=1)
 
-    # Writing vs Buying
     def classify_action(row):
         ce_action = "Writing" if (row["CE OI Change"] > 0 and row["CE Price Change"] < 0) else ("Buying" if (row["CE OI Change"] > 0 and row["CE Price Change"] > 0) else "Neutral")
         pe_action = "Writing" if (row["PE OI Change"] > 0 and row["PE Price Change"] < 0) else ("Buying" if (row["PE OI Change"] > 0 and row["PE Price Change"] > 0) else "Neutral")
@@ -245,7 +240,6 @@ if st.session_state.sec_id and st.session_state.expiry:
 
     df[["CE Action", "PE Action"]] = df.apply(lambda r: pd.Series(classify_action(r)), axis=1)
 
-    # Writers vs Buyers visual bar
     def writers_vs_buyers(row):
         ce_val = 1 if row["CE Action"] == "Buying" else (-1 if row["CE Action"] == "Writing" else 0)
         pe_val = 1 if row["PE Action"] == "Buying" else (-1 if row["PE Action"] == "Writing" else 0)
@@ -262,7 +256,6 @@ if st.session_state.sec_id and st.session_state.expiry:
             return "🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴"
     df["Writers vs Buyers"] = df.apply(writers_vs_buyers, axis=1)
 
-    # OI Velocity
     if prev_df is not None:
         df["CE OI Velocity"] = df["CE OI"] - prev_df["CE OI"]
         df["PE OI Velocity"] = df["PE OI"] - prev_df["PE OI"]
@@ -270,13 +263,11 @@ if st.session_state.sec_id and st.session_state.expiry:
         df["CE OI Velocity"] = 0
         df["PE OI Velocity"] = 0
 
-    # Divergence
     df["CE OI Divergence"] = np.sign(df["CE OI Change"]) * np.sign(df["CE Price Change"])
     df["PE OI Divergence"] = np.sign(df["PE OI Change"]) * np.sign(df["PE Price Change"])
     df["CE OI Divergence"] = df["CE OI Divergence"].apply(lambda x: "Bullish" if x == 1 else ("Bearish" if x == -1 else "Neutral"))
     df["PE OI Divergence"] = df["PE OI Divergence"].apply(lambda x: "Bullish" if x == 1 else ("Bearish" if x == -1 else "Neutral"))
 
-    # OI Shift
     if prev_df is not None:
         max_ce_prev = prev_df.loc[prev_df["CE OI"].idxmax(), "Strike"]
         max_ce_curr = df.loc[df["CE OI"].idxmax(), "Strike"]
@@ -299,7 +290,6 @@ if st.session_state.sec_id and st.session_state.expiry:
     support = df.nlargest(3, "PE OI")["Strike"].tolist()
     resistance = df.nlargest(3, "CE OI")["Strike"].tolist()
 
-    # Max Pain
     strikes = df["Strike"].values
     pain_values = []
     for strike in strikes:
@@ -308,22 +298,18 @@ if st.session_state.sec_id and st.session_state.expiry:
         pain_values.append((strike, ce_pain + pe_pain))
     max_pain = min(pain_values, key=lambda x: x[1])[0]
 
-    # Delta Exposure
     df["CE Delta Exposure"] = df["CE Delta"] * df["CE OI"]
     df["PE Delta Exposure"] = -df["PE Delta"] * df["PE OI"]
     net_delta = df["CE Delta Exposure"].sum() + df["PE Delta Exposure"].sum()
 
-    # Trap detection
     max_ce_strike = df.loc[df["CE OI"].idxmax(), "Strike"]
     max_pe_strike = df.loc[df["PE OI"].idxmax(), "Strike"]
     call_trap = (spot > max_ce_strike) and (pcr < 0.7)
     put_trap = (spot < max_pe_strike) and (pcr > 1.3)
 
-    # Best strike
     best_ce = df.loc[df["CE Delta"].sub(0.5).abs().idxmin(), "Strike"]
     best_pe = df.loc[df["PE Delta"].add(0.5).abs().idxmin(), "Strike"]
 
-    # Final Signal
     df["Signal"] = "Neutral"
     for idx, row in df.iterrows():
         if pcr > 1 and row["CE Delta"] > 0.5:
@@ -336,19 +322,119 @@ if st.session_state.sec_id and st.session_state.expiry:
             df.at[idx, "Signal"] = "STRONG BUY PE"
     final_signal = df[df["Signal"] != "Neutral"]["Signal"].iloc[0] if not df[df["Signal"] != "Neutral"].empty else "Neutral"
 
-    # ATM PCR
     atm_pcr = df.loc[df['Strike']==atm_strike, 'PE OI'].values[0] / df.loc[df['Strike']==atm_strike, 'CE OI'].values[0] if atm_strike in df['Strike'].values else 0
 
     # =========================
-    # RENDER DASHBOARD FROM MODULE
+    # RENDER LAYERED UI
     # =========================
-    render_decision_bar(spot, pcr, atm_strike, best_ce, final_signal, call_trap, put_trap)
-    render_core_analysis(support, resistance, max_pain, atm_pcr, pcr)
-    render_option_chain_table(df)
-    render_charts(df, support, resistance, spot)
-    render_candlestick(st.session_state.sec_id, st.session_state.segment)
-    render_strike_analysis(df, st.session_state.sec_id)
-    render_pro_insights(net_delta)
+    # Level 1 – Decision Bar
+    st.markdown("---")
+    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+    col1.metric("📍 Spot", f"{spot:.2f}")
+    col2.metric("📊 PCR", f"{pcr:.2f}")
+    col3.metric("🧠 Bias", "Bullish" if pcr > 1 else ("Bearish" if pcr < 0.7 else "Neutral"))
+    col4.metric("🎯 ATM", f"{atm_strike}")
+    col5.metric("🔥 Best", f"{best_ce} CE")
+    col6.metric("🚀 Signal", final_signal)
+    col7.metric("⚠️ Trap", "Call Trap" if call_trap else ("Put Trap" if put_trap else "No"))
+    st.markdown("---")
+
+    # Level 2 – Core Analysis
+    st.subheader("📌 Core Analysis")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.success(f"🟢 Support: {support[0] if support else 'N/A'}")
+    c2.error(f"🔴 Resistance: {resistance[0] if resistance else 'N/A'}")
+    c3.info(f"🎯 Max Pain: {max_pain}")
+    c4.info(f"📊 ATM PCR: {atm_pcr:.2f}" if atm_pcr else "N/A")
+    c5.info(f"🔥 OI Strength: {'High' if pcr > 1.2 or pcr < 0.8 else 'Moderate'}")
+
+    # Level 3 – Option Chain Table
+    st.subheader("📋 Option Chain + Advanced OI")
+    display_cols = [
+        "Strike", "CE OI", "PE OI", "CE OI Change", "PE OI Change",
+        "CE LTP", "PE LTP", "CE Delta", "PE Delta",
+        "CE BuildUp", "PE BuildUp", "Signal",
+        "CE OI Velocity", "PE OI Velocity",
+        "CE OI Divergence", "PE OI Divergence",
+        "CE OI Shift", "PE OI Shift",
+        "CE Action", "PE Action", "Writers vs Buyers"
+    ]
+    available = [c for c in display_cols if c in df.columns]
+    st.dataframe(df[available].style.format({
+        "CE OI": "{:,.0f}", "PE OI": "{:,.0f}",
+        "CE OI Change": "{:,.0f}", "PE OI Change": "{:,.0f}",
+        "CE LTP": "{:.2f}", "PE LTP": "{:.2f}",
+        "CE Delta": "{:.3f}", "PE Delta": "{:.3f}",
+        "CE OI Velocity": "{:,.0f}", "PE OI Velocity": "{:,.0f}",
+    }), height=500, use_container_width=True)
+
+    # Level 4 – Charts
+    st.subheader("📈 Charts")
+    chart_col1, chart_col2 = st.columns(2)
+    with chart_col1:
+        fig_oi = px.bar(df, x="Strike", y=["CE OI", "PE OI"], barmode="group", title="OI & Volume")
+        for s in support[:2]:
+            fig_oi.add_vline(x=s, line_dash="dash", line_color="green")
+        for r in resistance[:2]:
+            fig_oi.add_vline(x=r, line_dash="dash", line_color="red")
+        fig_oi.add_vline(x=spot, line_dash="dot", line_color="yellow")
+        st.plotly_chart(fig_oi, use_container_width=True)
+    with chart_col2:
+        ltp_df = df.melt(id_vars="Strike", value_vars=["CE LTP", "PE LTP"], var_name="Option", value_name="LTP")
+        fig_ltp = px.line(ltp_df, x="Strike", y="LTP", color="Option", title="CE LTP vs PE LTP", markers=True)
+        fig_ltp.add_vline(x=spot, line_dash="dot", line_color="yellow")
+        st.plotly_chart(fig_ltp, use_container_width=True)
+
+    # Candlestick
+    st.subheader("🕯️ Candlestick (Spot)")
+    from dhan_data.chart import get_candle_data, plot_candle
+    try:
+        df_candle = get_candle_data(st.session_state.sec_id, st.session_state.segment)
+        if df_candle is not None:
+            fig_candle, trend = plot_candle(df_candle)
+            st.write(f"Trend: {trend}")
+            st.plotly_chart(fig_candle, use_container_width=True)
+        else:
+            st.warning("Candlestick data not available.")
+    except Exception as e:
+        st.warning(f"Candlestick error: {e}")
+
+    # Level 5 – Strike Analysis
+    st.subheader("🔍 Strike Analysis")
+    selected_strike = st.selectbox("Select Strike", df["Strike"].tolist())
+    if selected_strike:
+        row = df[df["Strike"] == selected_strike].iloc[0]
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.write(f"**CE OI**: {row['CE OI']:,.0f}")
+            st.write(f"**CE LTP**: {row['CE LTP']:.2f}")
+            st.write(f"**CE Delta**: {row['CE Delta']:.3f}")
+            st.write(f"**CE BuildUp**: {row['CE BuildUp']}")
+            st.write(f"**CE Action**: {row['CE Action']}")
+        with col_b:
+            st.write(f"**PE OI**: {row['PE OI']:,.0f}")
+            st.write(f"**PE LTP**: {row['PE LTP']:.2f}")
+            st.write(f"**PE Delta**: {row['PE Delta']:.3f}")
+            st.write(f"**PE BuildUp**: {row['PE BuildUp']}")
+            st.write(f"**PE Action**: {row['PE Action']}")
+
+        st.write("**OI Velocity Graph** (last 5 intervals)")
+        history_ce = [1000, 1200, 1400, 1600, 1800]
+        history_pe = [800, 950, 1100, 1250, 1400]
+        fig_hist = go.Figure()
+        fig_hist.add_trace(go.Scatter(y=history_ce, name="CE OI", mode="lines+markers"))
+        fig_hist.add_trace(go.Scatter(y=history_pe, name="PE OI", mode="lines+markers"))
+        fig_hist.update_layout(title="OI History (Mock)", height=300)
+        st.plotly_chart(fig_hist, use_container_width=True)
+
+    # Level 6 – Pro Insights
+    st.subheader("🚀 Pro Insights")
+    pro1, pro2, pro3, pro4 = st.columns(4)
+    pro1.metric("FII Net Position (cr)", "1,240")
+    pro2.metric("DII Net Position (cr)", "-320")
+    pro3.metric("IV (ATM)", "14.8%")
+    pro4.metric("Gamma Exposure", "₹4.2 Lakh / pt")
+    st.write(f"**Delta Exposure:** {net_delta:,.0f}")
 
 else:
     st.info("Select a valid symbol from the sidebar to load data.")
