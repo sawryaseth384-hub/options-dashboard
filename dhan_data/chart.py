@@ -6,6 +6,7 @@ from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
 
+
 # =========================
 # FIX: CHART ID MAPPING
 # =========================
@@ -36,8 +37,7 @@ def get_candle_data(security_id, segment):
         payload = {
             "securityId": chart_id,
             "exchangeSegment": chart_seg,
-            "instrument": "INDEX" if chart_seg == "NSE_IDX" else "EQUITY",
-            "interval": "1",
+            "interval": "1",   # ✅ only this needed
             "oi": False,
             "fromDate": from_date.strftime("%Y-%m-%d %H:%M:%S"),
             "toDate": to_date.strftime("%Y-%m-%d %H:%M:%S")
@@ -46,6 +46,9 @@ def get_candle_data(security_id, segment):
         res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
         data = res.json()
 
+        # DEBUG
+        # st.write(data)
+
         if "data" not in data:
             st.error(f"Chart API Error: {data}")
             return None
@@ -53,6 +56,7 @@ def get_candle_data(security_id, segment):
         d = data["data"]
 
         if not d.get("timestamp"):
+            st.warning("No candle data returned")
             return None
 
         df = pd.DataFrame({
@@ -101,5 +105,11 @@ def plot_candle(df):
 
     fig.add_trace(go.Scatter(x=df["time"], y=df["EMA21"], name="EMA21"))
     fig.add_trace(go.Scatter(x=df["time"], y=df["EMA50"], name="EMA50"))
+
+    fig.update_layout(
+        template="plotly_dark",
+        height=600,
+        xaxis_rangeslider_visible=False
+    )
 
     return fig
