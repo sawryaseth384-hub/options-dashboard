@@ -3,6 +3,7 @@ import json
 import threading
 import struct
 import streamlit as st
+import time
 from core.token_manager import get_token
 
 CLIENT_ID = st.secrets.get("CLIENT_ID", "")
@@ -80,6 +81,8 @@ def start_live_feed():
         thread = threading.Thread(target=ws_app.run_forever)
         thread.daemon = True
         thread.start()
+        # Allow time to connect
+        time.sleep(2)
     except Exception as e:
         st.error(f"Live feed start error: {e}")
 
