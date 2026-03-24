@@ -7,7 +7,7 @@ BASE_URL = "https://api.dhan.co/v2"
 def map_exchange(segment):
     if segment == "IDX_I":
         return "NSE_EQ"
-    return "NSE_FNO"
+    return "NSE_FNO"   # For stocks and futures
 
 def get_ltp(security_id, segment):
     exchange = map_exchange(segment)
