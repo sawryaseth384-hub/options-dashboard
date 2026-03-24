@@ -21,6 +21,7 @@ st.markdown("""
             padding: 12px;
             border: 1px solid #1F2937;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            min-width: 130px;   /* added to prevent cut-off numbers */
         }
         .stDataFrame {font-size: 0.8rem;}
         .stSelectbox {margin-bottom: 1rem;}
