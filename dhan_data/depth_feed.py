@@ -1,60 +1,95 @@
 import websocket
-import json
+import struct
 import threading
-import streamlit as st
 from core.token_manager import get_token
+import streamlit as st
 
-# =========================
-# CONFIG
-# =========================
 CLIENT_ID = st.secrets.get("CLIENT_ID", "")
 
-ws = None
+ws_app = None
 is_connected = False
 
-LIVE_DATA = {}
+DEPTH_DATA = {"bids": [], "asks": []}
 
 # =========================
-# CONNECT
+# SEGMENT MAP
 # =========================
-def start_ws():
-    global ws, is_connected
+def map_ws_segment(segment):
+    if segment == "NSE_FNO":
+        return 2
+    return 1  # IDX_I / NSE_EQ
+
+
+# =========================
+# PARSE DEPTH
+# =========================
+def parse_depth(message):
+    global DEPTH_DATA
+
+    try:
+        body = message[12:]
+
+        bids, asks = [], []
+
+        for i in range(20):
+            chunk = body[i*16:(i+1)*16]
+            if len(chunk) < 16:
+                continue
+
+            price, qty, orders, side = struct.unpack('<fiii', chunk)
+
+            level = {
+                "price": round(price, 2),
+                "qty": qty,
+                "orders": orders
+            }
+
+            if side == 1:
+                bids.append(level)
+            else:
+                asks.append(level)
+
+        DEPTH_DATA = {"bids": bids, "asks": asks}
+
+    except Exception as e:
+        print("Parse error:", e)
+
+
+# =========================
+# CALLBACKS
+# =========================
+def on_open(ws):
+    global is_connected
+    is_connected = True
+    print("✅ WS Connected")
+
+
+def on_message(ws, message):
+    if isinstance(message, bytes):
+        parse_depth(message)
+
+
+def on_error(ws, error):
+    print("WS Error:", error)
+
+
+def on_close(ws, close_status_code, close_msg):
+    global is_connected
+    is_connected = False
+    print("❌ WS Closed")
+
+
+# =========================
+# START WS
+# =========================
+def start_depth_feed():
+    global ws_app
 
     token = get_token()
 
-    url = f"wss://api.dhan.co/ws/v2/marketfeed?client-id={CLIENT_ID}&access-token={token}"
+    url = f"wss://api-feed.dhan.co?version=2&token={token}&clientId={CLIENT_ID}&authType=2"
 
-    def on_open(ws):
-        global is_connected
-        is_connected = True
-        print("✅ WebSocket Connected")
-
-        # 🔥 Subscribe after connect
-        subscribe(ws)
-
-    def on_message(ws, message):
-        try:
-            data = json.loads(message)
-            print("DATA:", data)
-
-            # Store latest data
-            if "data" in data:
-                for seg in data["data"]:
-                    for sec_id, val in data["data"][seg].items():
-                        LIVE_DATA[sec_id] = val
-
-        except Exception as e:
-            print("Parse error:", e)
-
-    def on_error(ws, error):
-        print("WS Error:", error)
-
-    def on_close(ws, close_status_code, close_msg):
-        global is_connected
-        is_connected = False
-        print("❌ WebSocket Closed")
-
-    ws = websocket.WebSocketApp(
+    ws_app = websocket.WebSocketApp(
         url,
         on_open=on_open,
         on_message=on_message,
@@ -62,26 +97,38 @@ def start_ws():
         on_close=on_close
     )
 
-    threading.Thread(target=ws.run_forever, daemon=True).start()
+    threading.Thread(target=ws_app.run_forever, daemon=True).start()
 
 
 # =========================
-# SUBSCRIBE
+# SUBSCRIBE (BINARY)
 # =========================
-def subscribe(ws):
-    payload = {
-        "messageType": "subscribe",
-        "instruments": {
-            "IDX_I": [13],          # NIFTY
-            "NSE_FNO": [49081]      # Example FNO
-        }
-    }
+def subscribe_depth(security_id, segment):
+    global ws_app
 
-    ws.send(json.dumps(payload))
+    if not ws_app or not is_connected:
+        print("WS not ready")
+        return
+
+    exch = map_ws_segment(segment)
+
+    # Header (12 bytes)
+    header = struct.pack('<iii', 23, 20, int(CLIENT_ID))
+
+    # Instrument (8 bytes)
+    body = struct.pack('<ii', exch, int(security_id))
+
+    packet = header + body
+
+    try:
+        ws_app.send(packet, opcode=websocket.ABNF.OPCODE_BINARY)
+        print("Subscribed Depth")
+    except Exception as e:
+        print("Subscribe error:", e)
 
 
 # =========================
-# GET LTP
+# GET DATA
 # =========================
-def get_live_ltp(security_id):
-    return LIVE_DATA.get(str(security_id), {}).get("last_price", 0)
+def get_depth():
+    return DEPTH_DATA
