@@ -1,106 +1,87 @@
 import websocket
 import json
-import struct
 import threading
 import streamlit as st
 from core.token_manager import get_token
 
+# =========================
+# CONFIG
+# =========================
 CLIENT_ID = st.secrets.get("CLIENT_ID", "")
-WS_URL = None
 
-DEPTH_DATA = {"bids": [], "asks": []}
-ws_app = None
+ws = None
 is_connected = False
-subscribed = set()
 
-def map_ws_segment(segment):
-    if segment == "NSE_FNO":
-        return 2
-    else:
-        return 1
+LIVE_DATA = {}
 
-def parse_depth(message):
-    global DEPTH_DATA
-    try:
-        code = message[2]
-        body = message[12:]
-        levels = []
-        for i in range(20):
-            start = i * 16
-            chunk = body[start:start+16]
-            if len(chunk) < 16:
-                continue
-            price = struct.unpack('<d', chunk[0:8])[0]
-            qty = struct.unpack('<I', chunk[8:12])[0]
-            orders = struct.unpack('<I', chunk[12:16])[0]
-            levels.append({"price": round(price, 2), "qty": qty, "orders": orders})
-        if code == 41:
-            DEPTH_DATA["bids"] = levels
-        elif code == 51:
-            DEPTH_DATA["asks"] = levels
-    except Exception as e:
-        print("Depth Parse Error:", e)
+# =========================
+# CONNECT
+# =========================
+def start_ws():
+    global ws, is_connected
 
-def on_message(ws, message):
-    if isinstance(message, bytes):
-        parse_depth(message)
+    token = get_token()
 
-def on_open(ws):
-    global is_connected
-    is_connected = True
-    print("✅ Depth WS Connected")
+    url = f"wss://api.dhan.co/ws/v2/marketfeed?client-id={CLIENT_ID}&access-token={token}"
 
-def on_error(ws, error):
-    print("Depth WS Error:", error)
+    def on_open(ws):
+        global is_connected
+        is_connected = True
+        print("✅ WebSocket Connected")
 
-def on_close(ws, code, msg):
-    global is_connected
-    is_connected = False
-    print("Depth WS Closed")
+        # 🔥 Subscribe after connect
+        subscribe(ws)
 
-def start_depth_feed():
-    global ws_app, WS_URL
-    if ws_app is not None:
-        return
-    try:
-        token = get_token()
-        if not token:
-            st.warning("Depth feed not started: token missing.")
-            return
-        WS_URL = f"wss://depth-api-feed.dhan.co/twentydepth?token={token}&clientId={CLIENT_ID}&authType=2"
-        ws_app = websocket.WebSocketApp(
-            WS_URL,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
-        )
-        thread = threading.Thread(target=ws_app.run_forever)
-        thread.daemon = True
-        thread.start()
-    except Exception as e:
-        st.error(f"Depth feed start error: {e}")
+    def on_message(ws, message):
+        try:
+            data = json.loads(message)
+            print("DATA:", data)
 
-def subscribe_depth(security_id, segment):
-    global ws_app, is_connected, subscribed
-    if ws_app is None or not is_connected:
-        print("Depth WS not ready")
-        return
-    key = f"{security_id}_{segment}"
-    if key in subscribed:
-        return
-    subscribed.add(key)
+            # Store latest data
+            if "data" in data:
+                for seg in data["data"]:
+                    for sec_id, val in data["data"][seg].items():
+                        LIVE_DATA[sec_id] = val
+
+        except Exception as e:
+            print("Parse error:", e)
+
+    def on_error(ws, error):
+        print("WS Error:", error)
+
+    def on_close(ws, close_status_code, close_msg):
+        global is_connected
+        is_connected = False
+        print("❌ WebSocket Closed")
+
+    ws = websocket.WebSocketApp(
+        url,
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close
+    )
+
+    threading.Thread(target=ws.run_forever, daemon=True).start()
+
+
+# =========================
+# SUBSCRIBE
+# =========================
+def subscribe(ws):
     payload = {
-        "RequestCode": 23,
-        "InstrumentCount": 1,
-        "InstrumentList": [
-            {"ExchangeSegment": map_ws_segment(segment), "SecurityId": str(security_id)}
-        ]
+        "messageType": "subscribe",
+        "instruments": {
+            "IDX_I": [13],          # NIFTY
+            "NSE_FNO": [49081]      # Example FNO
+        }
     }
-    try:
-        ws_app.send(json.dumps(payload))
-    except Exception as e:
-        print("Depth Subscribe Error:", e)
 
-def get_depth():
-    return DEPTH_DATA
+    ws.send(json.dumps(payload))
+
+
+# =========================
+# GET LTP
+# =========================
+def get_live_ltp(security_id):
+    return LIVE_DATA.get(str(security_id), {}).get("last_price", 0)
