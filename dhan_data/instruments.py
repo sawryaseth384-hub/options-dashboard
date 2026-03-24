@@ -5,9 +5,13 @@ URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 
 @st.cache_data(ttl=3600)
 def load_instruments():
-    df = pd.read_csv(URL, low_memory=False)
+    try:
+        df = pd.read_csv(URL, low_memory=False)
+    except Exception as e:
+        st.error(f"Failed to load scrip master: {e}")
+        return pd.DataFrame()
 
-    # Auto‑detect exchange column
+    # Find the exchange column
     exch_col = next((c for c in df.columns if "EXCH" in c.upper()), None)
     if exch_col:
         df = df.rename(columns={exch_col: "EXCH_ID"})
@@ -15,7 +19,7 @@ def load_instruments():
         st.error("No exchange column found in master CSV")
         return pd.DataFrame()
 
-    # Auto‑detect segment column
+    # Find the segment column
     seg_col = next((c for c in df.columns if "SEGMENT" in c.upper()), None)
     if seg_col:
         df = df.rename(columns={seg_col: "SEGMENT"})
@@ -32,20 +36,16 @@ def get_stock_df():
     if df.empty:
         return pd.DataFrame(columns=["SEM_TRADING_SYMBOL", "SEM_SMST_SECURITY_ID", "SEGMENT"])
 
-    # Stocks are in segment "D"
     stock_df = df[df["SEGMENT"] == "D"]
-    # Remove options (contain "-") and futures (contain "FUT")
     stock_df = stock_df[~stock_df["SEM_TRADING_SYMBOL"].str.contains("-", na=False)]
     stock_df = stock_df[~stock_df["SEM_TRADING_SYMBOL"].str.contains("FUT", na=False)]
-    # Keep only pure alphabetic symbols
     stock_df = stock_df[stock_df["SEM_TRADING_SYMBOL"].str.match(r'^[A-Z]+$', na=False)]
-
     return stock_df[["SEM_TRADING_SYMBOL", "SEM_SMST_SECURITY_ID", "SEGMENT"]].drop_duplicates(subset="SEM_TRADING_SYMBOL")
 
 def get_index_df():
     df = load_instruments()
     if df.empty:
-        # Fallback when CSV is empty
+        # Hardcoded fallback
         data = [
             {"SEM_TRADING_SYMBOL": "NIFTY",    "SEM_SMST_SECURITY_ID": 13, "SEGMENT": "IDX_I"},
             {"SEM_TRADING_SYMBOL": "BANKNIFTY","SEM_SMST_SECURITY_ID": 25, "SEGMENT": "IDX_I"},
@@ -53,15 +53,11 @@ def get_index_df():
         ]
         return pd.DataFrame(data)
 
-    # Indices can have SEGMENT = "I" or "IDX_I"
     index_df = df[df["SEGMENT"].isin(["I", "IDX_I"])]
-    # Filter to only the major indices
     major_indices = ["NIFTY", "BANKNIFTY", "FINNIFTY"]
     index_df = index_df[index_df["SEM_TRADING_SYMBOL"].isin(major_indices)]
-
-    # If still empty, fallback to hardcoded
     if index_df.empty:
-        st.warning("Indices not found in CSV. Using fallback IDs.")
+        # Fallback if CSV missing
         data = [
             {"SEM_TRADING_SYMBOL": "NIFTY",    "SEM_SMST_SECURITY_ID": 13, "SEGMENT": "IDX_I"},
             {"SEM_TRADING_SYMBOL": "BANKNIFTY","SEM_SMST_SECURITY_ID": 25, "SEGMENT": "IDX_I"},
@@ -69,7 +65,6 @@ def get_index_df():
         ]
         return pd.DataFrame(data)
 
-    # Map segment to "IDX_I" for consistency
     index_df["SEGMENT"] = "IDX_I"
     return index_df[["SEM_TRADING_SYMBOL", "SEM_SMST_SECURITY_ID", "SEGMENT"]]
 
@@ -78,13 +73,6 @@ def get_instrument_df():
     stock_df = get_stock_df()
     index_df = get_index_df()
     combined = pd.concat([stock_df, index_df], ignore_index=True)
-
-    # Debug: show NIFTY's security ID
-    nifty_row = combined[combined["SEM_TRADING_SYMBOL"] == "NIFTY"]
-    if not nifty_row.empty:
-        st.write("🔍 NIFTY security ID:", nifty_row.iloc[0]["SEM_SMST_SECURITY_ID"])
-    else:
-        st.warning("NIFTY not found in combined instrument list")
     return combined
 
 def get_symbol_data(symbol):
