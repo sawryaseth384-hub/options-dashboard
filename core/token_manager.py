@@ -1,41 +1,64 @@
-import streamlit as st
 import requests
 import time
+import json
+import os
 import pyotp
 from datetime import datetime
+import streamlit as st
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
+TOKEN_FILE = "token.json"
 
-def get_headers():
-    token = get_token()
-    return {
-        "access-token": token,
-        "client-id": st.secrets["CLIENT_ID"],
-        "Content-Type": "application/json"
-    }
 
+# =========================
+# SAVE TOKEN
+# =========================
+def save_token(token, expiry):
+    with open(TOKEN_FILE, "w") as f:
+        json.dump({
+            "token": token,
+            "expiry": expiry
+        }, f)
+
+
+# =========================
+# LOAD TOKEN
+# =========================
+def load_token():
+    if not os.path.exists(TOKEN_FILE):
+        return None, 0
+
+    try:
+        with open(TOKEN_FILE, "r") as f:
+            data = json.load(f)
+            return data.get("token"), data.get("expiry", 0)
+    except:
+        return None, 0
+
+
+# =========================
+# GET TOKEN
+# =========================
 def get_token():
-    # Initialize session state if missing
-    if "token" not in st.session_state:
-        st.session_state.token = None
-        st.session_state.expiry = 0
-        st.session_state.last_call = 0
+    token, expiry = load_token()
 
-    # reuse valid token – ensure expiry is a number
-    if st.session_state.token:
-        try:
-            expiry = float(st.session_state.expiry)
-        except (TypeError, ValueError):
-            expiry = 0
-        if time.time() < expiry:
-            return st.session_state.token
+    # ✅ valid token → reuse
+    if token and time.time() < expiry:
+        return token
 
-    # avoid calling token generation more than once every 120 seconds
-    if time.time() - st.session_state.last_call < 120:
-        return st.session_state.token
+    # 🔁 generate new token
+    token, expiry = refresh_token()
 
-    return refresh_token()
+    if token:
+        save_token(token, expiry)
+        return token
 
+    raise Exception("❌ Unable to get token")
+
+
+# =========================
+# REFRESH TOKEN
+# =========================
 def refresh_token():
     try:
         totp = pyotp.TOTP(st.secrets["TOTP_SECRET"])
@@ -47,27 +70,40 @@ def refresh_token():
             "totp": current_totp
         }
 
-        res = requests.post(AUTH_URL, params=payload)
+        res = requests.post(AUTH_URL, json=payload, timeout=10)
         data = res.json()
 
         if "accessToken" in data:
-            st.session_state.token = data["accessToken"]
-            st.session_state.last_call = time.time()
 
             expiry = data.get("expiryTime")
+
             if expiry:
                 dt = datetime.fromisoformat(expiry)
-                st.session_state.expiry = dt.timestamp() - 60
+                expiry_ts = dt.timestamp() - 60
             else:
-                st.session_state.expiry = time.time() + 23 * 3600
+                expiry_ts = time.time() + 23 * 3600
 
-            st.success("✅ Token Generated")
-            return st.session_state.token
+            st.success("✅ New Token Generated")
+
+            return data["accessToken"], expiry_ts
 
         else:
             st.error(f"❌ Token failed: {data}")
-            return None
+            return None, 0
 
     except Exception as e:
-        st.error(f"❌ Token Error: {e}")
-        return None
+        st.error(f"❌ Token error: {e}")
+        return None, 0
+
+
+# =========================
+# HEADERS
+# =========================
+def get_headers():
+    token = get_token()
+
+    return {
+        "access-token": token,
+        "client-id": st.secrets["CLIENT_ID"],
+        "Content-Type": "application/json"
+    }
