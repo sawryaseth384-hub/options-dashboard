@@ -4,7 +4,6 @@ from core.token_manager import get_headers
 BASE_URL = "https://api.dhan.co/v2"
 
 def get_expiry(security_id, segment="IDX_I"):
-    """Fetch expiry list for a security with given segment."""
     url = f"{BASE_URL}/optionchain/expirylist"
     payload = {
         "UnderlyingScrip": int(security_id),
@@ -13,7 +12,6 @@ def get_expiry(security_id, segment="IDX_I"):
     try:
         res = requests.post(url, headers=get_headers(), json=payload)
         data = res.json()
-        # Return the list directly (handles both list and dict with 'data' key)
         if isinstance(data, list):
             return data
         elif isinstance(data, dict) and "data" in data:
