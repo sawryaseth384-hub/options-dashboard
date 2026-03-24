@@ -10,10 +10,8 @@ _last_hist_call = 0
 def map_to_exchange(segment):
     if segment in ["IDX_I", "I"]:
         return "NSE_EQ"
-    elif segment == "D":
-        return "NSE_EQ"
     else:
-        return "NSE_FNO"
+        return "NSE_FNO"   # For stocks/futures
 
 def get_historical(security_id, segment):
     global _last_hist_call
