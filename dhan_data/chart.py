@@ -36,7 +36,6 @@ def get_candle_data(security_id, segment):
         data = res.json()
         if "errorCode" not in data and "data" in data and data["data"]:
             d = data["data"]
-            # Build DataFrame only if there are multiple candles
             if d.get("timestamp") and len(d["timestamp"]) > 1:
                 df = pd.DataFrame({
                     "time": pd.to_datetime(d["timestamp"], unit="s", errors="coerce"),
