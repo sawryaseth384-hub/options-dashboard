@@ -5,15 +5,8 @@ import threading
 import streamlit as st
 from core.token_manager import get_token
 
-# Get token safely; if it fails, we'll still import without error
-try:
-    TOKEN = get_token()
-except Exception as e:
-    TOKEN = None
-    st.error(f"Depth feed: token error: {e}")
-
 CLIENT_ID = st.secrets.get("CLIENT_ID", "")
-WS_URL = f"wss://depth-api-feed.dhan.co/twentydepth?token={TOKEN}&clientId={CLIENT_ID}&authType=2"
+WS_URL = None  # will be set after token is known
 
 DEPTH_DATA = {"bids": [], "asks": []}
 ws_app = None
@@ -66,22 +59,27 @@ def on_close(ws, code, msg):
     print("Depth WS Closed")
 
 def start_depth_feed():
-    global ws_app
+    global ws_app, WS_URL
     if ws_app is not None:
         return
-    if not TOKEN:
-        st.warning("Depth feed not started: token missing.")
-        return
-    ws_app = websocket.WebSocketApp(
-        WS_URL,
-        on_open=on_open,
-        on_message=on_message,
-        on_error=on_error,
-        on_close=on_close
-    )
-    thread = threading.Thread(target=ws_app.run_forever)
-    thread.daemon = True
-    thread.start()
+    try:
+        token = get_token()
+        if not token:
+            st.warning("Depth feed not started: token missing.")
+            return
+        WS_URL = f"wss://depth-api-feed.dhan.co/twentydepth?token={token}&clientId={CLIENT_ID}&authType=2"
+        ws_app = websocket.WebSocketApp(
+            WS_URL,
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
+        )
+        thread = threading.Thread(target=ws_app.run_forever)
+        thread.daemon = True
+        thread.start()
+    except Exception as e:
+        st.error(f"Depth feed start error: {e}")
 
 def subscribe_depth(security_id, segment):
     global ws_app, is_connected, subscribed
