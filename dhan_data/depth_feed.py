@@ -10,6 +10,8 @@ CLIENT_ID = st.secrets.get("CLIENT_ID")
 ws = None
 is_connected = False
 
+DEPTH_DATA = {"bids": [], "asks": []}
+
 
 # =========================
 # MAP SEGMENT
@@ -28,7 +30,14 @@ def on_open(wsapp):
 
 
 def on_message(wsapp, message):
-    print("📩 DATA RECEIVED")
+    global DEPTH_DATA
+
+    try:
+        data = json.loads(message)
+        # simple debug
+        DEPTH_DATA = data
+    except:
+        pass
 
 
 def on_error(wsapp, error):
@@ -70,24 +79,22 @@ def start_depth_feed():
     thread.daemon = True
     thread.start()
 
-    # 🔥 WAIT FOR CONNECTION (IMPORTANT)
+    # wait for connection
     for _ in range(10):
         if is_connected:
             return
         time.sleep(0.5)
 
-    print("❌ WS FAILED TO CONNECT")
+    print("❌ WS FAILED")
 
 
 # =========================
-# SAFE SUBSCRIBE
+# SUBSCRIBE
 # =========================
 def subscribe_depth(security_id, segment):
 
-    global ws
-
     if not is_connected or ws is None:
-        print("❌ WS NOT READY - SKIPPING SUBSCRIBE")
+        print("❌ WS NOT READY")
         return
 
     payload = {
@@ -103,8 +110,13 @@ def subscribe_depth(security_id, segment):
 
     try:
         ws.send(json.dumps(payload))
-        print("✅ SUBSCRIBED SUCCESS")
-    except websocket.WebSocketConnectionClosedException:
-        print("❌ WS CLOSED - CANNOT SEND")
+        print("✅ SUBSCRIBED")
     except Exception as e:
-        print("❌ SEND ERROR:", e)
+        print("❌ SUBSCRIBE ERROR:", e)
+
+
+# =========================
+# GET DEPTH
+# =========================
+def get_depth():
+    return DEPTH_DATA
