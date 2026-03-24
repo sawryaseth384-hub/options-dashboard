@@ -1,52 +1,51 @@
+import streamlit as st
 import requests
 import time
 import pyotp
 from datetime import datetime
-import streamlit as st
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
 
 # =========================
-# GLOBAL TOKEN STORE (CLOUD SAFE)
+# GET HEADERS
 # =========================
-@st.cache_resource
-def token_store():
+def get_headers():
+    token = get_token()
     return {
-        "token": None,
-        "expiry": 0
+        "access-token": token,
+        "client-id": st.secrets["CLIENT_ID"],
+        "Content-Type": "application/json"
     }
 
 
 # =========================
-# GET TOKEN (MAIN)
+# GET TOKEN (SMART CACHE)
 # =========================
 def get_token():
-    store = token_store()
 
-    # ✅ अगर valid token है → reuse
-    if store["token"] and time.time() < store["expiry"]:
-        return store["token"]
+    # session init
+    if "token" not in st.session_state:
+        st.session_state.token = None
+        st.session_state.expiry = 0
 
-    # ❌ Dhan restriction: 2 min block avoid
-    if "last_call" in st.session_state:
-        if time.time() - st.session_state.last_call < 120:
-            return store["token"]
+    # ✅ reuse existing token (24h valid)
+    if st.session_state.token and time.time() < st.session_state.expiry:
+        return st.session_state.token
 
-    # 🔁 नया token generate
+    # ❌ otherwise generate once
     token, expiry = refresh_token()
 
     if token:
-        store["token"] = token
-        store["expiry"] = expiry
-        st.session_state.last_call = time.time()
+        st.session_state.token = token
+        st.session_state.expiry = expiry
         return token
 
     return None
 
 
 # =========================
-# REFRESH TOKEN
+# REFRESH TOKEN (FIXED)
 # =========================
 def refresh_token():
     try:
@@ -59,7 +58,9 @@ def refresh_token():
             "totp": current_totp
         }
 
-        res = requests.post(AUTH_URL, json=payload, timeout=10)
+        # 🔥 IMPORTANT FIX: use params, not json
+        res = requests.post(AUTH_URL, params=payload)
+
         data = res.json()
 
         if "accessToken" in data:
@@ -72,11 +73,7 @@ def refresh_token():
             else:
                 expiry_ts = time.time() + 23 * 3600
 
-            # show only once
-            if "token_shown" not in st.session_state:
-                st.success("✅ Token Generated")
-                st.session_state.token_shown = True
-
+            st.success("✅ Token Generated (Once)")
             return data["accessToken"], expiry_ts
 
         else:
@@ -86,19 +83,3 @@ def refresh_token():
     except Exception as e:
         st.error(f"❌ Token error: {e}")
         return None, 0
-
-
-# =========================
-# HEADERS
-# =========================
-def get_headers():
-    token = get_token()
-
-    if not token:
-        raise Exception("❌ Token not available")
-
-    return {
-        "access-token": token,
-        "client-id": st.secrets["CLIENT_ID"],
-        "Content-Type": "application/json"
-    }
