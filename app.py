@@ -36,7 +36,6 @@ HARDCODED_IDS = {
 }
 
 def resolve_symbol(symbol):
-    """Try instruments.py first, fallback to hardcoded."""
     sec_id, seg = get_symbol_data(symbol)
     if sec_id is None:
         if symbol in HARDCODED_IDS:
@@ -85,13 +84,11 @@ with st.sidebar:
             st.warning(f"Expiry fetch error: {e}")
 
         if expiry_list:
-            # Ensure expiry is in list
             if st.session_state.expiry not in expiry_list:
                 st.session_state.expiry = expiry_list[0]
             expiry = st.selectbox("Expiry", expiry_list, index=expiry_list.index(st.session_state.expiry))
             st.session_state.expiry = expiry
         else:
-            # Fallback: generate next Thursday
             fallback = get_next_thursday()
             st.warning(f"No expiry from API. Using fallback: {fallback}")
             st.session_state.expiry = fallback
@@ -119,10 +116,10 @@ with st.sidebar:
 if st.session_state.sec_id and st.session_state.expiry:
     # Fetch option chain (cached for 60 seconds)
     @st.cache_data(ttl=60)
-    def fetch_chain(sec_id, expiry, segment):
-        return get_option_chain(sec_id, expiry, segment)
+    def fetch_chain(sec_id, expiry):
+        return get_option_chain(sec_id, expiry)   # <-- only 2 arguments
 
-    data = fetch_chain(st.session_state.sec_id, st.session_state.expiry, st.session_state.segment)
+    data = fetch_chain(st.session_state.sec_id, st.session_state.expiry)
     if not data or "data" not in data:
         st.error("No option chain data. Check symbol/expiry.")
         st.stop()
