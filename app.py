@@ -27,12 +27,17 @@ if "symbol" not in st.session_state:
     st.session_state.symbol = "NIFTY"
 
 # =============================================================================
-# HARDCODED MAPPING FOR INDICES
+# HARDCODED MAPPING FOR INDICES AND POPULAR STOCKS (fallback)
 # =============================================================================
 HARDCODED_IDS = {
     "NIFTY": (13, "IDX_I"),
     "BANKNIFTY": (25, "IDX_I"),
     "FINNIFTY": (27, "IDX_I"),
+    "RELIANCE": (2885, "NSE_FNO"),
+    "TCS": (11536, "NSE_FNO"),
+    "HDFCBANK": (1333, "NSE_FNO"),
+    "INFY": (4083, "NSE_FNO"),
+    "ICICIBANK": (495, "NSE_FNO"),
 }
 
 def resolve_symbol(symbol):
@@ -42,7 +47,7 @@ def resolve_symbol(symbol):
             sec_id, seg = HARDCODED_IDS[symbol]
             st.sidebar.info(f"Using fallback for {symbol}")
         else:
-            st.sidebar.error(f"Symbol '{symbol}' not found. Try NIFTY, BANKNIFTY, etc.")
+            st.sidebar.error(f"Symbol '{symbol}' not found. Try NIFTY, BANKNIFTY, RELIANCE, etc.")
     return sec_id, seg
 
 def get_next_thursday():
@@ -123,10 +128,10 @@ with st.sidebar:
 # =============================================================================
 if st.session_state.sec_id and st.session_state.expiry:
     @st.cache_data(ttl=60)
-    def fetch_chain(sec_id, expiry):
-        return get_option_chain(sec_id, expiry)
+    def fetch_chain(sec_id, expiry, segment):
+        return get_option_chain(sec_id, expiry, segment)
 
-    data = fetch_chain(st.session_state.sec_id, st.session_state.expiry)
+    data = fetch_chain(st.session_state.sec_id, st.session_state.expiry, st.session_state.segment)
     if not data or "data" not in data:
         st.error("No option chain data. Check symbol/expiry.")
         st.stop()
@@ -341,6 +346,8 @@ if st.session_state.sec_id and st.session_state.expiry:
             fig_candle, trend = plot_candle(df_candle)
             st.write(f"Trend: {trend}")
             st.plotly_chart(fig_candle, use_container_width=True)
+        else:
+            st.warning("Candlestick data not available.")
     except Exception as e:
         st.warning(f"Candlestick error: {e}")
 
@@ -363,7 +370,8 @@ if st.session_state.sec_id and st.session_state.expiry:
             st.write(f"**PE Action**: {row['PE Action']}")
 
         st.write("**OI Velocity Graph** (last 5 intervals)")
-        history_ce = [1000, 1200, 1400, 1600, 1800]  # replace with actual historical data
+        # Placeholder – you can replace with actual historical OI fetch
+        history_ce = [1000, 1200, 1400, 1600, 1800]
         history_pe = [800, 950, 1100, 1250, 1400]
         fig_hist = go.Figure()
         fig_hist.add_trace(go.Scatter(y=history_ce, name="CE OI", mode="lines+markers"))
