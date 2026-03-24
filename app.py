@@ -164,3 +164,44 @@ ltp_static = get_ltp(nifty_sec, nifty_seg)
 st.write(f"Static LTP: {ltp_static}")
 
 st.success("✅ Scan complete")
+
+
+
+# =========================
+# LIVE LTP + DEPTH
+# =========================
+from dhan_data.depth_feed import (
+    start_depth_feed,
+    subscribe_ltp,
+    subscribe_depth,
+    get_ltp,
+    get_depth
+)
+
+st.subheader("5. Live LTP (WebSocket)")
+
+start_depth_feed()
+
+subscribe_ltp(nifty_sec, nifty_seg)
+
+import time
+time.sleep(2)
+
+st.write(f"Live LTP: {get_ltp()}")
+
+
+# =========================
+# DEPTH
+# =========================
+st.subheader("6. Depth Feed (Bid/Ask)")
+
+subscribe_depth(2885, "NSE_FNO")  # RELIANCE
+
+time.sleep(2)
+
+depth = get_depth()
+
+if depth["bids"]:
+    st.write(depth)
+else:
+    st.warning("❌ No depth data yet")
