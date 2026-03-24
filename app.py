@@ -8,9 +8,25 @@ from dhan_data.instruments import get_symbol_data
 from dhan_data.expiry import get_expiry
 from dhan_data.option_chain import get_option_chain
 from dhan_data.market_quote import get_ltp
-from dhan_data.live_market_feed import start_live_feed, subscribe_instrument, get_live_ltp
-from dhan_data.depth_feed import start_depth_feed, subscribe_depth, get_depth
 from core.token_manager import get_headers
+
+# =========================
+# SAFE IMPORTS FOR LIVE FEEDS (fallback if modules missing)
+# =========================
+try:
+    from dhan_data.live_market_feed import start_live_feed, subscribe_instrument, get_live_ltp
+    from dhan_data.depth_feed import start_depth_feed, subscribe_depth, get_depth
+    feeds_available = True
+except ImportError as e:
+    st.warning(f"Live feed modules not available: {e}. Using static data only.")
+    # Dummy functions
+    def start_live_feed(): pass
+    def start_depth_feed(): pass
+    def subscribe_instrument(*args, **kwargs): pass
+    def subscribe_depth(*args, **kwargs): pass
+    def get_live_ltp(): return 0
+    def get_depth(): return {"bids": [], "asks": []}
+    feeds_available = False
 
 st.set_page_config(layout="wide")
 st.markdown("""
@@ -168,13 +184,14 @@ st.markdown("---")
 # MAIN DASHBOARD (only if data available)
 # =========================
 if st.session_state.sec_id and st.session_state.expiry:
-    # Start live feeds only once
-    if not st.session_state.feeds_started:
+    # Start live feeds only once and only if available
+    if feeds_available and not st.session_state.feeds_started:
         start_live_feed()
         start_depth_feed()
         st.session_state.feeds_started = True
-    subscribe_instrument(st.session_state.sec_id, st.session_state.segment)
-    subscribe_depth(st.session_state.sec_id, st.session_state.segment)
+    if feeds_available:
+        subscribe_instrument(st.session_state.sec_id, st.session_state.segment)
+        subscribe_depth(st.session_state.sec_id, st.session_state.segment)
 
     @st.cache_data(ttl=60)
     def fetch_chain(sec_id, expiry, segment):
@@ -346,7 +363,8 @@ if st.session_state.sec_id and st.session_state.expiry:
     # =========================
     st.markdown("---")
     col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-    col1.metric("📍 Spot", f"{get_live_ltp():.2f}" if get_live_ltp() else f"{spot:.2f}")
+    live_price = get_live_ltp() if feeds_available else 0
+    col1.metric("📍 Spot", f"{live_price:.2f}" if live_price else f"{spot:.2f}")
     col2.metric("📊 PCR", f"{pcr:.2f}")
     col3.metric("🧠 Bias", "Bullish" if pcr > 1 else ("Bearish" if pcr < 0.7 else "Neutral"))
     col4.metric("🎯 ATM", f"{atm_strike}")
