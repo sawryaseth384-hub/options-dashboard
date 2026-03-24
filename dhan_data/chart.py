@@ -16,7 +16,7 @@ def get_candle_data(security_id, segment):
         time.sleep(wait)
     _last_chart_call = time.time()
 
-    # Try intraday 1-minute
+    # 1. Try intraday (1‑minute) for last 5 days
     try:
         url = f"{BASE_URL}/charts/intraday"
         exchange = "NSE_EQ"
@@ -34,28 +34,28 @@ def get_candle_data(security_id, segment):
         }
         res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
         data = res.json()
-        st.write("DEBUG intraday response:", data)  # <-- show in app
         if "errorCode" not in data and "data" in data and data["data"]:
             d = data["data"]
-            df = pd.DataFrame({
-                "time": pd.to_datetime(d["timestamp"], unit="s", errors="coerce"),
-                "open": d["open"],
-                "high": d["high"],
-                "low": d["low"],
-                "close": d["close"],
-                "volume": d["volume"]
-            })
-            df = df.dropna().sort_values("time")
-            return df
+            # Build DataFrame only if there are multiple candles
+            if d.get("timestamp") and len(d["timestamp"]) > 1:
+                df = pd.DataFrame({
+                    "time": pd.to_datetime(d["timestamp"], unit="s", errors="coerce"),
+                    "open": d["open"],
+                    "high": d["high"],
+                    "low": d["low"],
+                    "close": d["close"],
+                    "volume": d["volume"] if "volume" in d else [0]*len(d["timestamp"])
+                })
+                df = df.dropna().sort_values("time")
+                return df
     except Exception as e:
-        st.warning(f"Intraday failed: {e}")
+        st.warning(f"Intraday chart failed: {e}, trying historical...")
 
-    # Fallback to historical 5-minute
+    # 2. Fallback to 5‑minute historical data
     try:
         from dhan_data.historical_data import get_historical
         hist = get_historical(security_id, segment)
-        st.write("DEBUG historical data length:", len(hist) if hist else 0)
-        if hist:
+        if hist and len(hist) > 1:
             df = pd.DataFrame(hist)
             df["time"] = pd.to_datetime(df["time"], unit="s")
             df = df.rename(columns={"time": "time", "open": "open", "high": "high", "low": "low", "close": "close"})
