@@ -57,7 +57,7 @@ def get_index_df():
     major_indices = ["NIFTY", "BANKNIFTY", "FINNIFTY"]
     index_df = index_df[index_df["SEM_TRADING_SYMBOL"].isin(major_indices)]
     if index_df.empty:
-        # Fallback if CSV missing
+        # Fallback if CSV missing these rows
         data = [
             {"SEM_TRADING_SYMBOL": "NIFTY",    "SEM_SMST_SECURITY_ID": 13, "SEGMENT": "IDX_I"},
             {"SEM_TRADING_SYMBOL": "BANKNIFTY","SEM_SMST_SECURITY_ID": 25, "SEGMENT": "IDX_I"},
