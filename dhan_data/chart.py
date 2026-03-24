@@ -1,54 +1,102 @@
 import requests
 import pandas as pd
+import streamlit as st
 from datetime import datetime, timedelta
+import time
 from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
+_last_chart_call = 0
+
 
 # =========================
 # GET CANDLE DATA
 # =========================
 def get_candle_data(security_id, segment):
+    global _last_chart_call
 
-    # 🔥 INDEX (NIFTY / BANKNIFTY)
-    if segment == "IDX_I":
+    # 🔒 Rate limit safety
+    now = time.time()
+    wait = max(0, 1 - (now - _last_chart_call))
+    if wait > 0:
+        time.sleep(wait)
+    _last_chart_call = time.time()
 
-        index_map = {
-            13: "26000",   # NIFTY
-            25: "26009",   # BANKNIFTY
-            27: "26037"    # FINNIFTY
-        }
+    try:
+        # =========================
+        # 🔥 INDEX FIX (IMPORTANT)
+        # =========================
+        if segment == "IDX_I":
 
-        chart_id = index_map.get(security_id)
+            index_map = {
+                13: "26000",   # NIFTY
+                25: "26009",   # BANKNIFTY
+                27: "26037"    # FINNIFTY
+            }
 
-        if not chart_id:
-            return None
+            chart_id = index_map.get(security_id)
 
-        payload = {
-            "securityId": chart_id,
-            "exchangeSegment": "NSE_IDX",
-            "instrument": "INDEX",
-            "interval": "5",
-            "oi": False,
-            "fromDate": (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S"),
-            "toDate": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
+            if not chart_id:
+                st.warning("Invalid index mapping")
+                return None
 
+            payload = {
+                "securityId": chart_id,
+                "exchangeSegment": "NSE_IDX",
+                "instrument": "INDEX",
+                "interval": "5",
+                "oi": False,
+                "fromDate": (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S"),
+                "toDate": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+        # =========================
+        # 🔥 STOCK / FNO
+        # =========================
+        else:
+            payload = {
+                "securityId": str(security_id),
+                "exchangeSegment": "NSE_EQ",
+                "instrument": "EQUITY",
+                "interval": "5",
+                "oi": False,
+                "fromDate": (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S"),
+                "toDate": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+        # =========================
+        # API CALL
+        # =========================
         res = requests.post(
             f"{BASE_URL}/charts/intraday",
             headers=get_headers(),
-            json=payload
+            json=payload,
+            timeout=10
         )
 
         data = res.json()
 
-        if "data" not in data:
+        # =========================
+        # ERROR CHECK
+        # =========================
+        if "errorCode" in data:
+            st.warning(data.get("errorMessage"))
+            return None
+
+        if "data" not in data or not data["data"]:
+            st.warning("No candle data returned")
             return None
 
         d = data["data"]
 
+        if not d.get("timestamp"):
+            return None
+
+        # =========================
+        # DATAFRAME BUILD
+        # =========================
         df = pd.DataFrame({
-            "time": pd.to_datetime(d["timestamp"], unit="s"),
+            "time": pd.to_datetime(d["timestamp"], unit="s", errors="coerce"),
             "open": d["open"],
             "high": d["high"],
             "low": d["low"],
@@ -56,24 +104,13 @@ def get_candle_data(security_id, segment):
             "volume": d.get("volume", [0]*len(d["timestamp"]))
         })
 
-        return df.sort_values("time")
+        df = df.dropna().sort_values("time")
 
-    # 🔥 STOCK / FNO
-    else:
-        try:
-            from dhan_data.historical_data import get_historical
+        return df
 
-            hist = get_historical(security_id, segment)
-
-            if hist:
-                df = pd.DataFrame(hist)
-                df["time"] = pd.to_datetime(df["time"], unit="s")
-                return df.sort_values("time")
-
-        except:
-            return None
-
-    return None
+    except Exception as e:
+        st.error(f"Chart Error: {e}")
+        return None
 
 
 # =========================
@@ -114,7 +151,9 @@ def plot_candle(df):
     fig.update_layout(
         template="plotly_dark",
         height=600,
-        xaxis_rangeslider_visible=False
+        margin=dict(l=5, r=5, t=30, b=5),
+        xaxis_rangeslider_visible=False,
+        hovermode="x unified"
     )
 
     trend = "BULLISH" if df["EMA21"].iloc[-1] > df["EMA50"].iloc[-1] else "BEARISH"
