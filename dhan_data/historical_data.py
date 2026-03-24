@@ -59,7 +59,6 @@ def get_historical(security_id, segment):
             return []
 
         result = []
-
         for i in range(len(d["timestamp"])):
             result.append({
                 "time": d["timestamp"][i],
