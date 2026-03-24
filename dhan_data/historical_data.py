@@ -7,12 +7,6 @@ from core.token_manager import get_headers
 BASE_URL = "https://api.dhan.co/v2"
 _last_hist_call = 0
 
-def map_to_exchange(segment):
-    if segment in ["IDX_I", "I"]:
-        return "NSE_EQ"
-    else:
-        return "NSE_FNO"   # For stocks/futures
-
 def get_historical(security_id, segment):
     global _last_hist_call
     now = time.time()
@@ -21,11 +15,10 @@ def get_historical(security_id, segment):
         time.sleep(wait)
     _last_hist_call = time.time()
 
-    url = f"{BASE_URL}/charts/intraday"
+    exchange = "NSE_EQ"
+    instrument = "INDEX" if segment in ["IDX_I", "I"] else "EQUITY"
     to_date = datetime.now()
     from_date = to_date - timedelta(days=1)
-    exchange = map_to_exchange(segment)
-    instrument = "INDEX" if segment in ["IDX_I", "I"] else "EQUITY"
     payload = {
         "securityId": str(security_id),
         "exchangeSegment": exchange,
@@ -36,7 +29,7 @@ def get_historical(security_id, segment):
         "toDate": to_date.strftime("%Y-%m-%d %H:%M:%S")
     }
     try:
-        res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
+        res = requests.post(f"{BASE_URL}/charts/intraday", headers=get_headers(), json=payload, timeout=10)
         data = res.json()
         if "data" not in data:
             return []
