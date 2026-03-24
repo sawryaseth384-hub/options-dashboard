@@ -3,24 +3,10 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
 import time
-from core.token_manager import get_headers   # 👈 import
+from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
 _last_chart_call = 0
-
-def map_segment(segment):
-    if segment in ["IDX_I", "I", "D"]:
-        return "NSE_FNO"
-    else:
-        return "NSE_EQ"
-
-def get_instrument(segment):
-    if segment in ["IDX_I", "I"]:
-        return "INDEX"
-    elif segment == "D":
-        return "FUTSTK"
-    else:
-        return "EQUITY"
 
 def get_candle_data(security_id, segment):
     global _last_chart_call
@@ -32,13 +18,14 @@ def get_candle_data(security_id, segment):
 
     try:
         url = f"{BASE_URL}/charts/intraday"
-        mapped_segment = map_segment(segment)
-        instrument = get_instrument(segment)
+        # Intraday charts use NSE_EQ for both indices and stocks
+        exchange = "NSE_EQ"
+        instrument = "INDEX" if segment in ["IDX_I", "I"] else "EQUITY"
         to_date = datetime.now()
         from_date = to_date - timedelta(days=3)
         payload = {
             "securityId": str(security_id),
-            "exchangeSegment": mapped_segment,
+            "exchangeSegment": exchange,
             "instrument": instrument,
             "interval": "1",
             "oi": False,
