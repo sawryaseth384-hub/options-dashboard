@@ -6,13 +6,11 @@ URL = "https://api.dhan.co/v2/optionchain"
 
 def get_option_chain(security_id, expiry, segment="IDX_I"):
     try:
-        # Validate inputs
         if security_id is None or security_id == "":
             raise ValueError("Security ID missing")
         security_id = int(security_id)
         if not expiry:
             raise ValueError("Expiry missing")
-        # optional: check expiry format
         if not isinstance(expiry, str) or len(expiry.split("-")) != 3:
             raise ValueError(f"Invalid expiry format: {expiry}")
 
