@@ -8,6 +8,8 @@ from dhan_data.instruments import get_symbol_data
 from dhan_data.expiry import get_expiry
 from dhan_data.option_chain import get_option_chain
 from dhan_data.market_quote import get_ltp
+from dhan_data.live_market_feed import start_live_feed, subscribe_instrument, get_live_ltp
+from dhan_data.depth_feed import start_depth_feed, subscribe_depth, get_depth
 from core.token_manager import get_headers
 
 st.set_page_config(layout="wide")
@@ -44,6 +46,8 @@ if "expiry" not in st.session_state:
     st.session_state.expiry = None
 if "symbol" not in st.session_state:
     st.session_state.symbol = "NIFTY"
+if "feeds_started" not in st.session_state:
+    st.session_state.feeds_started = False
 
 # =========================
 # HARDCODED FALLBACKS FOR INDICES AND POPULAR STOCKS
@@ -91,7 +95,8 @@ def get_spot_for(symbol):
 # =========================
 with st.sidebar:
     st.header("⚙️ Controls")
-    symbol = st.text_input("Symbol", st.session_state.symbol).upper()
+    symbol_list = list(HARDCODED_IDS.keys())
+    symbol = st.selectbox("Symbol", symbol_list, index=symbol_list.index(st.session_state.symbol) if st.session_state.symbol in symbol_list else 0)
     if symbol != st.session_state.symbol:
         st.session_state.symbol = symbol
         sec_id, seg = resolve_symbol(symbol)
@@ -113,25 +118,15 @@ with st.sidebar:
             st.success(f"✅ {st.session_state.symbol} → ID: {sec_id}, Segment: {seg}")
 
     if st.session_state.sec_id:
-        # ---------- DEBUG START ----------
-        st.write(f"🔍 **DEBUG** sec_id = {st.session_state.sec_id}")
-        st.write(f"🔍 **DEBUG** segment = {st.session_state.segment}")
-        # ---------- DEBUG END ----------
         expiry_list = []
         try:
             exp_data = get_expiry(st.session_state.sec_id, st.session_state.segment)
-            # ---------- DEBUG START ----------
-            st.write(f"🔍 **DEBUG** raw expiry data = {exp_data}")
-            # ---------- DEBUG END ----------
             if isinstance(exp_data, list):
                 expiry_list = exp_data
             elif isinstance(exp_data, dict) and "data" in exp_data:
                 expiry_list = exp_data["data"]
         except Exception as e:
             st.warning(f"Expiry fetch error: {e}")
-            # ---------- DEBUG START ----------
-            st.write(f"🔍 **DEBUG** expiry fetch exception: {e}")
-            # ---------- DEBUG END ----------
 
         if expiry_list:
             if st.session_state.expiry not in expiry_list:
@@ -151,7 +146,6 @@ with st.sidebar:
     # Depth display (optional)
     st.divider()
     st.subheader("📊 Depth (Bid/Ask)")
-    from dhan_data.depth_feed import get_depth
     depth = get_depth()
     if depth["bids"]:
         st.write("**Bids**")
@@ -161,7 +155,7 @@ with st.sidebar:
         st.dataframe(pd.DataFrame(depth["asks"][:5]), use_container_width=True)
 
 # =========================
-# TOP BAR – NIFTY & BANKNIFTY SPOT PRICES
+# TOP BAR – NIFTY & BANKNIFTY SPOT PRICES (static fallback)
 # =========================
 nifty_spot = get_spot_for("NIFTY")
 banknifty_spot = get_spot_for("BANKNIFTY")
@@ -174,6 +168,14 @@ st.markdown("---")
 # MAIN DASHBOARD (only if data available)
 # =========================
 if st.session_state.sec_id and st.session_state.expiry:
+    # Start live feeds only once
+    if not st.session_state.feeds_started:
+        start_live_feed()
+        start_depth_feed()
+        st.session_state.feeds_started = True
+    subscribe_instrument(st.session_state.sec_id, st.session_state.segment)
+    subscribe_depth(st.session_state.sec_id, st.session_state.segment)
+
     @st.cache_data(ttl=60)
     def fetch_chain(sec_id, expiry, segment):
         return get_option_chain(sec_id, expiry, segment)
@@ -183,7 +185,7 @@ if st.session_state.sec_id and st.session_state.expiry:
         st.error("No option chain data. Check symbol/expiry.")
         st.stop()
 
-    # Process raw data (unchanged)
+    # Process raw data
     raw = data["data"]
     spot = raw.get("last_price", 0)
     oc = raw.get("oc", {})
@@ -210,7 +212,7 @@ if st.session_state.sec_id and st.session_state.expiry:
     df = pd.DataFrame(rows).sort_values("Strike")
     prev_df = st.session_state.previous_data
 
-    # Advanced indicators (unchanged)
+    # Advanced indicators (OI change, etc.)
     if prev_df is not None:
         merged = df.merge(prev_df, on="Strike", suffixes=("", "_prev"))
         df["CE OI Change"] = merged["CE OI"] - merged["CE OI_prev"]
@@ -340,11 +342,11 @@ if st.session_state.sec_id and st.session_state.expiry:
     atm_pcr = df.loc[df['Strike']==atm_strike, 'PE OI'].values[0] / df.loc[df['Strike']==atm_strike, 'CE OI'].values[0] if atm_strike in df['Strike'].values else 0
 
     # =========================
-    # LAYERED UI (unchanged)
+    # LAYERED UI
     # =========================
     st.markdown("---")
     col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-    col1.metric("📍 Spot", f"{spot:.2f}")
+    col1.metric("📍 Spot", f"{get_live_ltp():.2f}" if get_live_ltp() else f"{spot:.2f}")
     col2.metric("📊 PCR", f"{pcr:.2f}")
     col3.metric("🧠 Bias", "Bullish" if pcr > 1 else ("Bearish" if pcr < 0.7 else "Neutral"))
     col4.metric("🎯 ATM", f"{atm_strike}")
@@ -445,4 +447,4 @@ if st.session_state.sec_id and st.session_state.expiry:
     st.write(f"**Delta Exposure:** {net_delta:,.0f}")
 
 else:
-    st.info("Select a valid symbol from the sidebar to load data.")
+    st.info("Select a symbol from the sidebar to load data.")
