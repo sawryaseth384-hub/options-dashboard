@@ -16,7 +16,7 @@ def get_candle_data(security_id, segment):
         time.sleep(wait)
     _last_chart_call = time.time()
 
-    # First try intraday (1-minute) for last 3 days
+    # First try intraday (1-minute) for last 5 days
     try:
         url = f"{BASE_URL}/charts/intraday"
         exchange = "NSE_EQ"
@@ -49,7 +49,7 @@ def get_candle_data(security_id, segment):
     except Exception as e:
         st.warning(f"Intraday chart failed: {e}, trying historical...")
 
-    # Fallback: use 5-minute historical data
+    # Fallback: use 5-minute historical data (from historical_data.py)
     try:
         from dhan_data.historical_data import get_historical
         hist = get_historical(security_id, segment)
