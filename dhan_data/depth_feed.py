@@ -6,7 +6,7 @@ import streamlit as st
 from core.token_manager import get_token
 
 CLIENT_ID = st.secrets.get("CLIENT_ID", "")
-WS_URL = None  # will be set after token is known
+WS_URL = None
 
 DEPTH_DATA = {"bids": [], "asks": []}
 ws_app = None
