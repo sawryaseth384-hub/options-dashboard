@@ -10,9 +10,6 @@ from dhan_data.option_chain import get_option_chain
 from dhan_data.market_quote import get_ltp
 from core.token_manager import get_headers
 
-# =========================
-# STYLE – Dark Theme
-# =========================
 st.set_page_config(layout="wide")
 st.markdown("""
     <style>
@@ -33,9 +30,7 @@ st.markdown("""
 
 st.title("🧠 Smart Money Options Dashboard — Institutional Grade")
 
-# =========================
-# SESSION STATE
-# =========================
+# Session state
 if "previous_data" not in st.session_state:
     st.session_state.previous_data = None
 if "sec_id" not in st.session_state:
@@ -47,9 +42,7 @@ if "expiry" not in st.session_state:
 if "symbol" not in st.session_state:
     st.session_state.symbol = "NIFTY"
 
-# =========================
-# HARDCODED FALLBACKS
-# =========================
+# Hardcoded fallbacks
 HARDCODED_IDS = {
     "NIFTY": (13, "IDX_I"),
     "BANKNIFTY": (25, "IDX_I"),
@@ -88,9 +81,7 @@ def get_spot_for(symbol):
             return 0
     return 0
 
-# =========================
-# SIDEBAR CONTROLS
-# =========================
+# Sidebar
 with st.sidebar:
     st.header("⚙️ Controls")
     symbol = st.text_input("Symbol", st.session_state.symbol).upper()
@@ -116,7 +107,8 @@ with st.sidebar:
     if st.session_state.sec_id:
         expiry_list = []
         try:
-            exp_data = get_expiry(st.session_state.sec_id)
+            # Pass the segment to get_expiry
+            exp_data = get_expiry(st.session_state.sec_id, st.session_state.segment)
             if isinstance(exp_data, list):
                 expiry_list = exp_data
             elif isinstance(exp_data, dict) and "data" in exp_data:
@@ -139,7 +131,6 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-    # Depth display (optional)
     st.divider()
     st.subheader("📊 Depth (Bid/Ask)")
     from dhan_data.depth_feed import get_depth
@@ -151,9 +142,7 @@ with st.sidebar:
         st.write("**Asks**")
         st.dataframe(pd.DataFrame(depth["asks"][:5]), use_container_width=True)
 
-# =========================
-# TOP BAR (NIFTY & BANKNIFTY SPOT)
-# =========================
+# Top bar
 nifty_spot = get_spot_for("NIFTY")
 banknifty_spot = get_spot_for("BANKNIFTY")
 col1, col2 = st.columns(2)
@@ -161,9 +150,7 @@ col1.metric("🇮🇳 NIFTY", f"{nifty_spot:,.2f}" if nifty_spot else "N/A")
 col2.metric("🏦 BANKNIFTY", f"{banknifty_spot:,.2f}" if banknifty_spot else "N/A")
 st.markdown("---")
 
-# =========================
-# MAIN DASHBOARD (if data available)
-# =========================
+# Main dashboard
 if st.session_state.sec_id and st.session_state.expiry:
     @st.cache_data(ttl=60)
     def fetch_chain(sec_id, expiry, segment):
@@ -174,7 +161,6 @@ if st.session_state.sec_id and st.session_state.expiry:
         st.error("No option chain data. Check symbol/expiry.")
         st.stop()
 
-    # Process raw data
     raw = data["data"]
     spot = raw.get("last_price", 0)
     oc = raw.get("oc", {})
@@ -195,7 +181,7 @@ if st.session_state.sec_id and st.session_state.expiry:
     df = pd.DataFrame(rows).sort_values("Strike")
     prev_df = st.session_state.previous_data
 
-    # Advanced indicators (OI change, buildup, etc.)
+    # Advanced indicators (unchanged)
     if prev_df is not None:
         merged = df.merge(prev_df, on="Strike", suffixes=("", "_prev"))
         df["CE OI Change"] = merged["CE OI"] - merged["CE OI_prev"]
@@ -281,7 +267,6 @@ if st.session_state.sec_id and st.session_state.expiry:
 
     st.session_state.previous_data = df.copy()
 
-    # Key Metrics
     total_ce = df["CE OI"].sum()
     total_pe = df["PE OI"].sum()
     pcr = total_pe / total_ce if total_ce else 0
@@ -324,10 +309,7 @@ if st.session_state.sec_id and st.session_state.expiry:
 
     atm_pcr = df.loc[df['Strike']==atm_strike, 'PE OI'].values[0] / df.loc[df['Strike']==atm_strike, 'CE OI'].values[0] if atm_strike in df['Strike'].values else 0
 
-    # =========================
-    # RENDER LAYERED UI
-    # =========================
-    # Level 1 – Decision Bar
+    # Render UI
     st.markdown("---")
     col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
     col1.metric("📍 Spot", f"{spot:.2f}")
@@ -339,7 +321,6 @@ if st.session_state.sec_id and st.session_state.expiry:
     col7.metric("⚠️ Trap", "Call Trap" if call_trap else ("Put Trap" if put_trap else "No"))
     st.markdown("---")
 
-    # Level 2 – Core Analysis
     st.subheader("📌 Core Analysis")
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.success(f"🟢 Support: {support[0] if support else 'N/A'}")
@@ -348,7 +329,6 @@ if st.session_state.sec_id and st.session_state.expiry:
     c4.info(f"📊 ATM PCR: {atm_pcr:.2f}" if atm_pcr else "N/A")
     c5.info(f"🔥 OI Strength: {'High' if pcr > 1.2 or pcr < 0.8 else 'Moderate'}")
 
-    # Level 3 – Option Chain Table
     st.subheader("📋 Option Chain + Advanced OI")
     display_cols = [
         "Strike", "CE OI", "PE OI", "CE OI Change", "PE OI Change",
@@ -368,7 +348,6 @@ if st.session_state.sec_id and st.session_state.expiry:
         "CE OI Velocity": "{:,.0f}", "PE OI Velocity": "{:,.0f}",
     }), height=500, use_container_width=True)
 
-    # Level 4 – Charts
     st.subheader("📈 Charts")
     chart_col1, chart_col2 = st.columns(2)
     with chart_col1:
@@ -385,7 +364,6 @@ if st.session_state.sec_id and st.session_state.expiry:
         fig_ltp.add_vline(x=spot, line_dash="dot", line_color="yellow")
         st.plotly_chart(fig_ltp, use_container_width=True)
 
-    # Candlestick
     st.subheader("🕯️ Candlestick (Spot)")
     from dhan_data.chart import get_candle_data, plot_candle
     try:
@@ -399,7 +377,6 @@ if st.session_state.sec_id and st.session_state.expiry:
     except Exception as e:
         st.warning(f"Candlestick error: {e}")
 
-    # Level 5 – Strike Analysis
     st.subheader("🔍 Strike Analysis")
     selected_strike = st.selectbox("Select Strike", df["Strike"].tolist())
     if selected_strike:
@@ -427,7 +404,6 @@ if st.session_state.sec_id and st.session_state.expiry:
         fig_hist.update_layout(title="OI History (Mock)", height=300)
         st.plotly_chart(fig_hist, use_container_width=True)
 
-    # Level 6 – Pro Insights
     st.subheader("🚀 Pro Insights")
     pro1, pro2, pro3, pro4 = st.columns(4)
     pro1.metric("FII Net Position (cr)", "1,240")
