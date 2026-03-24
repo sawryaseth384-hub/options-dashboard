@@ -107,10 +107,64 @@ def get_spot_for(symbol):
     return 0
 
 # =========================
+# DIAGNOSTIC FUNCTION
+# =========================
+def run_diagnostic():
+    st.subheader("🔬 Diagnostic Output")
+    # Token
+    from core.token_manager import get_token
+    token = get_token()
+    st.write(f"**Token:** {'✅' if token else '❌'}")
+
+    # Symbol resolution for all symbols
+    st.write("**Symbol Resolution:**")
+    sym_data = {}
+    for sym in HARDCODED_IDS.keys():
+        sec_id, seg = resolve_symbol(sym)
+        sym_data[sym] = (sec_id, seg)
+        st.write(f"{sym}: sec_id={sec_id}, segment={seg}")
+
+    # Expiry lists
+    st.write("**Expiry Lists (first 3):**")
+    for sym, (sec_id, seg) in sym_data.items():
+        if sec_id:
+            try:
+                exp_list = get_expiry(sec_id, seg)
+                st.write(f"{sym}: {exp_list[:3] if exp_list else 'empty'}")
+            except Exception as e:
+                st.write(f"{sym}: error - {e}")
+
+    # Option chain sample (first expiry)
+    st.write("**Option Chain Sample (first expiry):**")
+    for sym, (sec_id, seg) in sym_data.items():
+        if sec_id:
+            exp_list = get_expiry(sec_id, seg)
+            if exp_list:
+                expiry = exp_list[0]
+                data = get_option_chain(sec_id, expiry, seg)
+                if data and "data" in data:
+                    spot = data["data"].get("last_price")
+                    oc = data["data"].get("oc", {})
+                    strikes = sorted([int(float(s)) for s in oc.keys()])
+                    st.write(f"{sym} expiry {expiry}: spot={spot}, strikes={len(strikes)}")
+                    if strikes:
+                        st.write(f"  First 5: {strikes[:5]}, Last 5: {strikes[-5:]}")
+                        if spot:
+                            near = [s for s in strikes if abs(s - spot) <= 500]
+                            st.write(f"  Near spot {spot}: {near[:5]}")
+                else:
+                    st.write(f"{sym}: option chain fetch failed")
+            else:
+                st.write(f"{sym}: no expiry list")
+    st.info("Diagnostic complete. Scroll up to see all details.")
+
+# =========================
 # SIDEBAR CONTROLS
 # =========================
 with st.sidebar:
     st.header("⚙️ Controls")
+    show_diagnostic = st.checkbox("🔍 Show Diagnostic Info", value=False)
+
     symbol_list = list(HARDCODED_IDS.keys())
     symbol = st.selectbox("Symbol", symbol_list, index=symbol_list.index(st.session_state.symbol) if st.session_state.symbol in symbol_list else 0)
     if symbol != st.session_state.symbol:
@@ -171,6 +225,13 @@ with st.sidebar:
         st.dataframe(pd.DataFrame(depth["asks"][:5]), use_container_width=True)
 
 # =========================
+# DIAGNOSTIC OUTPUT (if toggled)
+# =========================
+if show_diagnostic:
+    run_diagnostic()
+    st.markdown("---")
+
+# =========================
 # TOP BAR – NIFTY & BANKNIFTY SPOT PRICES (static fallback)
 # =========================
 nifty_spot = get_spot_for("NIFTY")
@@ -229,7 +290,7 @@ if st.session_state.sec_id and st.session_state.expiry:
     df = pd.DataFrame(rows).sort_values("Strike")
     prev_df = st.session_state.previous_data
 
-    # Advanced indicators (OI change, etc.)
+    # Advanced indicators (OI change, etc.) – same as before
     if prev_df is not None:
         merged = df.merge(prev_df, on="Strike", suffixes=("", "_prev"))
         df["CE OI Change"] = merged["CE OI"] - merged["CE OI_prev"]
@@ -433,7 +494,6 @@ if st.session_state.sec_id and st.session_state.expiry:
 
     # Strike Analysis – default to ATM strike
     st.subheader("🔍 Strike Analysis")
-    # find index of ATM strike in the list
     strikes_list = df["Strike"].tolist()
     try:
         atm_index = strikes_list.index(atm_strike)
