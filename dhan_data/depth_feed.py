@@ -1,91 +1,90 @@
 import websocket
-import json
 import threading
+import json
 import time
 import streamlit as st
 from core.token_manager import get_token
 
-CLIENT_ID = st.secrets.get("CLIENT_ID")
-
+# =========================
+# GLOBALS
+# =========================
 ws = None
 is_connected = False
 
-DEPTH_DATA = {"bids": [], "asks": []}
+DEPTH_DATA = {
+    "bids": [],
+    "asks": []
+}
 
 
 # =========================
-# MAP SEGMENT
+# SEGMENT MAP
 # =========================
-def map_segment(segment):
-    return 2 if segment == "NSE_FNO" else 1
+def map_segment(seg):
+    return {
+        "NSE_EQ": 1,
+        "NSE_FNO": 2,
+        "IDX_I": 0   # ❌ INDEX NOT SUPPORTED (IMPORTANT)
+    }.get(seg, 1)
 
 
 # =========================
-# CALLBACKS
+# ON MESSAGE
 # =========================
-def on_open(wsapp):
-    global is_connected
-    is_connected = True
-    print("✅ WS CONNECTED")
-
-
-def on_message(wsapp, message):
+def on_message(ws, message):
     global DEPTH_DATA
 
     try:
         data = json.loads(message)
-        # simple debug
-        DEPTH_DATA = data
+
+        if "Depth" in data:
+            DEPTH_DATA = data["Depth"]
+
     except:
         pass
 
 
-def on_error(wsapp, error):
-    print("❌ WS ERROR:", error)
+# =========================
+# ON OPEN
+# =========================
+def on_open(ws):
+    global is_connected
+    is_connected = True
+    print("✅ Depth WS Connected")
 
 
-def on_close(wsapp, close_status_code, close_msg):
+# =========================
+# ON CLOSE
+# =========================
+def on_close(ws, a, b):
     global is_connected
     is_connected = False
-    print("❌ WS CLOSED")
+    print("❌ Depth WS Closed")
 
 
 # =========================
 # START WS
 # =========================
 def start_depth_feed():
-    global ws, is_connected
+    global ws
 
     token = get_token()
+    client_id = st.secrets["CLIENT_ID"]
 
-    if not token:
-        print("❌ Token missing")
-        return
-
-    url = f"wss://api-feed.dhan.co?version=2&token={token}&clientId={CLIENT_ID}&authType=2"
+    url = f"wss://api-feed.dhan.co?version=2&token={token}&clientId={client_id}&authType=2"
 
     ws = websocket.WebSocketApp(
         url,
         on_open=on_open,
         on_message=on_message,
-        on_error=on_error,
         on_close=on_close
     )
 
-    def run():
-        ws.run_forever(ping_interval=20, ping_timeout=10)
-
-    thread = threading.Thread(target=run)
+    thread = threading.Thread(target=ws.run_forever)
     thread.daemon = True
     thread.start()
 
-    # wait for connection
-    for _ in range(10):
-        if is_connected:
-            return
-        time.sleep(0.5)
-
-    print("❌ WS FAILED")
+    time.sleep(2)
 
 
 # =========================
@@ -93,8 +92,12 @@ def start_depth_feed():
 # =========================
 def subscribe_depth(security_id, segment):
 
-    if not is_connected or ws is None:
-        print("❌ WS NOT READY")
+    if segment == "IDX_I":
+        print("❌ Index depth not supported")
+        return
+
+    if not ws or not is_connected:
+        print("❌ WS not connected")
         return
 
     payload = {
@@ -110,13 +113,14 @@ def subscribe_depth(security_id, segment):
 
     try:
         ws.send(json.dumps(payload))
-        print("✅ SUBSCRIBED")
+        print(f"✅ Subscribed Depth: {security_id}")
+
     except Exception as e:
-        print("❌ SUBSCRIBE ERROR:", e)
+        print("❌ Subscribe Error:", e)
 
 
 # =========================
-# GET DEPTH
+# GET DATA
 # =========================
 def get_depth():
     return DEPTH_DATA
