@@ -16,12 +16,13 @@ def get_candle_data(security_id, segment):
         time.sleep(wait)
     _last_chart_call = time.time()
 
+    # First try intraday (1-minute) for last 3 days
     try:
         url = f"{BASE_URL}/charts/intraday"
         exchange = "NSE_EQ"
         instrument = "INDEX" if segment in ["IDX_I", "I"] else "EQUITY"
         to_date = datetime.now()
-        from_date = to_date - timedelta(days=3)
+        from_date = to_date - timedelta(days=5)
         payload = {
             "securityId": str(security_id),
             "exchangeSegment": exchange,
@@ -31,27 +32,43 @@ def get_candle_data(security_id, segment):
             "fromDate": from_date.strftime("%Y-%m-%d %H:%M:%S"),
             "toDate": to_date.strftime("%Y-%m-%d %H:%M:%S")
         }
-        res = requests.post(url, headers=get_headers(), json=payload)
+        res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
         data = res.json()
-        if "errorCode" in data:
-            st.error(data.get("errorMessage"))
-            return None
-        if "data" not in data or not data["data"]:
-            return None
-        d = data["data"]
-        df = pd.DataFrame({
-            "time": pd.to_datetime(d["timestamp"], unit="s", errors="coerce"),
-            "open": d["open"],
-            "high": d["high"],
-            "low": d["low"],
-            "close": d["close"],
-            "volume": d["volume"]
-        })
-        df = df.dropna().sort_values("time")
-        return df
+        if "errorCode" not in data and "data" in data and data["data"]:
+            d = data["data"]
+            df = pd.DataFrame({
+                "time": pd.to_datetime(d["timestamp"], unit="s", errors="coerce"),
+                "open": d["open"],
+                "high": d["high"],
+                "low": d["low"],
+                "close": d["close"],
+                "volume": d["volume"]
+            })
+            df = df.dropna().sort_values("time")
+            return df
     except Exception as e:
-        st.error(f"Chart Error: {e}")
-        return None
+        st.warning(f"Intraday chart failed: {e}, trying historical...")
+
+    # Fallback: use 5-minute historical data
+    try:
+        from dhan_data.historical_data import get_historical
+        hist = get_historical(security_id, segment)
+        if hist:
+            df = pd.DataFrame(hist)
+            df["time"] = pd.to_datetime(df["time"], unit="s")
+            df = df.rename(columns={
+                "time": "time",
+                "open": "open",
+                "high": "high",
+                "low": "low",
+                "close": "close"
+            })
+            df["volume"] = 0  # volume not returned in historical
+            return df
+    except Exception as e:
+        st.error(f"Historical fallback error: {e}")
+
+    return None
 
 def add_indicators(df):
     df["EMA21"] = df["close"].ewm(span=21).mean()
