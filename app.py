@@ -381,7 +381,9 @@ if st.session_state.sec_id and st.session_state.expiry:
     c4.info(f"📊 ATM PCR: {atm_pcr:.2f}" if atm_pcr else "N/A")
     c5.info(f"🔥 OI Strength: {'High' if pcr > 1.2 or pcr < 0.8 else 'Moderate'}")
 
+    # Option Chain Table with a helpful note to scroll
     st.subheader("📋 Option Chain + Advanced OI")
+    st.info("👉 **Scroll down inside the table to see ATM strikes** (the real action is lower down).")
     display_cols = [
         "Strike", "CE OI", "PE OI", "CE OI Change", "PE OI Change",
         "CE LTP", "PE LTP", "CE Delta", "PE Delta",
@@ -429,8 +431,15 @@ if st.session_state.sec_id and st.session_state.expiry:
     except Exception as e:
         st.warning(f"Candlestick error: {e}")
 
+    # Strike Analysis – default to ATM strike
     st.subheader("🔍 Strike Analysis")
-    selected_strike = st.selectbox("Select Strike", df["Strike"].tolist())
+    # find index of ATM strike in the list
+    strikes_list = df["Strike"].tolist()
+    try:
+        atm_index = strikes_list.index(atm_strike)
+    except ValueError:
+        atm_index = 0
+    selected_strike = st.selectbox("Select Strike", strikes_list, index=atm_index)
     if selected_strike:
         row = df[df["Strike"] == selected_strike].iloc[0]
         col_a, col_b = st.columns(2)
