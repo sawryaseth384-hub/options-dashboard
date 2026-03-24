@@ -15,16 +15,22 @@ def get_headers():
     }
 
 def get_token():
+    # Initialize session state if missing
     if "token" not in st.session_state:
         st.session_state.token = None
         st.session_state.expiry = 0
         st.session_state.last_call = 0
 
-    # reuse valid token
-    if st.session_state.token and time.time() < st.session_state.expiry:
-        return st.session_state.token
+    # reuse valid token – ensure expiry is a number
+    if st.session_state.token:
+        try:
+            expiry = float(st.session_state.expiry)
+        except (TypeError, ValueError):
+            expiry = 0
+        if time.time() < expiry:
+            return st.session_state.token
 
-    # avoid 2 min violation
+    # avoid calling token generation more than once every 120 seconds
     if time.time() - st.session_state.last_call < 120:
         return st.session_state.token
 
@@ -49,19 +55,13 @@ def refresh_token():
             st.session_state.last_call = time.time()
 
             expiry = data.get("expiryTime")
+            if expiry:
+                dt = datetime.fromisoformat(expiry)
+                st.session_state.expiry = dt.timestamp() - 60
+            else:
+                st.session_state.expiry = time.time() + 23 * 3600
 
-            try:
-                # ✅ safe parsing
-                if expiry:
-                    dt = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
-                    st.session_state.expiry = float(dt.timestamp() - 60)
-                else:
-                    st.session_state.expiry = float(time.time() + 23 * 3600)
-
-            except Exception:
-                # ✅ fallback (VERY IMPORTANT)
-                st.session_state.expiry = float(time.time() + 3600)
-
+            st.success("✅ Token Generated")
             return st.session_state.token
 
         else:
