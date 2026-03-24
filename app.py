@@ -64,13 +64,6 @@ subscribe_instrument(nifty_sec, nifty_seg)
 ltp = get_live_ltp()
 st.write(f"Live LTP: {ltp} (should be non‑zero after a few seconds)")
 
-# 6. Depth feed
-st.subheader("6. Depth Feed")
-start_depth_feed()
-subscribe_depth(nifty_sec, nifty_seg)
-depth = get_depth()
-st.write(f"Depth bids: {depth['bids'][:2] if depth['bids'] else 'empty'}")
-st.write(f"Depth asks: {depth['asks'][:2] if depth['asks'] else 'empty'}")
 
 # 7. Historical data
 st.subheader("7. Historical Data (5‑minute)")
