@@ -5,7 +5,7 @@ from core.token_manager import get_headers
 BASE_URL = "https://api.dhan.co/v2"
 
 def get_ltp(security_id, segment):
-    # Always use NSE_EQ – works for both indices and stocks
+    # Always use NSE_EQ – this works for both indices and stocks
     exchange = "NSE_EQ"
     payload = {"NSE_EQ": [int(security_id)]}
     try:
