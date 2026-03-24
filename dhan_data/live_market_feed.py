@@ -5,10 +5,8 @@ import struct
 import streamlit as st
 from core.token_manager import get_token
 
-TOKEN = get_token()
-CLIENT_ID = st.secrets["CLIENT_ID"]
-WS_URL = f"wss://api-feed.dhan.co?version=2&token={TOKEN}&clientId={CLIENT_ID}&authType=2"
-
+CLIENT_ID = st.secrets.get("CLIENT_ID", "")
+WS_URL = None
 latest_data = {"ltp": 0, "ltt": 0, "volume": 0}
 ws_app = None
 is_connected = False
@@ -63,19 +61,27 @@ def on_open(ws):
     print("✅ LIVE CONNECTED")
 
 def start_live_feed():
-    global ws_app
+    global ws_app, WS_URL
     if ws_app is not None:
         return
-    ws_app = websocket.WebSocketApp(
-        WS_URL,
-        on_open=on_open,
-        on_message=on_message,
-        on_error=on_error,
-        on_close=on_close
-    )
-    thread = threading.Thread(target=ws_app.run_forever)
-    thread.daemon = True
-    thread.start()
+    try:
+        token = get_token()
+        if not token:
+            st.warning("Live feed not started: token missing.")
+            return
+        WS_URL = f"wss://api-feed.dhan.co?version=2&token={token}&clientId={CLIENT_ID}&authType=2"
+        ws_app = websocket.WebSocketApp(
+            WS_URL,
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
+        )
+        thread = threading.Thread(target=ws_app.run_forever)
+        thread.daemon = True
+        thread.start()
+    except Exception as e:
+        st.error(f"Live feed start error: {e}")
 
 def subscribe_instrument(security_id, segment):
     global ws_app, is_connected, subscribed
