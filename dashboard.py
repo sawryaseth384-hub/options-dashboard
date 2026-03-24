@@ -1,18 +1,15 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
 def render_header(nifty_spot=None, banknifty_spot=None):
-    """Top bar with NIFTY & BANKNIFTY spot prices."""
     col1, col2 = st.columns(2)
     col1.metric("🇮🇳 NIFTY", f"{nifty_spot:,.2f}" if nifty_spot else "N/A")
     col2.metric("🏦 BANKNIFTY", f"{banknifty_spot:,.2f}" if banknifty_spot else "N/A")
     st.markdown("---")
 
 def render_decision_bar(spot, pcr, atm_strike, best_ce, final_signal, call_trap, put_trap):
-    """Level 1 – Decision Bar (always visible at top)."""
     col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
     col1.metric("📍 Spot", f"{spot:.2f}")
     col2.metric("📊 PCR", f"{pcr:.2f}")
@@ -24,7 +21,6 @@ def render_decision_bar(spot, pcr, atm_strike, best_ce, final_signal, call_trap,
     st.markdown("---")
 
 def render_core_analysis(support, resistance, max_pain, atm_pcr, pcr):
-    """Level 2 – Core Analysis summary."""
     st.subheader("📌 Core Analysis")
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.success(f"🟢 Support: {support[0] if support else 'N/A'}")
@@ -34,7 +30,6 @@ def render_core_analysis(support, resistance, max_pain, atm_pcr, pcr):
     c5.info(f"🔥 OI Strength: {'High' if pcr > 1.2 or pcr < 0.8 else 'Moderate'}")
 
 def render_option_chain_table(df):
-    """Level 3 – Scrollable option chain with all advanced columns."""
     st.subheader("📋 Option Chain + Advanced OI")
     display_cols = [
         "Strike", "CE OI", "PE OI", "CE OI Change", "PE OI Change",
@@ -55,7 +50,6 @@ def render_option_chain_table(df):
     }), height=500, use_container_width=True)
 
 def render_charts(df, support, resistance, spot):
-    """Level 4 – OI bar chart and LTP line chart."""
     st.subheader("📈 Charts")
     chart_col1, chart_col2 = st.columns(2)
     with chart_col1:
@@ -73,7 +67,6 @@ def render_charts(df, support, resistance, spot):
         st.plotly_chart(fig_ltp, use_container_width=True)
 
 def render_candlestick(sec_id, segment):
-    """Level 4 – Candlestick chart (uses chart.py)."""
     st.subheader("🕯️ Candlestick (Spot)")
     from dhan_data.chart import get_candle_data, plot_candle
     try:
@@ -88,7 +81,6 @@ def render_candlestick(sec_id, segment):
         st.warning(f"Candlestick error: {e}")
 
 def render_strike_analysis(df, sec_id):
-    """Level 5 – Strike analysis with detailed metrics and OI velocity graph."""
     st.subheader("🔍 Strike Analysis")
     selected_strike = st.selectbox("Select Strike", df["Strike"].tolist())
     if selected_strike:
@@ -108,7 +100,6 @@ def render_strike_analysis(df, sec_id):
             st.write(f"**PE Action**: {row['PE Action']}")
 
         st.write("**OI Velocity Graph** (last 5 intervals)")
-        # Placeholder – you can replace with actual historical OI fetch
         history_ce = [1000, 1200, 1400, 1600, 1800]
         history_pe = [800, 950, 1100, 1250, 1400]
         fig_hist = go.Figure()
@@ -118,10 +109,9 @@ def render_strike_analysis(df, sec_id):
         st.plotly_chart(fig_hist, use_container_width=True)
 
 def render_pro_insights(net_delta):
-    """Level 6 – Pro insights (FII/DII, IV, Gamma, Delta Exposure)."""
     st.subheader("🚀 Pro Insights")
     pro1, pro2, pro3, pro4 = st.columns(4)
-    pro1.metric("FII Net Position (cr)", "1,240")   # placeholder
+    pro1.metric("FII Net Position (cr)", "1,240")
     pro2.metric("DII Net Position (cr)", "-320")
     pro3.metric("IV (ATM)", "14.8%")
     pro4.metric("Gamma Exposure", "₹4.2 Lakh / pt")
