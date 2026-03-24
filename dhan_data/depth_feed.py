@@ -3,10 +3,16 @@ import json
 import struct
 import threading
 import streamlit as st
-from core.token_manager import get_token   # 👈 import
+from core.token_manager import get_token
 
-TOKEN = get_token()
-CLIENT_ID = st.secrets["CLIENT_ID"]
+# Get token safely; if it fails, we'll still import without error
+try:
+    TOKEN = get_token()
+except Exception as e:
+    TOKEN = None
+    st.error(f"Depth feed: token error: {e}")
+
+CLIENT_ID = st.secrets.get("CLIENT_ID", "")
 WS_URL = f"wss://depth-api-feed.dhan.co/twentydepth?token={TOKEN}&clientId={CLIENT_ID}&authType=2"
 
 DEPTH_DATA = {"bids": [], "asks": []}
@@ -62,6 +68,9 @@ def on_close(ws, code, msg):
 def start_depth_feed():
     global ws_app
     if ws_app is not None:
+        return
+    if not TOKEN:
+        st.warning("Depth feed not started: token missing.")
         return
     ws_app = websocket.WebSocketApp(
         WS_URL,
