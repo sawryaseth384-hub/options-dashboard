@@ -6,7 +6,6 @@ from dhan_data.market_quote import get_ltp
 from dhan_data.historical_data import get_historical
 from dhan_data.chart import get_candle_data, plot_candle
 from dhan_data.live_market_feed import start_live_feed, subscribe_instrument, get_live_ltp
-from dhan_data.depth_feed import start_depth_feed, subscribe_depth, get_depth
 from core.token_manager import get_token
 import pandas as pd
 
