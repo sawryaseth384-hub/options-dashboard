@@ -20,6 +20,7 @@ def get_candle_data(security_id, segment):
         url = f"{BASE_URL}/charts/intraday"
         # Intraday charts use NSE_EQ for both indices and stocks
         exchange = "NSE_EQ"
+        # Instrument: INDEX for indices (IDX_I or I), EQUITY for stocks
         instrument = "INDEX" if segment in ["IDX_I", "I"] else "EQUITY"
         to_date = datetime.now()
         from_date = to_date - timedelta(days=3)
