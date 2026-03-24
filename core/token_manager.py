@@ -49,13 +49,19 @@ def refresh_token():
             st.session_state.last_call = time.time()
 
             expiry = data.get("expiryTime")
-            if expiry:
-                dt = datetime.fromisoformat(expiry)
-                st.session_state.expiry = dt.timestamp() - 60
-            else:
-                st.session_state.expiry = time.time() + 23 * 3600
 
-            st.success("✅ Token Generated")
+            try:
+                # ✅ safe parsing
+                if expiry:
+                    dt = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+                    st.session_state.expiry = float(dt.timestamp() - 60)
+                else:
+                    st.session_state.expiry = float(time.time() + 23 * 3600)
+
+            except Exception:
+                # ✅ fallback (VERY IMPORTANT)
+                st.session_state.expiry = float(time.time() + 3600)
+
             return st.session_state.token
 
         else:
