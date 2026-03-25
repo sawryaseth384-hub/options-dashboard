@@ -9,88 +9,112 @@ from dhan_data.expiry import get_expiry
 from dhan_data.option_chain import get_option_chain
 from core.token_manager import get_token, get_headers
 
+# =========================
+# PAGE SETUP
+# =========================
 st.set_page_config(layout="wide")
-st.title("🔍 Dhan Full Debug Dashboard")
+st.title("🚀 Dhan Trading Dashboard + Debug")
 
 # =========================
-# 1. TOKEN CHECK
+# SIDEBAR DEBUG PANEL
 # =========================
-st.subheader("1. Token Check")
+st.sidebar.title("🔧 Debug Panel")
+
+debug_mode = st.sidebar.toggle("Enable Debug Mode")
+
+# =========================
+# 1. TOKEN
+# =========================
+st.subheader("1. Token")
 
 try:
     token = get_token()
     headers = get_headers()
-    st.success("✅ Token Loaded")
-    st.write(headers)
+    st.success("✅ Token OK")
+
+    if debug_mode:
+        st.sidebar.write("Headers:", headers)
+
 except Exception as e:
     st.error(f"❌ Token Error: {e}")
 
 # =========================
-# 2. LTP CHECK
+# 2. MARKET QUOTE
 # =========================
-st.subheader("2. LTP Check")
+st.subheader("2. Market Quote")
 
 try:
     ltp = get_ltp(2885, "NSE_EQ")
-    st.success(f"✅ LTP: {ltp}")
+    st.write(f"RELIANCE LTP: {ltp}")
+
+    if debug_mode:
+        st.sidebar.success("LTP OK")
+
 except Exception as e:
     st.error(f"❌ LTP Error: {e}")
 
 # =========================
-# 3. HISTORICAL CHECK
+# 3. HISTORICAL
 # =========================
-st.subheader("3. Historical Check")
+st.subheader("3. Historical Data")
 
 try:
     hist = get_historical(2885, "NSE_EQ")
-    st.write("RAW DATA:", hist)
 
     if hist:
-        st.success("✅ Historical Data Loaded")
+        st.success("✅ Historical Loaded")
+
+        if debug_mode:
+            st.sidebar.write("Historical RAW:", hist)
+
     else:
-        st.warning("⚠️ No Historical Data")
+        st.warning("⚠️ No historical data")
+
 except Exception as e:
     st.error(f"❌ Historical Error: {e}")
 
 # =========================
-# 4. CANDLE CHECK
+# 4. CANDLE
 # =========================
-st.subheader("4. Candle Check")
+st.subheader("4. Candlestick")
 
 try:
     df = get_candle_data(2885, "NSE_EQ")
 
-    if df is not None:
-        st.write("DataFrame Preview:", df.head())
-
+    if df is not None and len(df) > 0:
         fig, trend = plot_candle(df)
-        st.success(f"Trend: {trend}")
+        st.write(f"Trend: {trend}")
         st.plotly_chart(fig)
+
+        if debug_mode:
+            st.sidebar.write("Candle DF:", df.head())
+
     else:
-        st.warning("⚠️ No Candle Data")
+        st.warning("⚠️ No candle data")
 
 except Exception as e:
     st.error(f"❌ Candle Error: {e}")
 
 # =========================
-# 5. OPTION CHAIN CHECK
+# 5. OPTION CHAIN
 # =========================
-st.subheader("5. Option Chain Check")
+st.subheader("5. Option Chain")
 
 try:
     exp_list = get_expiry(13, "IDX_I")
 
     if exp_list:
         expiry = exp_list[0]
-        st.write("Expiry:", expiry)
-
         oc = get_option_chain(13, expiry, "IDX_I")
-        st.write("Option Chain RAW:", oc)
 
         if oc:
             st.success("✅ Option Chain Loaded")
+
+            if debug_mode:
+                st.sidebar.write("OC RAW:", oc)
+
         else:
-            st.warning("⚠️ No OC Data")
+            st.warning("⚠️ No Option Chain Data")
 
     else:
         st.warning("⚠️ No Expiry Data")
@@ -99,13 +123,15 @@ except Exception as e:
     st.error(f"❌ Option Chain Error: {e}")
 
 # =========================
-# 6. FINAL STATUS
+# 6. STATUS SUMMARY
 # =========================
-st.success("🚀 Debug Scan Complete")
+st.subheader("6. System Status")
+
+st.success("✅ Dashboard Running")
 
 # =========================
-# REFRESH
+# REFRESH BUTTON
 # =========================
-if st.button("Refresh"):
+if st.button("🔄 Refresh"):
     st.cache_data.clear()
     st.rerun()
