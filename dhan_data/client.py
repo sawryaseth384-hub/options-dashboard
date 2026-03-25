@@ -1,3 +1,4 @@
+import logging
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -5,6 +6,7 @@ from urllib3.util.retry import Retry
 from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
+LOGGER = logging.getLogger(__name__)
 
 class DhanApiClient:
     """HTTP client for Dhan API with retry support and auth header injection."""
@@ -40,8 +42,10 @@ class DhanApiClient:
         headers = self.header_provider() or {}
 
         if not headers.get("access-token"):
+            LOGGER.warning("Dhan API auth failed: missing access token.")
             return None, "Authentication failed: missing access token"
         if not headers.get("client-id"):
+            LOGGER.warning("Dhan API auth failed: missing client ID.")
             return None, "Authentication failed: missing client ID"
 
         try:

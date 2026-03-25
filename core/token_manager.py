@@ -1,3 +1,4 @@
+import logging
 import os
 import requests
 import pyotp
@@ -5,6 +6,7 @@ import time
 import streamlit as st
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
+LOGGER = logging.getLogger(__name__)
 
 def get_token():
 
@@ -47,6 +49,7 @@ def get_headers(content_type="application/json"):
     client_id = _get_secret("CLIENT_ID")
 
     if not token or not client_id:
+        LOGGER.warning("Dhan auth headers unavailable; missing token or client_id.")
         return {}
 
     headers = {

@@ -266,6 +266,7 @@ def _normalize_quote_item(quote):
     if change_pct is None and ltp:
         base = ltp - change
         # Tolerance prevents extreme percentages when base is effectively zero.
+        # 1e-6 keeps tiny bases from exploding while staying negligible vs. prices.
         tolerance = max(1e-6, abs(ltp) * 1e-6)
         if abs(base) <= tolerance:
             change_pct = 0
@@ -292,7 +293,7 @@ class MarketDataEngine:
             df = load_instruments()
             upper_symbol_col = "SEM_TRADING_SYMBOL_UPPER"
             if "SEM_TRADING_SYMBOL" not in df.columns:
-                self._instrument_df = df.iloc[0:0]
+                self._instrument_df = df.iloc[:0]
                 return self._instrument_df
             if not df.empty and upper_symbol_col not in df.columns:
                 df = df.copy()
