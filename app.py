@@ -214,7 +214,10 @@ else:
     total_put = option_chain_df["Put OI"].sum()
     pcr = None
     if isinstance(options_data, dict):
-        pcr = options_data.get("pcr") or options_data.get("PCR")
+        if "pcr" in options_data:
+            pcr = options_data.get("pcr")
+        elif "PCR" in options_data:
+            pcr = options_data.get("PCR")
     if pcr is None and total_call and total_call != 0:
         pcr = total_put / total_call
     st.metric("PCR (Put/Call Ratio)", "No Data" if pcr is None else f"{pcr:.2f}")

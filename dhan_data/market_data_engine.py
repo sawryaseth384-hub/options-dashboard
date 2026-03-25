@@ -242,7 +242,7 @@ def build_market_data():
             if total_call:
                 market_data["options"]["pcr"] = total_put / total_call
             else:
-                market_data["options"]["pcr"] = None
+                market_data["options"]["pcr"] = 0
 
         return market_data
     except (AttributeError, KeyError, TypeError, ValueError):

@@ -15,7 +15,7 @@ def _build_url(endpoint):
 def safe_post(endpoint, payload, retries=3, timeout=10):
     headers = get_headers()
     if not headers or not headers.get("access-token") or not headers.get("client-id"):
-        return None, "Missing Dhan credentials"
+        return None, "Missing Dhan access token or client ID"
 
     last_error = None
     url = _build_url(endpoint)

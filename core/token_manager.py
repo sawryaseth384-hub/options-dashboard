@@ -11,7 +11,7 @@ def _read_secret(key):
         if hasattr(st, "secrets") and key in st.secrets:
             return st.secrets[key]
     except (AttributeError, KeyError, TypeError, RuntimeError):
-        return os.getenv(key)
+        pass
     return os.getenv(key)
 
 def get_client_id():
