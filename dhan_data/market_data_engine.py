@@ -13,6 +13,7 @@ DEFAULT_INDEX_FALLBACKS = {
 DEFAULT_INDEX_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"]
 
 class TTLCache:
+    """Simple TTL cache that ignores non-positive TTL values."""
     def __init__(self):
         self._store = {}
 
@@ -200,6 +201,11 @@ class MarketDataEngine:
         if isinstance(data, dict) and "data" in data:
             data = data["data"]
         expiries = data if isinstance(data, list) else []
+        if isinstance(expiries, list):
+            try:
+                expiries = sorted(expiries)
+            except TypeError:
+                pass
         self.cache.set(cache_key, expiries, cache_ttl)
         return expiries
 
@@ -345,11 +351,21 @@ class MarketDataEngine:
             return None
 
         symbol_upper = symbol.upper()
-        match = df[df["SEM_TRADING_SYMBOL"].str.upper() == symbol_upper]
+        if "_SYM_UPPER" not in df.columns:
+            df["_SYM_UPPER"] = df["SEM_TRADING_SYMBOL"].str.upper()
+        match = df[df["_SYM_UPPER"] == symbol_upper]
         if match.empty and symbol_upper == "VIX":
-            match = df[df["SEM_TRADING_SYMBOL"].str.contains("VIX", case=False, na=False)]
+            match = df[df["_SYM_UPPER"].str.contains("VIX", case=False, na=False)]
         if match.empty:
             return None
+
+        if len(match) > 1:
+            preferred_segments = [fallback_segment, "IDX_I", "I", "NSE_EQ"]
+            for seg in preferred_segments:
+                candidate = match[match["SEGMENT"] == seg]
+                if not candidate.empty:
+                    match = candidate
+                    break
 
         row = match.iloc[0]
         segment = row.get("SEGMENT") or fallback_segment

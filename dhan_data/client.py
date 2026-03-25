@@ -39,7 +39,7 @@ class DhanApiClient:
         headers = self.header_provider() or {}
 
         if not headers:
-            return None, "Missing auth headers"
+            return None, "Authentication failed: missing token or client ID"
 
         try:
             response = self.session.post(url, headers=headers, json=payload, timeout=self.timeout)
