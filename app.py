@@ -53,7 +53,10 @@ def _to_float(value):
 
 @st.cache_data(show_spinner=False)
 def load_market_data():
-    return build_market_data()
+    try:
+        return build_market_data()
+    except Exception as exc:
+        return {"_error": str(exc)}
 
 
 def render_header_row(title, symbols, section):
@@ -159,6 +162,9 @@ market_data = load_market_data()
 if not market_data:
     st.warning("No Data")
     st.stop()
+if isinstance(market_data, dict) and market_data.get("_error"):
+    st.error(f"Data refresh failed: {market_data['_error']}")
+    st.stop()
 
 indian_section = _get_section(market_data, ["indices", "indian_market", "market", "header", "headers"])
 global_section = _get_section(market_data, ["global", "commodities", "global_commodities"])
@@ -206,7 +212,7 @@ else:
     pcr = None
     if isinstance(options_data, dict):
         pcr = options_data.get("pcr") or options_data.get("PCR")
-    if pcr is None and total_call:
+    if pcr is None and total_call and total_call != 0:
         pcr = total_put / total_call
     st.metric("PCR (Put/Call Ratio)", "No Data" if pcr is None else f"{pcr:.2f}")
 
@@ -214,12 +220,14 @@ else:
     atm_strike = None
     if spot_price is not None and not option_chain_df["Strike"].isna().all():
         option_chain_df["Strike"] = pd.to_numeric(option_chain_df["Strike"], errors="coerce")
-        atm_strike = option_chain_df.iloc[(option_chain_df["Strike"] - spot_price).abs().argsort()[:1]]["Strike"].values[0]
+        strike_diff = (option_chain_df["Strike"] - spot_price).abs()
+        atm_index = strike_diff.idxmin()
+        atm_strike = option_chain_df.loc[atm_index, "Strike"]
 
     def highlight_atm(row):
         if atm_strike is None:
             return [""] * len(row)
-        return ["background-color: #1f4d2e" if row["Strike"] == atm_strike else "" for _ in row]
+        return ["background-color: #ffeeba" if row["Strike"] == atm_strike else "" for _ in row]
 
     st.dataframe(option_chain_df.style.apply(highlight_atm, axis=1), use_container_width=True)
 
