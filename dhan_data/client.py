@@ -39,9 +39,9 @@ class DhanApiClient:
         url = endpoint if endpoint.startswith("http") else f"{self.base_url}/{endpoint.lstrip('/')}"
         headers = self.header_provider() or {}
 
-        if "access-token" not in headers:
+        if not headers.get("access-token"):
             return None, "Authentication failed: missing access token"
-        if "client-id" not in headers:
+        if not headers.get("client-id"):
             return None, "Authentication failed: missing client ID"
 
         try:

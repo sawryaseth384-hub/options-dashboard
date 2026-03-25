@@ -14,7 +14,7 @@ DEFAULT_INDEX_FALLBACKS = {
 DEFAULT_INDEX_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"]
 
 class TTLCache:
-    """Simple TTL cache that ignores non-positive TTL values and uses a lock for safety."""
+    """Simple TTL cache with lazy expiry cleanup and lock-based safety."""
     def __init__(self):
         self._store = {}
         self._lock = threading.Lock()
@@ -292,7 +292,13 @@ class MarketDataEngine:
     def fetch_option_chain(self, security_id, segment="IDX_I", expiry=None, cache_ttl=5):
         if expiry is None:
             expiries = self.fetch_expiry_dates(security_id, segment=segment)
-            expiry = min(expiries) if expiries else None
+            if expiries:
+                try:
+                    expiry = min(expiries)
+                except TypeError:
+                    expiry = expiries[0]
+            else:
+                expiry = None
 
         if not expiry:
             return {"chain": [], "pcr": 0, "spot_price": 0, "expiry": None}
@@ -531,6 +537,6 @@ class MarketDataEngine:
                     inst["segment"],
                 )
             else:
-                raise ValueError(
+                raise AssertionError(
                     f"Unsupported candle_type: {candle_type!r}. Expected 'intraday' or 'historical'."
                 )
