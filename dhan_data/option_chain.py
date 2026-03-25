@@ -1,35 +1,22 @@
-def get_option_chain(security_id, expiry, segment="IDX_I"):
-    try:
-        headers = get_headers()
+def get_option_chain(sec, expiry):
+    payload = {
+        "UnderlyingScrip": int(sec),
+        "UnderlyingSeg": "IDX_I",
+        "expiryDate": expiry   # ✅ FIXED
+    }
 
-        payload = {
-            "UnderlyingScrip": int(security_id),
-            "UnderlyingSeg": segment,
-            "expiryDate": expiry   # ✅ correct
-        }
+    data, err = safe_post("https://api.dhan.co/v2/optionchain", payload)
 
-        res = requests.post(URL, headers=headers, json=payload, timeout=10)
+    if err:
+        return None, err
 
-        if res.status_code != 200:
-            return None, f"HTTP {res.status_code}"
+    if not data or data.get("status") != "success":
+        return None, data
 
-        data = res.json()
+    # ✅ handle both formats
+    if "oc" in data["data"]:
+        return data["data"]["oc"], None
+    elif "records" in data["data"]:
+        return data["data"]["records"], None
 
-        # 🔥 DEBUG (important)
-        # st.write(data)
-
-        if data.get("status") != "success":
-            return None, data
-
-        # ✅ HANDLE BOTH STRUCTURES
-        if "oc" in data["data"]:
-            return data["data"]["oc"], None
-
-        elif "records" in data["data"]:
-            return data["data"]["records"], None
-
-        else:
-            return None, "Unknown structure"
-
-    except Exception as e:
-        return None, str(e)
+    return None, "Parse Error"
