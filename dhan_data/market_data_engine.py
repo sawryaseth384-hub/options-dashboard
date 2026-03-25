@@ -265,7 +265,8 @@ def _normalize_quote_item(quote):
     change_pct = _coalesce(quote, ["percentChange", "changePercent", "netChangePercent"], default=None)
     if change_pct is None and ltp:
         base = ltp - change
-        if abs(base) < 1e-6:
+        tolerance = max(1e-6, abs(ltp) * 1e-6)
+        if abs(base) <= tolerance:
             change_pct = 0
         else:
             change_pct = round((change / base) * 100, 4)
@@ -687,6 +688,7 @@ class MarketDataEngine:
         return market_data
 
     def _attach_candles(self, targets, instruments, candle_type, interval):
+        """Attach intraday or historical candles to the provided instrument list."""
         target_set = {symbol.upper() for symbol in targets} if targets else None
         for inst in instruments:
             if target_set and inst["symbol"].upper() not in target_set:
@@ -704,7 +706,8 @@ class MarketDataEngine:
                 )
             else:
                 raise ValueError(
-                    f"Unsupported candle_type: {candle_type}. Expected 'intraday' or 'historical'."
+                    f"Unsupported candle_type in _attach_candles: {candle_type}. "
+                    "Expected 'intraday' or 'historical'."
                 )
 
 _DEFAULT_ENGINE = None
