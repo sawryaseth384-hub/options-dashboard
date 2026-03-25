@@ -39,8 +39,6 @@ class DhanApiClient:
         url = endpoint if endpoint.startswith("http") else f"{self.base_url}/{endpoint.lstrip('/')}"
         headers = self.header_provider() or {}
 
-        if not headers:
-            return None, "Authentication failed: missing auth headers"
         if not headers.get("access-token"):
             return None, "Authentication failed: missing access token"
         if not headers.get("client-id"):

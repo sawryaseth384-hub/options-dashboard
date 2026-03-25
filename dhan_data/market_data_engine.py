@@ -265,7 +265,10 @@ def _normalize_quote_item(quote):
     change_pct = _coalesce(quote, ["percentChange", "changePercent", "netChangePercent"], default=None)
     if change_pct is None and ltp:
         base = ltp - change
-        change_pct = round((change / base) * 100, 4) if base else 0
+        if abs(base) < 1e-6:
+            change_pct = 0
+        else:
+            change_pct = round((change / base) * 100, 4)
     return {
         "ltp": ltp,
         "change": change,
@@ -701,22 +704,28 @@ class MarketDataEngine:
                 )
             else:
                 raise ValueError(
-                    f"Unsupported candle_type: {candle_type!r}. Expected 'intraday' or 'historical'."
+                    f"Unsupported candle_type: {candle_type}. Expected 'intraday' or 'historical'."
                 )
 
-_DEFAULT_ENGINE = MarketDataEngine()
+_DEFAULT_ENGINE = None
+
+def _get_default_engine():
+    global _DEFAULT_ENGINE
+    if _DEFAULT_ENGINE is None:
+        _DEFAULT_ENGINE = MarketDataEngine()
+    return _DEFAULT_ENGINE
 
 def get_indices(symbols=None):
     """Module-level helper for index quotes."""
-    return _DEFAULT_ENGINE.get_indices(symbols)
+    return _get_default_engine().get_indices(symbols)
 
 def get_stocks(symbols):
     """Module-level helper for stock quotes."""
-    return _DEFAULT_ENGINE.get_stocks(symbols)
+    return _get_default_engine().get_stocks(symbols)
 
 def get_option_chain(symbol=None, security_id=None, segment="IDX_I", expiry=None):
     """Module-level helper for option chain + PCR."""
-    return _DEFAULT_ENGINE.get_option_chain(
+    return _get_default_engine().get_option_chain(
         symbol=symbol,
         security_id=security_id,
         segment=segment,
@@ -725,7 +734,7 @@ def get_option_chain(symbol=None, security_id=None, segment="IDX_I", expiry=None
 
 def get_intraday(security_id, segment, interval="1", from_date=None, to_date=None):
     """Module-level helper for intraday candles."""
-    return _DEFAULT_ENGINE.get_intraday(
+    return _get_default_engine().get_intraday(
         security_id,
         segment,
         interval=interval,
@@ -735,4 +744,4 @@ def get_intraday(security_id, segment, interval="1", from_date=None, to_date=Non
 
 def build_market_data(**kwargs):
     """Module-level helper to assemble the full market_data payload."""
-    return _DEFAULT_ENGINE.build_market_data(**kwargs)
+    return _get_default_engine().build_market_data(**kwargs)
