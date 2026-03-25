@@ -10,7 +10,7 @@ def _read_secret(key):
     try:
         if hasattr(st, "secrets") and key in st.secrets:
             return st.secrets[key]
-    except Exception:
+    except (AttributeError, KeyError, TypeError, RuntimeError):
         return os.getenv(key)
     return os.getenv(key)
 
@@ -43,7 +43,7 @@ def get_token():
     try:
         res = requests.post(AUTH_URL, params=payload, timeout=10)
         data = res.json()
-    except Exception:
+    except (requests.RequestException, ValueError):
         return None
 
     access_token = data.get("accessToken")

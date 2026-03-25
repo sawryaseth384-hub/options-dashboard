@@ -15,7 +15,7 @@ INDEX_SPECS = {
 def _safe_float(value):
     try:
         return float(value)
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 
@@ -48,7 +48,7 @@ def _lookup_security(symbols, fallback):
             if not match.empty:
                 row = match.iloc[0]
                 return int(row["SEM_SMST_SECURITY_ID"]), _normalize_segment(row.get("SEGMENT"))
-    except Exception:
+    except (AttributeError, KeyError, TypeError, ValueError):
         pass
 
     return fallback
@@ -245,5 +245,5 @@ def build_market_data():
                 market_data["options"]["pcr"] = None
 
         return market_data
-    except Exception:
+    except (AttributeError, KeyError, TypeError, ValueError):
         return market_data
