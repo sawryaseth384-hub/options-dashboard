@@ -2,28 +2,53 @@ import streamlit as st
 import requests
 import pandas as pd
 import time
+import pyotp
 from datetime import datetime, timedelta
 
 # =========================
 # CONFIG
 # =========================
 BASE_URL = "https://api.dhan.co/v2"
+AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
 st.set_page_config(layout="wide")
 st.title("🚀 Dhan Full Debug Dashboard")
 
 # =========================
-# TOKEN
+# TOKEN (AUTO FIXED)
 # =========================
+def get_token():
+
+    if "token" not in st.session_state:
+        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"]).now()
+
+        payload = {
+            "dhanClientId": st.secrets["CLIENT_ID"],
+            "pin": st.secrets["PIN"],
+            "totp": totp
+        }
+
+        res = requests.post(AUTH_URL, params=payload)
+        data = res.json()
+
+        if "accessToken" in data:
+            st.session_state.token = data["accessToken"]
+        else:
+            st.error(f"Token Error: {data}")
+            return None
+
+    return st.session_state.token
+
+
 def get_headers():
     return {
-        "access-token": st.secrets["ACCESS_TOKEN"],
+        "access-token": get_token(),
         "client-id": st.secrets["CLIENT_ID"],
         "Content-Type": "application/json"
     }
 
 # =========================
-# SAFE API CALL (RATE LIMIT FIX)
+# SAFE API CALL
 # =========================
 _last_call = 0
 
@@ -100,7 +125,7 @@ def get_depth(sec, seg):
         return None, "Depth Parse Error"
 
 # =========================
-# HISTORICAL (FIXED)
+# HISTORICAL
 # =========================
 def get_historical(sec, seg, inst):
     payload = {
@@ -132,7 +157,7 @@ def get_historical(sec, seg, inst):
     return df, None
 
 # =========================
-# INTRADAY (CANDLE)
+# INTRADAY
 # =========================
 def get_intraday(sec, seg, inst):
     payload = {
@@ -163,80 +188,48 @@ def get_intraday(sec, seg, inst):
     return df, None
 
 # =========================
-# UI START
+# UI
 # =========================
 st.subheader("📊 SYMBOLS")
 for k, v in symbols.items():
     st.write(k, v)
 
-# =========================
-# TEST SYMBOL
-# =========================
 sec, seg, inst = symbols["RELIANCE"]
 
-# =========================
 # LTP
-# =========================
 st.subheader("📈 LTP STATUS")
 ltp, ltp_err = get_ltp(sec, seg)
+st.success(f"LTP: {ltp}" if ltp else f"LTP Error: {ltp_err}")
 
-if ltp:
-    st.success(f"LTP: {ltp}")
-else:
-    st.warning(f"LTP Error: {ltp_err}")
-
-# =========================
 # DEPTH
-# =========================
 st.subheader("📊 DEPTH STATUS")
 depth, d_err = get_depth(sec, seg)
+st.success("Depth OK") if depth else st.warning(f"Depth Error: {d_err}")
 
-if depth:
-    st.success("Depth OK")
-    st.json(depth)
-else:
-    st.warning(f"Depth Error: {d_err}")
-
-# =========================
 # HISTORICAL
-# =========================
 st.subheader("📅 HISTORICAL")
-
 hist, h_err = get_historical(sec, seg, inst)
-
 if hist is not None:
-    st.success(f"Rows: {len(hist)}")
     st.dataframe(hist.tail())
 else:
     st.warning(f"Historical Error: {h_err}")
 
-# =========================
 # CANDLE
-# =========================
 st.subheader("🕯 CANDLE")
-
 candle, c_err = get_intraday(sec, seg, inst)
-
 if candle is not None:
-    st.success(f"Candles: {len(candle)}")
     st.line_chart(candle["close"])
 else:
     st.warning(f"Candle Error: {c_err}")
 
-# =========================
-# DEBUG PANEL
-# =========================
+# DEBUG
 st.subheader("🛠 DEBUG PANEL")
-
 st.write("Token:", "✅")
 st.write("LTP:", ltp)
 st.write("Depth:", "OK" if depth else "FAIL")
 st.write("Historical:", "OK" if hist is not None else "FAIL")
 st.write("Candle:", "OK" if candle is not None else "FAIL")
 
-# =========================
-# REFRESH
-# =========================
 if st.button("🔄 Refresh"):
     st.rerun()
 
