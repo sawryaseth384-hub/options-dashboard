@@ -13,6 +13,8 @@ DEFAULT_INDEX_FALLBACKS = {
 
 DEFAULT_INDEX_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"]
 
+STANDARD_FIELDS = ("ltp", "change", "change_pct", "high", "low", "open")
+
 class TTLCache:
     """Simple TTL cache with lazy expiry cleanup and lock-based safety."""
     def __init__(self):
@@ -108,7 +110,10 @@ def _normalize_option_chain(raw_data):
                 strike = _normalize_number(strike_key)
             ce = row.get("ce") or row.get("CE") or row.get("call") or {}
             pe = row.get("pe") or row.get("PE") or row.get("put") or {}
-            rows.append(_build_chain_row(strike, ce, pe))
+            if ce or pe:
+                rows.append(_build_chain_row(strike, ce, pe))
+            else:
+                rows.append(_build_flat_chain_row(strike, row))
     elif isinstance(oc, list):
         for row in oc:
             if not isinstance(row, dict):
@@ -116,7 +121,10 @@ def _normalize_option_chain(raw_data):
             strike = _coalesce(row, ["strikePrice", "strike", "strike_price"], default=0)
             ce = row.get("ce") or row.get("CE") or {}
             pe = row.get("pe") or row.get("PE") or {}
-            rows.append(_build_chain_row(strike, ce, pe))
+            if ce or pe:
+                rows.append(_build_chain_row(strike, ce, pe))
+            else:
+                rows.append(_build_flat_chain_row(strike, row))
 
     return rows, spot
 
@@ -141,6 +149,28 @@ def _build_chain_row(strike, ce, pe):
         "put_gamma": put["gamma"],
         "put_theta": put["theta"],
         "put_vega": put["vega"],
+    }
+
+def _build_flat_chain_row(strike, row):
+    """Handle flat option chain rows with call/put fields."""
+    return {
+        "strike": strike,
+        "call_oi": _coalesce(row, ["callOi", "call_oi", "ceOi", "CE_OI"]),
+        "call_ltp": _coalesce(row, ["callLtp", "call_ltp", "ceLtp", "CE_LTP"]),
+        "call_iv": _coalesce(row, ["callIv", "call_iv", "ceIv"]),
+        "call_volume": _coalesce(row, ["callVolume", "call_volume", "ceVolume"]),
+        "call_delta": _coalesce(row, ["callDelta", "call_delta"]),
+        "call_gamma": _coalesce(row, ["callGamma", "call_gamma"]),
+        "call_theta": _coalesce(row, ["callTheta", "call_theta"]),
+        "call_vega": _coalesce(row, ["callVega", "call_vega"]),
+        "put_oi": _coalesce(row, ["putOi", "put_oi", "peOi", "PE_OI"]),
+        "put_ltp": _coalesce(row, ["putLtp", "put_ltp", "peLtp", "PE_LTP"]),
+        "put_iv": _coalesce(row, ["putIv", "put_iv", "peIv"]),
+        "put_volume": _coalesce(row, ["putVolume", "put_volume", "peVolume"]),
+        "put_delta": _coalesce(row, ["putDelta", "put_delta"]),
+        "put_gamma": _coalesce(row, ["putGamma", "put_gamma"]),
+        "put_theta": _coalesce(row, ["putTheta", "put_theta"]),
+        "put_vega": _coalesce(row, ["putVega", "put_vega"]),
     }
 
 def _calculate_pcr(rows):
@@ -204,6 +234,46 @@ def _normalize_candles(payload):
             "oi": oi_values[idx] if idx < len(oi_values) else None,
         })
     return candles
+
+def _extract_market_items(data):
+    if not data:
+        return []
+    if isinstance(data, dict):
+        data = data.get("data", data)
+    if isinstance(data, dict):
+        return list(data.values())
+    if isinstance(data, list):
+        return data
+    return []
+
+def _index_key(symbol):
+    symbol_upper = (symbol or "").upper()
+    if "BANKNIFTY" in symbol_upper:
+        return "banknifty"
+    if "FINNIFTY" in symbol_upper:
+        return "finnifty"
+    if "NIFTY" in symbol_upper:
+        return "nifty"
+    if "VIX" in symbol_upper:
+        return "vix"
+    return None
+
+def _normalize_quote_item(quote):
+    """Normalize quote payload into the standard price fields."""
+    ltp = _coalesce(quote, ["ltp", "lastPrice", "last_price", "close"])
+    change = _coalesce(quote, ["netChange", "change", "net_change"])
+    change_pct = _coalesce(quote, ["percentChange", "changePercent", "netChangePercent"], default=None)
+    if not change_pct and ltp:
+        base = ltp - change
+        change_pct = round((change / base) * 100, 4) if base else 0
+    return {
+        "ltp": ltp,
+        "change": change,
+        "change_pct": _normalize_number(change_pct),
+        "high": _coalesce(quote, ["high", "highPrice", "dayHigh"]),
+        "low": _coalesce(quote, ["low", "lowPrice", "dayLow"]),
+        "open": _coalesce(quote, ["open", "openPrice", "dayOpen"]),
+    }
 
 class MarketDataEngine:
     """Data engine that fetches, normalizes, and caches Dhan market data."""
@@ -274,12 +344,16 @@ class MarketDataEngine:
 
         payload = {"instruments": payload_instruments}
 
-        data, err = self.client.post("/marketquote", payload)
+        data, err = self.client.post("/marketfeed/quote", payload)
+        if err or not data:
+            data, err = self.client.post("/marketquote", payload)
         if err or not data:
             return {}
 
         quotes = {}
-        for item in data.get("data", []) if isinstance(data, dict) else []:
+        for item in _extract_market_items(data):
+            if not isinstance(item, dict):
+                continue
             security_id = item.get("securityId") or item.get("security_id")
             segment = item.get("exchangeSegment") or item.get("segment")
             if security_id is None or not segment:
@@ -288,6 +362,51 @@ class MarketDataEngine:
 
         self.cache.set(cache_key, quotes, cache_ttl)
         return quotes
+
+    def fetch_market_ltp(self, instruments, cache_ttl=1):
+        if not instruments:
+            return {}
+        key_parts = sorted(
+            _instrument_key(item.get("security_id"), item.get("segment"))
+            for item in instruments
+            if item.get("security_id") is not None and item.get("segment")
+        )
+        cache_key = ("marketltp", tuple(key_parts))
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        payload_instruments = []
+        for inst in instruments:
+            security_id = inst.get("security_id")
+            segment = inst.get("segment")
+            if security_id is None or not segment:
+                continue
+            payload_instruments.append({
+                "exchangeSegment": segment,
+                "securityId": int(security_id),
+            })
+        if not payload_instruments:
+            return {}
+
+        payload = {"instruments": payload_instruments}
+
+        data, err = self.client.post("/marketfeed/ltp", payload)
+        if err or not data:
+            return {}
+
+        ltps = {}
+        for item in _extract_market_items(data):
+            if not isinstance(item, dict):
+                continue
+            security_id = item.get("securityId") or item.get("security_id")
+            segment = item.get("exchangeSegment") or item.get("segment")
+            if security_id is None or not segment:
+                continue
+            ltps[_instrument_key(security_id, segment)] = item
+
+        self.cache.set(cache_key, ltps, cache_ttl)
+        return ltps
 
     def fetch_option_chain(self, security_id, segment="IDX_I", expiry=None, cache_ttl=5):
         if expiry is None:
@@ -389,6 +508,32 @@ class MarketDataEngine:
         self.cache.set(cache_key, candles, cache_ttl)
         return candles
 
+    # Public, modular helpers expected by the dashboard.
+    def get_indices(self, symbols=None):
+        return self.fetch_indices(symbols)
+
+    def get_stocks(self, symbols):
+        return self.fetch_stocks(symbols)
+
+    def get_option_chain(self, symbol=None, security_id=None, segment="IDX_I", expiry=None):
+        if security_id is None and symbol:
+            resolved = self.resolve_symbol(symbol, fallback_segment=segment)
+            if resolved:
+                security_id = resolved["security_id"]
+                segment = resolved["segment"]
+        if not security_id:
+            return {"chain": [], "pcr": 0, "spot_price": 0, "expiry": expiry}
+        return self.fetch_option_chain(security_id, segment=segment, expiry=expiry)
+
+    def get_intraday(self, security_id, segment, interval="1", from_date=None, to_date=None):
+        return self.fetch_intraday(
+            security_id,
+            segment,
+            interval=interval,
+            from_date=from_date,
+            to_date=to_date,
+        )
+
     def resolve_symbol(self, symbol, fallback_segment="NSE_EQ"):
         security_id, segment = get_symbol_data(symbol)
         if security_id:
@@ -433,8 +578,10 @@ class MarketDataEngine:
             resolved = self.resolve_symbol(symbol, fallback_segment="IDX_I")
             if resolved:
                 instruments.append(resolved)
+        # Use quote endpoint for OHLC data and LTP endpoint for live prices.
         quotes = self.fetch_market_quotes(instruments)
-        return self._merge_quotes(instruments, quotes)
+        ltps = self.fetch_market_ltp(instruments)
+        return self._merge_quotes(instruments, quotes, ltps)
 
     def fetch_stocks(self, symbols):
         instruments = []
@@ -443,19 +590,24 @@ class MarketDataEngine:
             if resolved:
                 instruments.append(resolved)
         quotes = self.fetch_market_quotes(instruments)
-        return self._merge_quotes(instruments, quotes)
+        ltps = self.fetch_market_ltp(instruments)
+        return self._merge_quotes(instruments, quotes, ltps)
 
-    def _merge_quotes(self, instruments, quotes):
+    def _merge_quotes(self, instruments, quotes, ltps=None):
         merged = []
+        ltps = ltps or {}
         for inst in instruments:
             key = _instrument_key(inst["security_id"], inst["segment"])
-            quote = quotes.get(key, {})
+            quote = quotes.get(key, {}).copy()
+            ltp_quote = ltps.get(key, {})
+            if ltp_quote:
+                quote.setdefault("ltp", ltp_quote.get("ltp") or ltp_quote.get("lastPrice"))
+            normalized = _normalize_quote_item(quote)
             merged.append({
                 "symbol": inst["symbol"],
                 "security_id": inst["security_id"],
                 "segment": inst["segment"],
-                "ltp": _coalesce(quote, ["lastPrice", "last_price", "ltp"]),
-                "change": _coalesce(quote, ["netChange", "change", "net_change"]),
+                **normalized,
                 "quote": quote,
             })
         return merged
@@ -475,7 +627,12 @@ class MarketDataEngine:
         historical_symbols=None,
     ):
         market_data = {
-            "indian": {},
+            "indian": {
+                "nifty": {},
+                "banknifty": {},
+                "finnifty": {},
+                "vix": {},
+            },
             "global": {},
             "commodity": {},
             "currency": {},
@@ -486,7 +643,13 @@ class MarketDataEngine:
         indices = self.fetch_indices(index_symbols)
         stocks = self.fetch_stocks(stock_symbols or [])
 
-        market_data["indian"]["indices"] = indices
+        for index_item in indices:
+            key = _index_key(index_item.get("symbol"))
+            if not key:
+                continue
+            market_data["indian"][key] = {
+                field: index_item.get(field, 0) for field in STANDARD_FIELDS
+            }
         market_data["stocks"] = stocks
 
         if option_chain_symbol or option_chain_security_id:
@@ -540,3 +703,36 @@ class MarketDataEngine:
                 raise AssertionError(
                     f"Unsupported candle_type: {candle_type!r}. Expected 'intraday' or 'historical'."
                 )
+
+_DEFAULT_ENGINE = MarketDataEngine()
+
+def get_indices(symbols=None):
+    """Module-level helper for index quotes."""
+    return _DEFAULT_ENGINE.get_indices(symbols)
+
+def get_stocks(symbols):
+    """Module-level helper for stock quotes."""
+    return _DEFAULT_ENGINE.get_stocks(symbols)
+
+def get_option_chain(symbol=None, security_id=None, segment="IDX_I", expiry=None):
+    """Module-level helper for option chain + PCR."""
+    return _DEFAULT_ENGINE.get_option_chain(
+        symbol=symbol,
+        security_id=security_id,
+        segment=segment,
+        expiry=expiry,
+    )
+
+def get_intraday(security_id, segment, interval="1", from_date=None, to_date=None):
+    """Module-level helper for intraday candles."""
+    return _DEFAULT_ENGINE.get_intraday(
+        security_id,
+        segment,
+        interval=interval,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+def build_market_data(**kwargs):
+    """Module-level helper to assemble the full market_data payload."""
+    return _DEFAULT_ENGINE.build_market_data(**kwargs)
