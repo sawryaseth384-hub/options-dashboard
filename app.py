@@ -14,7 +14,7 @@ from core.token_manager import get_token
 # PAGE SETUP
 # =========================
 st.set_page_config(layout="wide")
-st.title("🔬 Full Dhan Dashboard (Stable)")
+st.title("🚀 Dhan Trading Dashboard (Stable)")
 
 # =========================
 # 1. TOKEN
@@ -24,19 +24,17 @@ token = get_token()
 st.write(f"Token: {'✅' if token else '❌'}")
 
 # =========================
-# 2. SYMBOL SETUP
+# 2. SYMBOLS
 # =========================
 st.subheader("2. Symbols")
 
 symbols = {
     "NIFTY": (13, "IDX_I"),
     "RELIANCE": (2885, "NSE_EQ"),
-    "TCS": (11536, "NSE_EQ"),
-    "HDFCBANK": (1333, "NSE_EQ"),
 }
 
 for sym, (sec, seg) in symbols.items():
-    st.write(f"{sym}: sec_id={sec}, segment={seg}")
+    st.write(f"{sym}: {sec}, {seg}")
 
 nifty_sec, nifty_seg = symbols["NIFTY"]
 
@@ -53,50 +51,22 @@ if exp_list:
 
     if oc_data and "data" in oc_data:
         spot = oc_data["data"].get("last_price")
-        oc = oc_data["data"].get("oc", {})
-        strikes = sorted([int(float(s)) for s in oc.keys()])
-
         st.write(f"Spot: {spot}")
-        st.write(f"Strikes: {len(strikes)}")
     else:
         st.error("Option Chain Failed")
-else:
-    st.warning("No expiry data")
 
 # =========================
-# 4. MARKET QUOTES (FIXED)
+# 4. MARKET QUOTE
 # =========================
-st.subheader("4. Market Quotes")
+st.subheader("4. Market Quote")
 
-quote_list = [
-    ("RELIANCE", 2885, "NSE_EQ"),
-    ("HDFCBANK", 1333, "NSE_EQ"),
-    ("TCS", 11536, "NSE_EQ"),
-]
-
-quote_data = []
-
-for name, sec, seg in quote_list:
-    ltp = get_ltp(sec, seg)
-    quote_data.append({
-        "Symbol": name,
-        "LTP": ltp
-    })
-
-st.dataframe(pd.DataFrame(quote_data), use_container_width=True)
+ltp = get_ltp(2885, "NSE_EQ")
+st.write(f"RELIANCE LTP: {ltp}")
 
 # =========================
-# 5. LTP TEST (IMPORTANT)
+# 5. HISTORICAL DATA
 # =========================
-st.subheader("5. LTP Test")
-
-test_ltp = get_ltp(2885, "NSE_EQ")
-st.write("RELIANCE LTP:", test_ltp)
-
-# =========================
-# 6. HISTORICAL DATA (FIXED)
-# =========================
-st.subheader("6. Historical Data")
+st.subheader("5. Historical Data")
 
 hist = get_historical(2885, "NSE_EQ")
 
@@ -106,29 +76,29 @@ else:
     st.warning("No historical data")
 
 # =========================
-# 7. CANDLESTICK (FIXED)
+# 6. CANDLESTICK
 # =========================
-st.subheader("7. Candlestick")
+st.subheader("6. Candlestick")
 
 chart_sec = 2885
 chart_seg = "NSE_EQ"
 
 candle_df = get_candle_data(chart_sec, chart_seg)
 
-if candle_df is not None:
+if candle_df is not None and len(candle_df) > 0:
     fig, trend = plot_candle(candle_df)
     st.write(f"Trend: {trend}")
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.error("Candle data failed")
+    st.warning("No candle data")
 
 # =========================
-# 8. AUTO REFRESH
+# 7. REFRESH
 # =========================
-st.subheader("🔄 Auto Refresh")
+st.subheader("🔄 Refresh")
 
 if st.button("Refresh"):
     st.cache_data.clear()
     st.rerun()
 
-st.success("✅ App Running Stable")
+st.success("✅ Dashboard Running Stable")
