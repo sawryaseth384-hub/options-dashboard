@@ -12,6 +12,7 @@ DEFAULT_INDEX_FALLBACKS = {
 }
 
 DEFAULT_INDEX_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"]
+EPSILON = 1e-6
 
 STANDARD_FIELDS = ("ltp", "change", "change_pct", "high", "low", "open")
 
@@ -266,8 +267,8 @@ def _normalize_quote_item(quote):
     if change_pct is None and ltp:
         base = ltp - change
         # Tolerance prevents extreme percentages when base is effectively zero.
-        # 1e-6 keeps tiny bases from exploding while staying negligible vs. prices.
-        tolerance = max(1e-6, abs(ltp) * 1e-6)
+        # EPSILON keeps tiny bases from exploding while staying negligible vs. prices.
+        tolerance = max(EPSILON, abs(ltp) * EPSILON)
         if abs(base) <= tolerance:
             change_pct = 0
         else:
@@ -711,8 +712,7 @@ class MarketDataEngine:
                 )
             else:
                 raise ValueError(
-                    f"Unsupported candle_type in _attach_candles: {candle_type}. "
-                    "Expected 'intraday' or 'historical'."
+                    f"Invalid candle_type: {candle_type}. Expected 'intraday' or 'historical'."
                 )
 
 _DEFAULT_ENGINE = None

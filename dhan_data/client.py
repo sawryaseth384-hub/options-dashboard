@@ -38,7 +38,10 @@ class DhanApiClient:
             self.session.mount("http://", adapter)
 
     def post(self, endpoint, payload):
-        url = endpoint if endpoint.startswith("http") else f"{self.base_url}/{endpoint.lstrip('/')}"
+        if endpoint.startswith("http"):
+            url = endpoint
+        else:
+            url = f"{self.base_url}/{endpoint.lstrip('/')}"
         headers = self.header_provider() or {}
 
         if not headers.get("access-token"):
