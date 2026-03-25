@@ -5,9 +5,6 @@ import time
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
 
-# =========================
-# CUSTOM MODULES
-# =========================
 from core.token_manager import get_token
 from dhan_data.live_market_feed import start_feed, get_live_price
 
@@ -17,37 +14,30 @@ from dhan_data.live_market_feed import start_feed, get_live_price
 BASE_URL = "https://api.dhan.co/v2"
 
 st.set_page_config(layout="wide")
-st.title("🚀 Dhan Smart Dashboard")
+st.title("🚀 PRO TRADING DASHBOARD")
 
-# =========================
-# AUTO REFRESH (Stable)
-# =========================
 st_autorefresh(interval=2000, key="refresh")
 
-# =========================
-# CLIENT ID SAFE LOAD
-# =========================
 CLIENT_ID = st.secrets.get("CLIENT_ID")
 
 if not CLIENT_ID:
-    st.error("❌ CLIENT_ID missing in secrets")
+    st.error("CLIENT_ID missing")
     st.stop()
 
-# =========================
-# TOKEN INIT
-# =========================
 token = get_token()
-
 if not token:
-    st.error("❌ Token Error")
+    st.error("Token Error")
     st.stop()
 
 # =========================
-# WEBSOCKET START (SAFE)
+# WS START
 # =========================
 if not st.session_state.get("ws_started", False):
-    start_feed(token, CLIENT_ID)
-    st.session_state["ws_started"] = True
+    try:
+        start_feed(token, CLIENT_ID)
+        st.session_state["ws_started"] = True
+    except Exception as e:
+        st.error(f"WS Error: {e}")
 
 # =========================
 # HEADERS
@@ -60,7 +50,7 @@ def get_headers():
     }
 
 # =========================
-# SAFE POST (WITH RETRY)
+# SAFE POST
 # =========================
 _last_call = 0
 
@@ -74,22 +64,18 @@ def safe_post(url, payload):
     for _ in range(3):
         try:
             res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
-            _last_call = time.time()
 
             if res.status_code == 200:
                 data = res.json()
+                if data:
+                    return data, None
 
-                if data.get("status") == "failure":
-                    return None, data.get("remarks", "API Error")
+            time.sleep(1)
 
-                return data, None
+        except:
+            time.sleep(1)
 
-        except Exception as e:
-            return None, str(e)
-
-        time.sleep(1)
-
-    return None, "Retry Failed"
+    return None, "API Failed"
 
 # =========================
 # SYMBOLS
@@ -99,8 +85,8 @@ symbols = {
     "RELIANCE": (2885, "NSE_EQ", "EQUITY"),
 }
 
-st.subheader("📊 SYMBOLS")
-st.write(symbols)
+symbol_name = st.selectbox("Select Symbol", list(symbols.keys()))
+sec, seg, inst = symbols[symbol_name]
 
 # =========================
 # LIVE LTP
@@ -108,78 +94,46 @@ st.write(symbols)
 st.subheader("📈 LIVE LTP")
 
 ltp = get_live_price()
+try:
+    ltp = float(ltp)
+except:
+    ltp = 0
 
 if ltp > 0:
-    st.success(f"🔥 {round(ltp, 2)}")
+    st.success(f"{symbol_name} → {round(ltp,2)}")
 else:
-    st.warning("⏳ Waiting for live data...")
+    st.warning("Waiting for live data...")
 
 # =========================
-# MARKET DEPTH (CACHED)
+# DEPTH
 # =========================
 @st.cache_data(ttl=5)
 def get_depth(sec, seg):
     payload = {seg: [int(sec)]}
-
     data, err = safe_post(f"{BASE_URL}/marketfeed/ltp", payload)
 
     if err:
-        return None, err
+        return None
 
     try:
         d = data["data"][seg][str(sec)]
         return {
-            "LTP": d.get("last_price"),
-            "High": d.get("high"),
-            "Low": d.get("low"),
-            "Open": d.get("open"),
-        }, None
+            "LTP": float(d.get("last_price", 0)),
+            "High": float(d.get("high") or d.get("last_price", 0)),
+            "Low": float(d.get("low") or d.get("last_price", 0)),
+        }
     except:
-        return None, "Parse Error"
+        return None
 
 st.subheader("📊 MARKET DEPTH")
 
-sec, seg, inst = symbols["RELIANCE"]
-depth, d_err = get_depth(sec, seg)
+depth = get_depth(sec, seg)
 
 if depth:
     c1, c2, c3 = st.columns(3)
     c1.metric("LTP", depth["LTP"])
     c2.metric("High", depth["High"])
     c3.metric("Low", depth["Low"])
-else:
-    st.warning(f"❌ {d_err}")
-
-# =========================
-# HISTORICAL DATA
-# =========================
-@st.cache_data(ttl=60)
-def get_historical(sec, seg, inst):
-    payload = {
-        "securityId": str(sec),
-        "exchangeSegment": seg,
-        "instrument": inst,
-        "expiryCode": 0,
-        "oi": False,
-        "fromDate": (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d"),
-        "toDate": datetime.now().strftime("%Y-%m-%d"),
-    }
-
-    data, err = safe_post(f"{BASE_URL}/charts/historical", payload)
-
-    if err or not data or "open" not in data:
-        return None
-
-    return pd.DataFrame(data)
-
-st.subheader("📅 HISTORICAL")
-
-hist = get_historical(sec, seg, inst)
-
-if hist is not None:
-    st.dataframe(hist.tail())
-else:
-    st.warning("No Data")
 
 # =========================
 # INTRADAY
@@ -201,27 +155,32 @@ def get_intraday(sec, seg, inst):
     if err or not data:
         return None
 
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df = df.dropna(subset=["close"])
+
+    if "datetime" in df.columns:
+        df["datetime"] = pd.to_datetime(df["datetime"])
+        df = df.set_index("datetime")
+
+    return df
 
 st.subheader("🕯 INTRADAY")
 
 candle = get_intraday(sec, seg, inst)
 
-if candle is not None:
+if candle is not None and not candle.empty:
     st.line_chart(candle["close"])
 else:
     st.warning("No Data")
 
 # =========================
-# OPTION CHAIN
+# OPTION CHAIN + PCR
 # =========================
 @st.cache_data(ttl=300)
 def get_expiry(sec):
-    payload = {
-        "UnderlyingScrip": int(sec),
-        "UnderlyingSeg": "IDX_I"
-    }
-
+    payload = {"UnderlyingScrip": int(sec), "UnderlyingSeg": "IDX_I"}
     data, err = safe_post(f"{BASE_URL}/optionchain/expirylist", payload)
 
     if err or not data:
@@ -244,36 +203,41 @@ def get_chain(sec, expiry):
 
     return data["data"]["oc"]
 
-st.subheader("📊 OPTION CHAIN")
+st.subheader("📊 OPTION CHAIN + PCR")
 
-nifty_sec, _, _ = symbols["NIFTY"]
-
-expiries = get_expiry(nifty_sec)
+expiries = get_expiry(sec)
 
 if expiries:
-    selected_exp = st.selectbox("Select Expiry", expiries)
-
-    chain = get_chain(nifty_sec, selected_exp)
+    expiry = st.selectbox("Expiry", expiries)
+    chain = get_chain(sec, expiry)
 
     if chain:
         df = pd.DataFrame.from_dict(chain, orient="index")
-        st.success(f"Strikes: {len(df)}")
-        st.dataframe(df.head(20))
-    else:
-        st.warning("Chain Error")
-else:
-    st.warning("No Expiry Data")
+
+        # ATM FILTER
+        df["strike"] = df.index.astype(float)
+        atm = df["strike"].median()
+
+        df = df[(df["strike"] > atm - 500) & (df["strike"] < atm + 500)]
+
+        # PCR
+        total_put = df["putOi"].sum()
+        total_call = df["callOi"].sum()
+        pcr = round(total_put / total_call, 2) if total_call else 0
+
+        st.metric("PCR", pcr)
+
+        st.dataframe(df.head(30))
 
 # =========================
-# DEBUG PANEL
+# DEBUG
 # =========================
-st.subheader("🛠 DEBUG")
+st.subheader("🛠 SYSTEM STATUS")
 
 st.write({
     "Token": "OK",
+    "WS": st.session_state.get("ws_started", False),
     "LTP": ltp,
     "Depth": depth is not None,
-    "Historical": hist is not None,
-    "Intraday": candle is not None,
-    "Expiry": len(expiries) > 0
+    "Intraday": candle is not None
 })
