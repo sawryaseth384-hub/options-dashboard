@@ -1,31 +1,65 @@
+import os
+import time
 import requests
 import pyotp
-import time
 import streamlit as st
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
+def _read_secret(key):
+    try:
+        if hasattr(st, "secrets") and key in st.secrets:
+            return st.secrets[key]
+    except Exception:
+        return os.getenv(key)
+    return os.getenv(key)
+
+def get_client_id():
+    return _read_secret("CLIENT_ID") or _read_secret("DHAN_CLIENT_ID")
+
 def get_token():
 
-    # 🔒 अगर token already बना है → वही use करो
+    access_token = _read_secret("ACCESS_TOKEN") or _read_secret("DHAN_ACCESS_TOKEN")
+    if access_token:
+        return access_token
+
     if "token" in st.session_state:
         return st.session_state.token
 
-    # ❌ नहीं है → सिर्फ 1 बार बनाओ
-    totp = pyotp.TOTP(st.secrets["TOTP_SECRET"]).now()
+    totp_secret = _read_secret("TOTP_SECRET")
+    pin = _read_secret("PIN")
+    client_id = get_client_id()
+    if not all([totp_secret, pin, client_id]):
+        return None
+
+    totp = pyotp.TOTP(totp_secret).now()
 
     payload = {
-        "dhanClientId": st.secrets["CLIENT_ID"],
-        "pin": st.secrets["PIN"],
+        "dhanClientId": client_id,
+        "pin": pin,
         "totp": totp
     }
 
-    res = requests.post(AUTH_URL, params=payload)
-    data = res.json()
+    try:
+        res = requests.post(AUTH_URL, params=payload, timeout=10)
+        data = res.json()
+    except Exception:
+        return None
 
-    if "accessToken" in data:
-        st.session_state.token = data["accessToken"]
-        return st.session_state.token
+    access_token = data.get("accessToken")
+    if access_token:
+        st.session_state.token = access_token
+        return access_token
 
-    st.error("Token Failed")
     return None
+
+def get_headers():
+    token = get_token()
+    client_id = get_client_id()
+    if not token or not client_id:
+        return {}
+    return {
+        "access-token": token,
+        "client-id": client_id,
+        "Content-Type": "application/json"
+    }

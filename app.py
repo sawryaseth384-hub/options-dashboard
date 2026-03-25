@@ -27,6 +27,9 @@ def _find_symbol(section, symbol):
     if isinstance(section, dict):
         if symbol in section:
             return section[symbol]
+        lower = symbol.lower()
+        if lower in section:
+            return section[lower]
     if isinstance(section, list):
         for item in section:
             name = str(item.get("symbol") or item.get("name") or item.get("ticker") or item.get("Symbol") or "").upper()
@@ -166,7 +169,7 @@ if isinstance(market_data, dict) and market_data.get("_error"):
     st.error(f"Data refresh failed: {market_data['_error']}")
     st.stop()
 
-indian_section = _get_section(market_data, ["indices", "indian_market", "market", "header", "headers"])
+indian_section = _get_section(market_data, ["indian", "indices", "indian_market", "market", "header", "headers"])
 global_section = _get_section(market_data, ["global", "commodities", "global_commodities"])
 currency_section = _get_section(market_data, ["currency", "currencies", "fx"])
 

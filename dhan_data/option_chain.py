@@ -1,3 +1,6 @@
+from dhan_data.client import safe_post
+
+
 def get_option_chain(sec, expiry):
     payload = {
         "UnderlyingScrip": int(sec),
