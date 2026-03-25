@@ -1,189 +1,246 @@
 import streamlit as st
-import requests
 import pandas as pd
-import time
-from datetime import datetime
-from streamlit_autorefresh import st_autorefresh
-
-from core.token_manager import get_token
-from dhan_data.live_market_feed import start_feed, get_live_price
-
-# =========================
-# CONFIG
-# =========================
-BASE_URL = "https://api.dhan.co/v2"
-
-st.set_page_config(layout="wide")
-st.title("🚀 FIRST TRADING TERMINAL")
-
-st_autorefresh(interval=2000, key="refresh")
-
-CLIENT_ID = st.secrets.get("CLIENT_ID")
-
-if not CLIENT_ID:
-    st.error("CLIENT_ID missing")
-    st.stop()
-
-token = get_token()
-if not token:
-    st.error("Token Error")
-    st.stop()
-
-# =========================
-# SYMBOLS
-# =========================
-symbols = {
-    "NIFTY": (13, "IDX_I", "INDEX"),
-    "BANKNIFTY": (25, "IDX_I", "INDEX"),
-}
-
-symbol = st.selectbox("Select Market", list(symbols.keys()))
-sec, seg, inst = symbols[symbol]
-
-# =========================
-# WS START
-# =========================
-if not st.session_state.get("ws_started", False):
-    start_feed(token, CLIENT_ID)
-    st.session_state["ws_started"] = True
-
-# =========================
-# SAFE API
-# =========================
-def safe_post(url, payload):
-    try:
-        res = requests.post(url, headers={
-            "access-token": get_token(),
-            "client-id": CLIENT_ID,
-            "Content-Type": "application/json"
-        }, json=payload, timeout=10)
-
-        if res.status_code == 200:
-            return res.json()
-    except:
-        return None
-
-# =========================
-# LTP
-# =========================
-ltp = get_live_price()
 
 try:
-    ltp = float(ltp)
-except:
-    ltp = 0
+    from dhan_data.market_data_engine import build_market_data
+except Exception as exc:
+    build_market_data = None
+    IMPORT_ERROR = str(exc)
 
-# =========================
-# INTRADAY + EMA
-# =========================
-def get_intraday():
-    payload = {
-        "securityId": str(sec),
-        "exchangeSegment": seg,
-        "instrument": inst,
-        "interval": "1",
-        "oi": False,
-        "fromDate": datetime.now().strftime("%Y-%m-%d"),
-        "toDate": datetime.now().strftime("%Y-%m-%d"),
+st.set_page_config(page_title="Trading Dashboard", layout="wide")
+st.title("📈 Trading Dashboard")
+
+
+def _get_section(data, keys):
+    if not isinstance(data, dict):
+        return None
+    for key in keys:
+        if key in data:
+            return data[key]
+    return None
+
+
+def _find_symbol(section, symbol):
+    symbol = symbol.upper()
+    if section is None:
+        return None
+    if isinstance(section, dict):
+        if symbol in section:
+            return section[symbol]
+    if isinstance(section, list):
+        for item in section:
+            name = str(item.get("symbol") or item.get("name") or item.get("ticker") or item.get("Symbol") or "").upper()
+            if name == symbol:
+                return item
+    return None
+
+
+def _get_value(item, keys):
+    if not isinstance(item, dict):
+        return None
+    for key in keys:
+        if key in item:
+            return item[key]
+    return None
+
+
+def _to_float(value):
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+@st.cache_data(show_spinner=False)
+def load_market_data():
+    return build_market_data()
+
+
+def render_header_row(title, symbols, section):
+    st.markdown(f"### {title}")
+    cols = st.columns(len(symbols))
+    for col, symbol in zip(cols, symbols):
+        item = _find_symbol(section, symbol)
+        ltp = _get_value(item, ["ltp", "LTP", "last_price", "price", "last"])
+        change = _get_value(item, ["change_pct", "changePercent", "change_percentage", "change%", "pct_change", "Change %"])
+        ltp_value = "No Data" if ltp is None else f"{_to_float(ltp):,.2f}"
+        change_value = None if change is None else f"{_to_float(change):+.2f}%"
+        col.metric(symbol, ltp_value, change_value)
+
+
+def normalize_stocks(stocks):
+    if stocks is None:
+        return pd.DataFrame(columns=["Symbol", "LTP", "Change %", "High", "Low"])
+    if isinstance(stocks, dict):
+        stocks = stocks.get("data") or stocks.get("stocks") or []
+    df = pd.DataFrame(stocks)
+    if df.empty:
+        return pd.DataFrame(columns=["Symbol", "LTP", "Change %", "High", "Low"])
+    rename_map = {
+        "symbol": "Symbol",
+        "name": "Symbol",
+        "ticker": "Symbol",
+        "ltp": "LTP",
+        "last_price": "LTP",
+        "price": "LTP",
+        "change_pct": "Change %",
+        "changePercent": "Change %",
+        "change_percentage": "Change %",
+        "change%": "Change %",
+        "pct_change": "Change %",
+        "high": "High",
+        "low": "Low",
     }
+    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+    for col in ["Symbol", "LTP", "Change %", "High", "Low"]:
+        if col not in df.columns:
+            df[col] = None
+    return df[["Symbol", "LTP", "Change %", "High", "Low"]]
 
-    data = safe_post(f"{BASE_URL}/charts/intraday", payload)
 
-    if not data:
-        return None
-
-    df = pd.DataFrame(data)
-
-    if "close" not in df.columns:
-        return None
-
-    df["close"] = pd.to_numeric(df["close"], errors="coerce")
-    df = df.dropna()
-
-    df["EMA"] = df["close"].ewm(span=21).mean()
-
-    return df
-
-df = get_intraday()
-
-# =========================
-# TREND
-# =========================
-trend = "WAIT"
-
-if df is not None and not df.empty:
-    last_price = df["close"].iloc[-1]
-    ema = df["EMA"].iloc[-1]
-
-    if last_price > ema:
-        trend = "BULLISH"
+def normalize_option_chain(options_data):
+    if options_data is None:
+        return pd.DataFrame(columns=["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"])
+    if isinstance(options_data, dict):
+        chain = options_data.get("chain") or options_data.get("oc") or options_data.get("option_chain")
     else:
-        trend = "BEARISH"
-
-# =========================
-# OPTION CHAIN + PCR
-# =========================
-def get_chain():
-    payload = {
-        "UnderlyingScrip": int(sec),
-        "UnderlyingSeg": seg,
-        "Expiry": "2026-03-30"
-    }
-
-    data = safe_post(f"{BASE_URL}/optionchain", payload)
-
-    if not data:
-        return None
-
-    return data["data"]["oc"]
-
-chain = get_chain()
-
-total_put = 0
-total_call = 0
-
-if chain:
+        chain = options_data
+    if chain is None:
+        return pd.DataFrame(columns=["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"])
+    if isinstance(chain, list):
+        df = pd.DataFrame(chain)
+        rename_map = {
+            "strike": "Strike",
+            "call_oi": "Call OI",
+            "put_oi": "Put OI",
+            "call_ltp": "Call LTP",
+            "put_ltp": "Put LTP",
+        }
+        df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+        for col in ["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"]:
+            if col not in df.columns:
+                df[col] = None
+        return df[["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"]]
+    rows = []
     for strike, row in chain.items():
-        try:
-            if "CE" in row and "PE" in row:
-                total_call += row["CE"].get("oi", 0)
-                total_put += row["PE"].get("oi", 0)
-        except:
-            continue
+        call = row.get("CE") or row.get("ce") or {}
+        put = row.get("PE") or row.get("pe") or {}
+        rows.append({
+            "Strike": _to_float(strike),
+            "Call OI": call.get("oi"),
+            "Put OI": put.get("oi"),
+            "Call LTP": call.get("ltp") or call.get("last_price"),
+            "Put LTP": put.get("ltp") or put.get("last_price"),
+        })
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return pd.DataFrame(columns=["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"])
+    return df[["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"]]
 
-pcr = round(total_put / total_call, 2) if total_call else 0
 
-# =========================
-# FINAL SIGNAL
-# =========================
-signal = "WAIT"
+def resolve_spot_price(options_data, market_data):
+    spot = None
+    if isinstance(options_data, dict):
+        spot = options_data.get("spot") or options_data.get("underlying_ltp") or options_data.get("ltp")
+    if spot is None:
+        spot = _get_value(_get_section(market_data, ["indices", "indian_market", "market"]), ["NIFTY", "BANKNIFTY"])
+    return _to_float(spot)
 
-if trend == "BULLISH" and pcr > 1:
-    signal = "BUY CALL"
 
-elif trend == "BEARISH" and pcr < 1:
-    signal = "BUY PUT"
+if not build_market_data:
+    st.error(f"Data engine unavailable: {IMPORT_ERROR}")
+    st.stop()
 
-# =========================
-# UI
-# =========================
-col1, col2, col3 = st.columns(3)
+if st.button("🔄 Refresh Data"):
+    load_market_data.clear()
+    st.experimental_rerun()
 
-col1.metric("LTP", round(ltp, 2))
-col2.metric("Trend", trend)
-col3.metric("PCR", pcr)
+market_data = load_market_data()
+if not market_data:
+    st.warning("No Data")
+    st.stop()
 
-st.subheader("🎯 SIGNAL")
+indian_section = _get_section(market_data, ["indices", "indian_market", "market", "header", "headers"])
+global_section = _get_section(market_data, ["global", "commodities", "global_commodities"])
+currency_section = _get_section(market_data, ["currency", "currencies", "fx"])
 
-if signal == "BUY CALL":
-    st.success("🚀 BUY CALL")
-elif signal == "BUY PUT":
-    st.error("🔻 BUY PUT")
+render_header_row("Indian Market", ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"], indian_section)
+render_header_row("Global + Commodity", ["DOW", "NASDAQ", "GIFT", "CRUDE"], global_section)
+render_header_row("Currency", ["USDINR", "DXY"], currency_section)
+
+st.divider()
+st.subheader("📋 Live Market Scanner")
+
+stocks_df = normalize_stocks(market_data.get("stocks") if isinstance(market_data, dict) else None)
+if stocks_df.empty:
+    st.warning("No Data")
 else:
-    st.warning("WAIT")
+    stocks_df["Change %"] = pd.to_numeric(stocks_df["Change %"], errors="coerce")
+    stocks_df["LTP"] = pd.to_numeric(stocks_df["LTP"], errors="coerce")
+    sort_by = st.selectbox("Sort By", ["Change %", "LTP", "Symbol"], index=0)
+    sorted_df = stocks_df.sort_values(sort_by, ascending=False, na_position="last")
+    st.dataframe(sorted_df, use_container_width=True)
 
-# =========================
-# CHART
-# =========================
-if df is not None:
-    st.line_chart(df[["close", "EMA"]])
+    col1, col2 = st.columns(2)
+    top_gainers = stocks_df.nlargest(5, "Change %", keep="all")
+    top_losers = stocks_df.nsmallest(5, "Change %", keep="all")
+    with col1:
+        st.markdown("#### Top Gainers")
+        st.dataframe(top_gainers, use_container_width=True)
+    with col2:
+        st.markdown("#### Top Losers")
+        st.dataframe(top_losers, use_container_width=True)
+
+st.divider()
+st.subheader("📊 Options Analytics")
+
+options_data = market_data.get("options") if isinstance(market_data, dict) else None
+option_chain_df = normalize_option_chain(options_data)
+if option_chain_df.empty:
+    st.warning("No Data")
+else:
+    option_chain_df["Call OI"] = pd.to_numeric(option_chain_df["Call OI"], errors="coerce")
+    option_chain_df["Put OI"] = pd.to_numeric(option_chain_df["Put OI"], errors="coerce")
+    total_call = option_chain_df["Call OI"].sum()
+    total_put = option_chain_df["Put OI"].sum()
+    pcr = None
+    if isinstance(options_data, dict):
+        pcr = options_data.get("pcr") or options_data.get("PCR")
+    if pcr is None and total_call:
+        pcr = total_put / total_call
+    st.metric("PCR (Put/Call Ratio)", "No Data" if pcr is None else f"{pcr:.2f}")
+
+    spot_price = resolve_spot_price(options_data, market_data)
+    atm_strike = None
+    if spot_price is not None and not option_chain_df["Strike"].isna().all():
+        option_chain_df["Strike"] = pd.to_numeric(option_chain_df["Strike"], errors="coerce")
+        atm_strike = option_chain_df.iloc[(option_chain_df["Strike"] - spot_price).abs().argsort()[:1]]["Strike"].values[0]
+
+    def highlight_atm(row):
+        if atm_strike is None:
+            return [""] * len(row)
+        return ["background-color: #1f4d2e" if row["Strike"] == atm_strike else "" for _ in row]
+
+    st.dataframe(option_chain_df.style.apply(highlight_atm, axis=1), use_container_width=True)
+
+st.divider()
+st.subheader("📉 Intraday Chart")
+
+intraday_data = _get_section(market_data, ["intraday", "chart", "intraday_data"])
+if intraday_data is None:
+    st.warning("No Data")
+else:
+    if isinstance(intraday_data, pd.DataFrame):
+        intraday_df = intraday_data.copy()
+    else:
+        intraday_df = pd.DataFrame(intraday_data)
+    if intraday_df.empty or "close" not in intraday_df.columns:
+        st.warning("No Data")
+    else:
+        intraday_df["close"] = pd.to_numeric(intraday_df["close"], errors="coerce")
+        intraday_df = intraday_df.dropna(subset=["close"])
+        if intraday_df.empty:
+            st.warning("No Data")
+        else:
+            intraday_df["EMA"] = intraday_df["close"].ewm(span=21).mean()
+            st.line_chart(intraday_df[["close", "EMA"]])
