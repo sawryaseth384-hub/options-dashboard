@@ -27,6 +27,13 @@ def _find_symbol(section, symbol):
     if isinstance(section, dict):
         if symbol in section:
             return section[symbol]
+        for key, value in section.items():
+            if str(key).upper() == symbol:
+                return value
+            if isinstance(value, dict):
+                name = str(value.get("symbol") or value.get("name") or value.get("ticker") or "").upper()
+                if name == symbol:
+                    return value
     if isinstance(section, list):
         for item in section:
             name = str(item.get("symbol") or item.get("name") or item.get("ticker") or item.get("Symbol") or "").upper()
@@ -53,10 +60,7 @@ def _to_float(value):
 
 @st.cache_data(show_spinner=False)
 def load_market_data():
-    try:
-        return build_market_data()
-    except Exception as exc:
-        return {"_error": str(exc)}
+    return build_market_data()
 
 
 def render_header_row(title, symbols, section):
@@ -66,8 +70,10 @@ def render_header_row(title, symbols, section):
         item = _find_symbol(section, symbol)
         ltp = _get_value(item, ["ltp", "LTP", "last_price", "price", "last"])
         change = _get_value(item, ["change_pct", "changePercent", "change_percentage", "change%", "pct_change", "Change %"])
-        ltp_value = "No Data" if ltp is None else f"{_to_float(ltp):,.2f}"
-        change_value = None if change is None else f"{_to_float(change):+.2f}%"
+        ltp_float = _to_float(ltp)
+        change_float = _to_float(change)
+        ltp_value = "No Data" if ltp_float is None else f"{ltp_float:,.2f}"
+        change_value = None if change_float is None else f"{change_float:+.2f}%"
         col.metric(symbol, ltp_value, change_value)
 
 
@@ -146,7 +152,7 @@ def resolve_spot_price(options_data, market_data):
     if isinstance(options_data, dict):
         spot = options_data.get("spot") or options_data.get("underlying_ltp") or options_data.get("ltp")
     if spot is None:
-        spot = _get_value(_get_section(market_data, ["indices", "indian_market", "market"]), ["NIFTY", "BANKNIFTY"])
+        spot = _get_value(_get_section(market_data, ["indian", "indices", "indian_market", "market"]), ["NIFTY", "BANKNIFTY"])
     return _to_float(spot)
 
 
@@ -156,7 +162,6 @@ if not build_market_data:
 
 if st.button("🔄 Refresh Data"):
     load_market_data.clear()
-    st.experimental_rerun()
 
 market_data = load_market_data()
 if not market_data:
@@ -166,13 +171,15 @@ if isinstance(market_data, dict) and market_data.get("_error"):
     st.error(f"Data refresh failed: {market_data['_error']}")
     st.stop()
 
-indian_section = _get_section(market_data, ["indices", "indian_market", "market", "header", "headers"])
+indian_section = _get_section(market_data, ["indian", "indices", "indian_market", "market", "header", "headers"])
 global_section = _get_section(market_data, ["global", "commodities", "global_commodities"])
 currency_section = _get_section(market_data, ["currency", "currencies", "fx"])
 
 render_header_row("Indian Market", ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"], indian_section)
-render_header_row("Global + Commodity", ["DOW", "NASDAQ", "GIFT", "CRUDE"], global_section)
-render_header_row("Currency", ["USDINR", "DXY"], currency_section)
+if global_section:
+    render_header_row("Global + Commodity", ["DOW", "NASDAQ", "GIFT", "CRUDE"], global_section)
+if currency_section:
+    render_header_row("Currency", ["USDINR", "DXY"], currency_section)
 
 st.divider()
 st.subheader("📋 Live Market Scanner")
