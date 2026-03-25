@@ -1,7 +1,12 @@
 import time
 import requests
 
-from core.token_manager import get_headers, HEADER_ACCESS_TOKEN, HEADER_CLIENT_ID
+from core.token_manager import (
+    get_client_id,
+    get_token,
+    HEADER_ACCESS_TOKEN,
+    HEADER_CLIENT_ID,
+)
 
 BASE_URL = "https://api.dhan.co/v2"
 
@@ -13,16 +18,21 @@ def _build_url(endpoint):
 
 
 def safe_post(endpoint, payload, retries=3, timeout=10):
-    headers = get_headers()
-    if not headers:
-        return None, "Missing Dhan credentials"
+    token = get_token()
+    client_id = get_client_id()
     missing = []
-    if not headers.get(HEADER_ACCESS_TOKEN):
+    if not token:
         missing.append("access token")
-    if not headers.get(HEADER_CLIENT_ID):
+    if not client_id:
         missing.append("client ID")
     if missing:
         return None, f"Missing Dhan {' and '.join(missing)}"
+
+    headers = {
+        HEADER_ACCESS_TOKEN: token,
+        HEADER_CLIENT_ID: client_id,
+        "Content-Type": "application/json",
+    }
 
     last_error = None
     url = _build_url(endpoint)
