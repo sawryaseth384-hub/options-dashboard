@@ -1,7 +1,7 @@
 import time
 import requests
 
-from core.token_manager import get_headers
+from core.token_manager import get_headers, HEADER_ACCESS_TOKEN, HEADER_CLIENT_ID
 
 BASE_URL = "https://api.dhan.co/v2"
 
@@ -17,9 +17,9 @@ def safe_post(endpoint, payload, retries=3, timeout=10):
     if not headers:
         return None, "Missing Dhan credentials"
     missing = []
-    if not headers.get("access-token"):
+    if not headers.get(HEADER_ACCESS_TOKEN):
         missing.append("access token")
-    if not headers.get("client-id"):
+    if not headers.get(HEADER_CLIENT_ID):
         missing.append("client ID")
     if missing:
         return None, f"Missing Dhan {' and '.join(missing)}"

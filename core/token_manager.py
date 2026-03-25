@@ -5,6 +5,8 @@ import pyotp
 import streamlit as st
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
+HEADER_ACCESS_TOKEN = "access-token"
+HEADER_CLIENT_ID = "client-id"
 
 def _read_credential(key):
     try:
@@ -60,7 +62,7 @@ def get_headers():
     if not token or not client_id:
         return {}
     return {
-        "access-token": token,
-        "client-id": client_id,
+        HEADER_ACCESS_TOKEN: token,
+        HEADER_CLIENT_ID: client_id,
         "Content-Type": "application/json"
     }

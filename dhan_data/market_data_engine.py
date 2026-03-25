@@ -250,7 +250,7 @@ def build_market_data():
             market_data["options"]["spot"] = chain_meta.get("spot")
             total_call = sum(item.get("call_oi") or 0 for item in chain)
             total_put = sum(item.get("put_oi") or 0 for item in chain)
-            if total_call:
+            if total_call > 0:
                 market_data["options"]["pcr"] = total_put / total_call
             else:
                 market_data["options"]["pcr"] = 0
