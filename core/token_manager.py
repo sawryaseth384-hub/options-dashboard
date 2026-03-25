@@ -7,20 +7,19 @@ from datetime import datetime
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
 # =========================
-# 🔐 GET TOKEN (MAIN)
+# GET TOKEN
 # =========================
 def get_token():
 
-    # init session
     if "token" not in st.session_state:
         st.session_state.token = None
         st.session_state.expiry = 0
 
-    # ✅ reuse token (valid for 24h)
+    # ✅ reuse valid token
     if st.session_state.token and time.time() < st.session_state.expiry:
         return st.session_state.token
 
-    # 🔄 generate new token
+    # 🔄 generate new
     token, expiry = _generate_token()
 
     if token:
@@ -32,7 +31,7 @@ def get_token():
 
 
 # =========================
-# 🔄 FORCE REFRESH (IMPORTANT)
+# FORCE REFRESH
 # =========================
 def force_refresh_token():
     st.session_state.token = None
@@ -40,58 +39,48 @@ def force_refresh_token():
 
 
 # =========================
-# 🔑 GENERATE TOKEN
+# GENERATE TOKEN
 # =========================
 def _generate_token():
     try:
-        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"])
-        current_totp = totp.now()
+        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"]).now()
 
         payload = {
             "dhanClientId": st.secrets["CLIENT_ID"],
             "pin": st.secrets["PIN"],
-            "totp": current_totp
+            "totp": totp
         }
 
-        # 🔥 IMPORTANT: params use करना है
         res = requests.post(AUTH_URL, params=payload, timeout=10)
 
         if res.status_code != 200:
-            st.error(f"❌ Token HTTP Error: {res.status_code}")
             return None, 0
 
         data = res.json()
 
         if "accessToken" not in data:
-            st.error(f"❌ Token Failed: {data}")
             return None, 0
 
-        # ✅ expiry handling
         expiry = data.get("expiryTime")
 
         if expiry:
             dt = datetime.fromisoformat(expiry)
-            expiry_ts = dt.timestamp() - 60   # 1 min early refresh
+            expiry_ts = dt.timestamp() - 60
         else:
             expiry_ts = time.time() + 23 * 3600
 
-        st.success("✅ Token Generated")
-
         return data["accessToken"], expiry_ts
 
-    except Exception as e:
-        st.error(f"❌ Token Error: {e}")
+    except:
         return None, 0
 
 
 # =========================
-# 📡 HEADERS
+# HEADERS
 # =========================
 def get_headers():
-    token = get_token()
-
     return {
-        "access-token": token,
+        "access-token": get_token(),
         "client-id": st.secrets["CLIENT_ID"],
         "Content-Type": "application/json"
     }
