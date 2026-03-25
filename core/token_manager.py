@@ -42,8 +42,9 @@ def _get_secret(key):
 def get_headers(content_type="application/json"):
     """Return auth headers after calling get_token() and _get_secret(); empty dict on failure.
 
-    Set content_type to None to omit the Content-Type header. Missing secrets or tokens
-    result in an empty dict to avoid crashing call sites.
+    Parameters:
+        content_type: Optional Content-Type header value (default: "application/json").
+            Set to None to omit Content-Type entirely.
     """
     token = get_token()
     client_id = _get_secret("CLIENT_ID")

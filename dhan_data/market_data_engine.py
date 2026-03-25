@@ -267,7 +267,7 @@ def _normalize_quote_item(quote):
     if change_pct is None and ltp:
         base = ltp - change
         # Tolerance prevents extreme percentages when base is effectively zero.
-        # EPSILON keeps tiny bases from exploding while staying negligible vs. prices.
+        # Tolerance is max(EPSILON, price * EPSILON) to guard absolute and relative precision.
         tolerance = max(EPSILON, abs(ltp) * EPSILON)
         if abs(base) <= tolerance:
             change_pct = 0
@@ -588,7 +588,7 @@ class MarketDataEngine:
             resolved = self.resolve_symbol(symbol, fallback_segment="IDX_I")
             if resolved:
                 instruments.append(resolved)
-        # Use quote endpoint for OHLC data and LTP endpoint for live prices.
+        # Quote endpoint supplies OHLC; LTP endpoint keeps latest price for merged output.
         quotes = self.fetch_market_quotes(instruments)
         ltps = self.fetch_market_ltp(instruments)
         return self._merge_quotes(instruments, quotes, ltps)
@@ -694,7 +694,13 @@ class MarketDataEngine:
         return market_data
 
     def _attach_candles(self, targets, instruments, candle_type, interval):
-        """Attach intraday or historical candles; candle_type must be intraday or historical."""
+        """Attach intraday or historical candles to instrument dicts.
+
+        targets: optional list of symbols to include.
+        instruments: list of dicts from fetch_indices/fetch_stocks.
+        candle_type: "intraday" or "historical".
+        interval: intraday interval string (e.g., "1", "5").
+        """
         target_set = {symbol.upper() for symbol in targets} if targets else None
         for inst in instruments:
             if target_set and inst["symbol"].upper() not in target_set:
