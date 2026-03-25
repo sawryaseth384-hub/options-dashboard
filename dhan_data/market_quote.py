@@ -4,7 +4,6 @@ from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
 
-# ✅ cache add किया (important)
 @st.cache_data(ttl=2)
 def get_ltp(security_id, segment):
     try:
@@ -16,9 +15,13 @@ def get_ltp(security_id, segment):
         else:
             exchange = "NSE_EQ"
 
+        # ✅ correct payload
         payload = {
-            exchange: [int(security_id)]
+            "IDX_I": [],
+            "NSE_EQ": [],
+            "NSE_FNO": []
         }
+        payload[exchange] = [int(security_id)]
 
         res = requests.post(
             f"{BASE_URL}/marketfeed/ltp",
@@ -27,9 +30,8 @@ def get_ltp(security_id, segment):
             timeout=5
         )
 
-        # अगर API fail हो जाए
         if res.status_code != 200:
-            st.warning(f"LTP API Error: {res.status_code}")
+            st.error(f"LTP API Error: {res.status_code}")
             return 0
 
         data = res.json()
