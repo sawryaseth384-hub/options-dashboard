@@ -4,7 +4,10 @@ import pandas as pd
 import time
 from datetime import datetime, timedelta
 
-# 🔥 WebSocket import
+# ✅ Token Manager
+from dhan_data.token_manager import get_token
+
+# ✅ WebSocket
 from dhan_data.live_market_feed import start_feed, get_live_price
 
 # =========================
@@ -13,21 +16,26 @@ from dhan_data.live_market_feed import start_feed, get_live_price
 BASE_URL = "https://api.dhan.co/v2"
 
 st.set_page_config(layout="wide")
-st.title("🚀 Dhan Full Debug Dashboard")
+st.title("🚀 Dhan Full Dashboard")
 
 # =========================
-# START WEBSOCKET (ONLY ONCE)
+# START WEBSOCKET
 # =========================
 if "ws_started" not in st.session_state:
-    start_feed(st.secrets["ACCESS_TOKEN"], st.secrets["CLIENT_ID"])
-    st.session_state.ws_started = True
+    token = get_token()
+    if token:
+        start_feed(token, st.secrets["CLIENT_ID"])
+        st.session_state.ws_started = True
+    else:
+        st.error("❌ Token Error")
+        st.stop()
 
 # =========================
 # HEADERS
 # =========================
 def get_headers():
     return {
-        "access-token": st.secrets["ACCESS_TOKEN"],
+        "access-token": get_token(),
         "client-id": st.secrets["CLIENT_ID"],
         "Content-Type": "application/json"
     }
@@ -69,6 +77,27 @@ symbols = {
     "RELIANCE": (2885, "NSE_EQ", "EQUITY"),
 }
 
+st.subheader("📊 SYMBOLS")
+for k, v in symbols.items():
+    st.write(k, v)
+
+# =========================
+# TEST SYMBOL
+# =========================
+sec, seg, inst = symbols["RELIANCE"]
+
+# =========================
+# 🔥 LIVE LTP
+# =========================
+st.subheader("📈 LIVE LTP")
+
+ltp = get_live_price()
+
+if ltp > 0:
+    st.success(f"🔥 LIVE LTP: {ltp}")
+else:
+    st.warning("⏳ Waiting for live data...")
+
 # =========================
 # HISTORICAL
 # =========================
@@ -101,8 +130,17 @@ def get_historical(sec, seg, inst):
 
     return df, None
 
+st.subheader("📅 HISTORICAL")
+
+hist, h_err = get_historical(sec, seg, inst)
+
+if hist is not None:
+    st.dataframe(hist.tail())
+else:
+    st.warning(f"Historical Error: {h_err}")
+
 # =========================
-# INTRADAY
+# CANDLE
 # =========================
 def get_intraday(sec, seg, inst):
     payload = {
@@ -132,52 +170,11 @@ def get_intraday(sec, seg, inst):
 
     return df, None
 
-# =========================
-# UI START
-# =========================
-st.subheader("📊 SYMBOLS")
-for k, v in symbols.items():
-    st.write(k, v)
-
-# =========================
-# TEST SYMBOL
-# =========================
-sec, seg, inst = symbols["RELIANCE"]
-
-# =========================
-# 🔥 LIVE LTP (WebSocket)
-# =========================
-st.subheader("📈 LIVE LTP")
-
-ltp = get_live_price()
-
-if ltp > 0:
-    st.success(f"🔥 LIVE LTP: {ltp}")
-else:
-    st.warning("Waiting for live data...")
-
-# =========================
-# HISTORICAL
-# =========================
-st.subheader("📅 HISTORICAL")
-
-hist, h_err = get_historical(sec, seg, inst)
-
-if hist is not None:
-    st.success(f"Rows: {len(hist)}")
-    st.dataframe(hist.tail())
-else:
-    st.warning(f"Historical Error: {h_err}")
-
-# =========================
-# CANDLE
-# =========================
 st.subheader("🕯 CANDLE")
 
 candle, c_err = get_intraday(sec, seg, inst)
 
 if candle is not None:
-    st.success(f"Candles: {len(candle)}")
     st.line_chart(candle["close"])
 else:
     st.warning(f"Candle Error: {c_err}")
@@ -187,7 +184,7 @@ else:
 # =========================
 st.subheader("🛠 DEBUG PANEL")
 
-st.write("WebSocket:", "✅ Running")
+st.write("Token:", "✅")
 st.write("Live LTP:", ltp)
 st.write("Historical:", "OK" if hist is not None else "FAIL")
 st.write("Candle:", "OK" if candle is not None else "FAIL")
