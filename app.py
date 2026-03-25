@@ -14,11 +14,12 @@ from dhan_data.live_market_feed import start_feed, get_live_price
 BASE_URL = "https://api.dhan.co/v2"
 
 st.set_page_config(layout="wide")
-st.title("🚀 MULTI SYMBOL TRADING DASHBOARD")
+st.title("🚀 FIRST TRADING TERMINAL")
 
 st_autorefresh(interval=2000, key="refresh")
 
 CLIENT_ID = st.secrets.get("CLIENT_ID")
+
 if not CLIENT_ID:
     st.error("CLIENT_ID missing")
     st.stop()
@@ -29,93 +30,58 @@ if not token:
     st.stop()
 
 # =========================
-# SYMBOL MASTER
+# SYMBOLS
 # =========================
 symbols = {
     "NIFTY": (13, "IDX_I", "INDEX"),
     "BANKNIFTY": (25, "IDX_I", "INDEX"),
-    "FINNIFTY": (27, "IDX_I", "INDEX"),
-    "RELIANCE": (2885, "NSE_EQ", "EQUITY"),
-    "TCS": (11536, "NSE_EQ", "EQUITY"),
 }
 
-selected_symbols = st.multiselect(
-    "Select Symbols",
-    list(symbols.keys()),
-    default=["NIFTY", "BANKNIFTY", "RELIANCE"]
-)
+symbol = st.selectbox("Select Market", list(symbols.keys()))
+sec, seg, inst = symbols[symbol]
 
 # =========================
 # WS START
 # =========================
 if not st.session_state.get("ws_started", False):
-    try:
-        start_feed(token, CLIENT_ID)
-        st.session_state["ws_started"] = True
-    except Exception as e:
-        st.error(f"WS Error: {e}")
+    start_feed(token, CLIENT_ID)
+    st.session_state["ws_started"] = True
 
 # =========================
-# SAFE POST
+# SAFE API
 # =========================
-_last_call = 0
-
 def safe_post(url, payload):
-    global _last_call
-
-    wait = max(0, 1.2 - (time.time() - _last_call))
-    if wait > 0:
-        time.sleep(wait)
-
-    for _ in range(3):
-        try:
-            res = requests.post(url, headers={
-                "access-token": get_token(),
-                "client-id": CLIENT_ID,
-                "Content-Type": "application/json"
-            }, json=payload, timeout=10)
-
-            if res.status_code == 200:
-                data = res.json()
-                if data:
-                    return data
-
-        except:
-            time.sleep(1)
-
-    return None
-
-# =========================
-# DEPTH FUNCTION
-# =========================
-@st.cache_data(ttl=5)
-def get_depth(sec, seg):
-    payload = {seg: [int(sec)]}
-    data = safe_post(f"{BASE_URL}/marketfeed/ltp", payload)
-
-    if not data:
-        return None
-
     try:
-        d = data["data"][seg][str(sec)]
-        return {
-            "ltp": float(d.get("last_price", 0)),
-            "high": float(d.get("high") or d.get("last_price", 0)),
-            "low": float(d.get("low") or d.get("last_price", 0)),
-        }
+        res = requests.post(url, headers={
+            "access-token": get_token(),
+            "client-id": CLIENT_ID,
+            "Content-Type": "application/json"
+        }, json=payload, timeout=10)
+
+        if res.status_code == 200:
+            return res.json()
     except:
         return None
 
 # =========================
-# INTRADAY FUNCTION
+# LTP
 # =========================
-@st.cache_data(ttl=15)
-def get_intraday(sec, seg, inst):
+ltp = get_live_price()
+
+try:
+    ltp = float(ltp)
+except:
+    ltp = 0
+
+# =========================
+# INTRADAY + EMA
+# =========================
+def get_intraday():
     payload = {
         "securityId": str(sec),
         "exchangeSegment": seg,
         "instrument": inst,
-        "interval": "5",
+        "interval": "1",
         "oi": False,
         "fromDate": datetime.now().strftime("%Y-%m-%d"),
         "toDate": datetime.now().strftime("%Y-%m-%d"),
@@ -134,57 +100,90 @@ def get_intraday(sec, seg, inst):
     df["close"] = pd.to_numeric(df["close"], errors="coerce")
     df = df.dropna()
 
-    if "datetime" in df.columns:
-        df["datetime"] = pd.to_datetime(df["datetime"])
-        df = df.set_index("datetime")
+    df["EMA"] = df["close"].ewm(span=21).mean()
 
     return df
 
+df = get_intraday()
+
 # =========================
-# DASHBOARD GRID
+# TREND
 # =========================
-st.subheader("📊 LIVE MARKET")
+trend = "WAIT"
 
-cols = st.columns(len(selected_symbols))
+if df is not None and not df.empty:
+    last_price = df["close"].iloc[-1]
+    ema = df["EMA"].iloc[-1]
 
-for i, sym in enumerate(selected_symbols):
-    sec, seg, inst = symbols[sym]
+    if last_price > ema:
+        trend = "BULLISH"
+    else:
+        trend = "BEARISH"
 
-    with cols[i]:
+# =========================
+# OPTION CHAIN + PCR
+# =========================
+def get_chain():
+    payload = {
+        "UnderlyingScrip": int(sec),
+        "UnderlyingSeg": seg,
+        "Expiry": "2026-03-30"
+    }
 
-        st.markdown(f"### {sym}")
+    data = safe_post(f"{BASE_URL}/optionchain", payload)
 
-        # LTP
-        ltp = get_live_price()
+    if not data:
+        return None
+
+    return data["data"]["oc"]
+
+chain = get_chain()
+
+total_put = 0
+total_call = 0
+
+if chain:
+    for strike, row in chain.items():
         try:
-            ltp = float(ltp)
+            if "CE" in row and "PE" in row:
+                total_call += row["CE"].get("oi", 0)
+                total_put += row["PE"].get("oi", 0)
         except:
-            ltp = 0
+            continue
 
-        st.metric("LTP", round(ltp, 2) if ltp else "—")
-
-        # Depth
-        depth = get_depth(sec, seg)
-
-        if depth:
-            st.caption(f"H: {depth['high']} | L: {depth['low']}")
-        else:
-            st.caption("No depth")
-
-        # Intraday Chart
-        candle = get_intraday(sec, seg, inst)
-
-        if candle is not None and not candle.empty:
-            st.line_chart(candle["close"])
-        else:
-            st.write("No chart")
+pcr = round(total_put / total_call, 2) if total_call else 0
 
 # =========================
-# STATUS
+# FINAL SIGNAL
 # =========================
-st.subheader("🛠 SYSTEM STATUS")
+signal = "WAIT"
 
-st.write({
-    "WS": st.session_state.get("ws_started", False),
-    "Symbols": selected_symbols,
-})
+if trend == "BULLISH" and pcr > 1:
+    signal = "BUY CALL"
+
+elif trend == "BEARISH" and pcr < 1:
+    signal = "BUY PUT"
+
+# =========================
+# UI
+# =========================
+col1, col2, col3 = st.columns(3)
+
+col1.metric("LTP", round(ltp, 2))
+col2.metric("Trend", trend)
+col3.metric("PCR", pcr)
+
+st.subheader("🎯 SIGNAL")
+
+if signal == "BUY CALL":
+    st.success("🚀 BUY CALL")
+elif signal == "BUY PUT":
+    st.error("🔻 BUY PUT")
+else:
+    st.warning("WAIT")
+
+# =========================
+# CHART
+# =========================
+if df is not None:
+    st.line_chart(df[["close", "EMA"]])
