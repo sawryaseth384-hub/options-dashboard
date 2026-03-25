@@ -1,9 +1,12 @@
+import logging
+import os
 import requests
 import pyotp
 import time
 import streamlit as st
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
+LOGGER = logging.getLogger(__name__)
 
 def get_token():
 
@@ -29,3 +32,31 @@ def get_token():
 
     st.error("Token Failed")
     return None
+
+def _get_secret(key):
+    try:
+        return st.secrets[key]
+    except (KeyError, AttributeError):
+        return os.getenv(key)
+
+def get_headers(content_type="application/json"):
+    """Return auth headers after calling get_token() and _get_secret(); empty dict on failure.
+
+    Parameters:
+        content_type: Optional Content-Type header value (default: "application/json").
+            Set to None to omit Content-Type entirely.
+    """
+    token = get_token()
+    client_id = _get_secret("CLIENT_ID")
+
+    if not token or not client_id:
+        LOGGER.warning("Dhan auth headers unavailable; missing token or client_id.")
+        return {}
+
+    headers = {
+        "access-token": token,
+        "client-id": client_id,
+    }
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
