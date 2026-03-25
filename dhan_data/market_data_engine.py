@@ -44,7 +44,8 @@ def _lookup_security(symbols, fallback):
     try:
         instruments = load_instruments()
         if not instruments.empty:
-            match = instruments[instruments["SEM_TRADING_SYMBOL"].str.upper().isin([s.upper() for s in symbols])]
+            symbols_upper = [s.upper() for s in symbols]
+            match = instruments[instruments["SEM_TRADING_SYMBOL"].str.upper().isin(symbols_upper)]
             if not match.empty:
                 row = match.iloc[0]
                 return int(row["SEM_SMST_SECURITY_ID"]), _normalize_segment(row.get("SEGMENT"))
@@ -122,7 +123,14 @@ def _normalize_chain(chain):
     if isinstance(chain, dict):
         items = chain.items()
     elif isinstance(chain, list):
-        items = [(row.get("strike") or row.get("Strike") or row.get("strikePrice"), row) for row in chain if isinstance(row, dict)]
+        items = []
+        for row in chain:
+            if not isinstance(row, dict):
+                continue
+            strike_value = row.get("strike") or row.get("Strike") or row.get("strikePrice")
+            if strike_value is None:
+                continue
+            items.append((strike_value, row))
     else:
         return normalized
 

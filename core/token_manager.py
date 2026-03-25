@@ -8,8 +8,9 @@ AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
 def _read_secret(key):
     try:
-        if hasattr(st, "secrets") and key in st.secrets:
-            return st.secrets[key]
+        secrets = st.secrets
+        if key in secrets:
+            return secrets[key]
     except (AttributeError, KeyError, TypeError, RuntimeError):
         pass
     return os.getenv(key)
