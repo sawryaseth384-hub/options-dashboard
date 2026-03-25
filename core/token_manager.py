@@ -1,84 +1,49 @@
 import streamlit as st
 import requests
-import time
 import pyotp
+import time
 from datetime import datetime
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
-
-# 🔥 GLOBAL STORE (token save रहेगा)
-@st.cache_resource
-def token_store():
-    return {"token": None, "expiry": 0}
-
-
-# =========================
-# GET TOKEN
-# =========================
 def get_token():
-    store = token_store()
 
-    # ✅ अगर token है और valid है → वही use
-    if store["token"] and time.time() < store["expiry"]:
-        return store["token"]
+    if "token" not in st.session_state:
+        st.session_state.token = None
+        st.session_state.expiry = 0
 
-    # ❌ नहीं है / expire हो गया → नया बनाओ
-    token, expiry = refresh_token()
+    # ✅ reuse token (24h)
+    if st.session_state.token and time.time() < st.session_state.expiry:
+        return st.session_state.token
 
-    if token:
-        store["token"] = token
-        store["expiry"] = expiry
-        return token
-
-    return None
-
-
-# =========================
-# REFRESH TOKEN
-# =========================
-def refresh_token():
     try:
-        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"])
-        current_totp = totp.now()
+        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"]).now()
 
         payload = {
             "dhanClientId": st.secrets["CLIENT_ID"],
             "pin": st.secrets["PIN"],
-            "totp": current_totp
+            "totp": totp
         }
 
         res = requests.post(AUTH_URL, params=payload)
         data = res.json()
 
         if "accessToken" in data:
-
-            # 👉 अगर expiry API दे रही है
             expiry = data.get("expiryTime")
 
             if expiry:
                 dt = datetime.fromisoformat(expiry)
-                expiry_ts = dt.timestamp()
+                expiry_ts = dt.timestamp() - 60
             else:
-                # 👉 default 24 घंटे
-                expiry_ts = time.time() + 24 * 3600
+                expiry_ts = time.time() + 23 * 3600
 
-            return data["accessToken"], expiry_ts
+            st.session_state.token = data["accessToken"]
+            st.session_state.expiry = expiry_ts
 
-        return None, 0
+            return data["accessToken"]
+
+        return None
 
     except Exception as e:
-        st.error(e)
-        return None, 0
-
-
-# =========================
-# HEADERS
-# =========================
-def get_headers():
-    token = get_token()
-    return {
-        "access-token": token,
-        "client-id": st.secrets["CLIENT_ID"],
-        "Content-Type": "application/json"
-    }
+        st.error(f"Token Error: {e}")
+        return None
