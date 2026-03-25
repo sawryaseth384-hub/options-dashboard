@@ -1,86 +1,68 @@
-import streamlit as st
-import requests
+# core/token_manager.py
 import time
-import pyotp
+import streamlit as st
 from datetime import datetime
+from dhanhq import dhanhq
 
-AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
-
-# =========================
-# GET TOKEN
-# =========================
 def get_token():
-
+    """Get a valid token, refreshing if necessary."""
+    # Initialize session state if needed
     if "token" not in st.session_state:
         st.session_state.token = None
         st.session_state.expiry = 0
 
-    # ✅ reuse valid token
-    if st.session_state.token and time.time() < st.session_state.expiry:
-        return st.session_state.token
+    # If we have a token, check its expiry (handles both string and numeric)
+    if st.session_state.token:
+        expiry = st.session_state.expiry
+        # Convert string expiry to numeric if needed
+        if isinstance(expiry, str):
+            try:
+                # Try to parse ISO format like "2026-03-25T17:10:37Z"
+                if expiry.endswith('Z'):
+                    expiry = expiry.replace('Z', '+00:00')
+                dt = datetime.fromisoformat(expiry)
+                expiry = dt.timestamp()
+                # Update session state to numeric for future runs
+                st.session_state.expiry = expiry
+            except Exception:
+                # If parsing fails, treat as expired
+                expiry = 0
+        # Now compare with current time
+        if time.time() < expiry:
+            return st.session_state.token
 
-    # 🔄 generate new
-    token, expiry = _generate_token()
+    # Generate new token
+    try:
+        client_id = st.secrets["CLIENT_ID"]
+        access_token = st.secrets["DHAN_ACCESS_TOKEN"]  # adjust secret name as needed
 
-    if token:
+        # Initialize Dhan client
+        dhan = dhanhq(client_id, access_token)
+
+        # Request a new token – adjust based on your actual Dhan API
+        # For Dhan, you typically exchange the access token for a session token
+        # Replace with your actual token generation logic
+        response = dhan.generate_token()  # Example – may need to use dhan.get_access_token()
+
+        # Extract token and expiry
+        token = response.get("access_token")
+        expiry_str = response.get("expiry")  # Expected format: "2026-03-25T17:10:37Z"
+
+        if not token or not expiry_str:
+            raise ValueError("Invalid response from token API")
+
+        # Convert expiry to Unix timestamp
+        # Handle ISO format with 'Z'
+        if expiry_str.endswith('Z'):
+            expiry_str = expiry_str.replace('Z', '+00:00')
+        expiry_ts = datetime.fromisoformat(expiry_str).timestamp()
+
+        # Store in session state
         st.session_state.token = token
-        st.session_state.expiry = expiry
+        st.session_state.expiry = expiry_ts
+
         return token
 
-    return None
-
-
-# =========================
-# FORCE REFRESH
-# =========================
-def force_refresh_token():
-    st.session_state.token = None
-    st.session_state.expiry = 0
-
-
-# =========================
-# GENERATE TOKEN
-# =========================
-def _generate_token():
-    try:
-        totp = pyotp.TOTP(st.secrets["TOTP_SECRET"]).now()
-
-        payload = {
-            "dhanClientId": st.secrets["CLIENT_ID"],
-            "pin": st.secrets["PIN"],
-            "totp": totp
-        }
-
-        res = requests.post(AUTH_URL, params=payload, timeout=10)
-
-        if res.status_code != 200:
-            return None, 0
-
-        data = res.json()
-
-        if "accessToken" not in data:
-            return None, 0
-
-        expiry = data.get("expiryTime")
-
-        if expiry:
-            dt = datetime.fromisoformat(expiry)
-            expiry_ts = dt.timestamp() - 60
-        else:
-            expiry_ts = time.time() + 23 * 3600
-
-        return data["accessToken"], expiry_ts
-
-    except:
-        return None, 0
-
-
-# =========================
-# HEADERS
-# =========================
-def get_headers():
-    return {
-        "access-token": get_token(),
-        "client-id": st.secrets["CLIENT_ID"],
-        "Content-Type": "application/json"
-    }
+    except Exception as e:
+        st.error(f"Token generation failed: {e}")
+        return None
