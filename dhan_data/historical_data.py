@@ -5,15 +5,13 @@ from core.token_manager import get_headers
 BASE_URL = "https://api.dhan.co/v2"
 
 @st.cache_data(ttl=30)
-def get_historical_daily(security_id, segment):
+def get_historical(security_id, segment):
 
-    # 🔥 instrument mapping
+    # 🔥 correct instrument mapping
     if segment == "IDX_I":
         instrument = "INDEX"
     elif segment == "NSE_EQ":
         instrument = "EQUITY"
-    elif segment == "NSE_FNO":
-        instrument = "FUTSTK"   # or OPTSTK
     else:
         instrument = "EQUITY"
 
@@ -21,25 +19,30 @@ def get_historical_daily(security_id, segment):
         "securityId": str(security_id),
         "exchangeSegment": segment,
         "instrument": instrument,
-        "expiryCode": 0,   # 🔥 IMPORTANT (cash = 0)
+        "expiryCode": 0,
         "oi": False,
         "fromDate": "2025-03-01",
         "toDate": "2025-03-25"
     }
 
-    res = requests.post(
-        f"{BASE_URL}/charts/historical",
-        headers=get_headers(),
-        json=payload,
-        timeout=10
-    )
+    try:
+        res = requests.post(
+            f"{BASE_URL}/charts/historical",
+            headers=get_headers(),
+            json=payload,
+            timeout=10
+        )
 
-    print("STATUS:", res.status_code)
-    print("RESPONSE:", res.text[:200])
+        if res.status_code != 200:
+            return {}
 
-    if res.status_code != 200:
+        data = res.json()
+
+        # 🔥 VALIDATION
+        if not data or "open" not in data:
+            return {}
+
+        return data
+
+    except:
         return {}
-
-    data = res.json()
-
-    return data if isinstance(data, dict) else {}
