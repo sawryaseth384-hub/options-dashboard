@@ -1,137 +1,128 @@
 import streamlit as st
 import pandas as pd
 
-# Modules
+# Dhan Modules
+from dhan_data.instruments import get_symbol_data
+from dhan_data.expiry import get_expiry
+from dhan_data.option_chain import get_option_chain
 from dhan_data.market_quote import get_ltp
 from dhan_data.historical_data import get_historical
 from dhan_data.chart import get_candle_data, plot_candle
-from dhan_data.expiry import get_expiry
-from dhan_data.option_chain import get_option_chain
-from core.token_manager import get_token, get_headers
+
+from core.token_manager import get_token
 
 # =========================
 # PAGE SETUP
 # =========================
 st.set_page_config(layout="wide")
-st.title("🚀 Dhan Trading Dashboard + Debug")
-
-# =========================
-# SIDEBAR DEBUG PANEL
-# =========================
-st.sidebar.title("🔧 Debug Panel")
-
-debug_mode = st.sidebar.toggle("Enable Debug Mode")
+st.title("🔬 Full Dhan Modules Scan")
 
 # =========================
 # 1. TOKEN
 # =========================
 st.subheader("1. Token")
-
-try:
-    token = get_token()
-    headers = get_headers()
-    st.success("✅ Token OK")
-
-    if debug_mode:
-        st.sidebar.write("Headers:", headers)
-
-except Exception as e:
-    st.error(f"❌ Token Error: {e}")
+token = get_token()
+st.write(f"Token: {'✅' if token else '❌'}")
 
 # =========================
-# 2. MARKET QUOTE
+# 2. SYMBOL SETUP
 # =========================
-st.subheader("2. Market Quote")
+st.subheader("2. Symbol Resolution")
 
-try:
-    ltp = get_ltp(2885, "NSE_EQ")
-    st.write(f"RELIANCE LTP: {ltp}")
+symbols = {
+    "NIFTY": (13, "IDX_I"),
+    "RELIANCE": (2885, "NSE_EQ"),
+    "TCS": (11536, "NSE_EQ"),
+    "HDFCBANK": (1333, "NSE_EQ"),
+}
 
-    if debug_mode:
-        st.sidebar.success("LTP OK")
+for sym, (sec, seg) in symbols.items():
+    st.write(f"{sym}: sec_id={sec}, segment={seg}")
 
-except Exception as e:
-    st.error(f"❌ LTP Error: {e}")
+nifty_sec, nifty_seg = symbols["NIFTY"]
 
 # =========================
-# 3. HISTORICAL
+# 3. EXPIRY LIST
 # =========================
-st.subheader("3. Historical Data")
+st.subheader("3. Expiry List (NIFTY)")
+exp_list = get_expiry(nifty_sec, nifty_seg)
 
-try:
-    hist = get_historical(2885, "NSE_EQ")
+if exp_list:
+    st.write(exp_list[:5])
+else:
+    st.warning("No expiry data")
 
-    if hist:
-        st.success("✅ Historical Loaded")
+# =========================
+# 4. OPTION CHAIN
+# =========================
+st.subheader("4. Option Chain")
 
-        if debug_mode:
-            st.sidebar.write("Historical RAW:", hist)
+if exp_list:
+    expiry = exp_list[0]
+    oc_data = get_option_chain(nifty_sec, expiry, nifty_seg)
 
+    if oc_data and "data" in oc_data:
+        spot = oc_data["data"].get("last_price")
+        oc = oc_data["data"].get("oc", {})
+        strikes = sorted([int(float(s)) for s in oc.keys()])
+
+        st.write(f"Spot: {spot}")
+        st.write(f"Strikes Count: {len(strikes)}")
     else:
-        st.warning("⚠️ No historical data")
-
-except Exception as e:
-    st.error(f"❌ Historical Error: {e}")
+        st.error("Option Chain Failed")
 
 # =========================
-# 4. CANDLE
+# 5. MARKET QUOTES (FIXED)
 # =========================
-st.subheader("4. Candlestick")
+st.subheader("5. Market Quotes")
 
-try:
-    df = get_candle_data(2885, "NSE_EQ")
+quote_list = [
+    ("RELIANCE", 2885, "NSE_EQ"),  # 🔴 अभी 1 ही रखो (429 avoid)
+]
 
-    if df is not None and len(df) > 0:
-        fig, trend = plot_candle(df)
-        st.write(f"Trend: {trend}")
-        st.plotly_chart(fig)
+data = []
 
-        if debug_mode:
-            st.sidebar.write("Candle DF:", df.head())
+for name, sec, seg in quote_list:
+    ltp = get_ltp(sec, seg)
+    data.append({
+        "Symbol": name,
+        "LTP": ltp
+    })
 
-    else:
-        st.warning("⚠️ No candle data")
-
-except Exception as e:
-    st.error(f"❌ Candle Error: {e}")
+st.dataframe(pd.DataFrame(data))
 
 # =========================
-# 5. OPTION CHAIN
+# 6. HISTORICAL (FIXED)
 # =========================
-st.subheader("5. Option Chain")
+st.subheader("6. Historical Data")
 
-try:
-    exp_list = get_expiry(13, "IDX_I")
+hist = get_historical(2885, "NSE_EQ")  # 🔴 IDX मत use करो
 
-    if exp_list:
-        expiry = exp_list[0]
-        oc = get_option_chain(13, expiry, "IDX_I")
-
-        if oc:
-            st.success("✅ Option Chain Loaded")
-
-            if debug_mode:
-                st.sidebar.write("OC RAW:", oc)
-
-        else:
-            st.warning("⚠️ No Option Chain Data")
-
-    else:
-        st.warning("⚠️ No Expiry Data")
-
-except Exception as e:
-    st.error(f"❌ Option Chain Error: {e}")
+if hist:
+    st.success("Historical Loaded")
+    st.write(hist)  # debug
+else:
+    st.warning("No historical data")
 
 # =========================
-# 6. STATUS SUMMARY
+# 7. CANDLE (FIXED)
 # =========================
-st.subheader("6. System Status")
+st.subheader("7. Candlestick")
 
-st.success("✅ Dashboard Running")
+df = get_candle_data(2885, "NSE_EQ")
+
+if df is not None and len(df) > 0:
+    fig, trend = plot_candle(df)
+    st.write(f"Trend: {trend}")
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.warning("No candle data")
 
 # =========================
-# REFRESH BUTTON
+# REFRESH
 # =========================
-if st.button("🔄 Refresh"):
+if st.button("Refresh"):
     st.cache_data.clear()
     st.rerun()
+
+st.success("✅ Scan Complete")
