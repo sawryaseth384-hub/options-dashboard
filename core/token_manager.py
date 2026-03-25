@@ -37,15 +37,17 @@ def _get_secret(key):
     except Exception:
         return os.getenv(key)
 
-def get_headers():
+def get_headers(content_type="application/json"):
     token = get_token()
     client_id = _get_secret("CLIENT_ID")
 
     if not token or not client_id:
         return {}
 
-    return {
+    headers = {
         "access-token": token,
         "client-id": client_id,
-        "Content-Type": "application/json"
     }
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers

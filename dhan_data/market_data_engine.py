@@ -1,4 +1,5 @@
 import datetime as dt
+import threading
 import time
 
 from dhan_data.client import DhanApiClient
@@ -16,21 +17,24 @@ class TTLCache:
     """Simple TTL cache that ignores non-positive TTL values."""
     def __init__(self):
         self._store = {}
+        self._lock = threading.Lock()
 
     def get(self, key):
-        item = self._store.get(key)
-        if not item:
-            return None
-        expires_at, value = item
-        if time.time() > expires_at:
-            self._store.pop(key, None)
-            return None
-        return value
+        with self._lock:
+            item = self._store.get(key)
+            if not item:
+                return None
+            expires_at, value = item
+            if time.time() > expires_at:
+                self._store.pop(key, None)
+                return None
+            return value
 
     def set(self, key, value, ttl):
         if ttl <= 0:
             return
-        self._store[key] = (time.time() + ttl, value)
+        with self._lock:
+            self._store[key] = (time.time() + ttl, value)
 
 def _instrument_key(security_id, segment):
     return f"{segment}:{security_id}"
@@ -494,3 +498,5 @@ class MarketDataEngine:
                     inst["security_id"],
                     inst["segment"],
                 )
+            else:
+                raise ValueError(f"Unsupported candle_type: {candle_type}")
