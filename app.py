@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 
 # Dhan Modules
-from dhan_data.instruments import get_symbol_data
 from dhan_data.expiry import get_expiry
 from dhan_data.option_chain import get_option_chain
 from dhan_data.market_quote import get_ltp
@@ -18,106 +17,89 @@ st.set_page_config(layout="wide")
 st.title("🔬 Full Dhan Modules Scan")
 
 # =========================
-# 1. TOKEN
+# TOKEN
 # =========================
 st.subheader("1. Token")
-token = get_token()
-st.write(f"Token: {'✅' if token else '❌'}")
+
+try:
+    token = get_token()
+    st.success("✅ Token OK")
+except Exception as e:
+    st.error(f"❌ Token Error: {e}")
 
 # =========================
-# 2. SYMBOL SETUP
+# SYMBOLS
 # =========================
-st.subheader("2. Symbol Resolution")
+st.subheader("2. Symbols")
 
 symbols = {
     "NIFTY": (13, "IDX_I"),
     "RELIANCE": (2885, "NSE_EQ"),
-    "TCS": (11536, "NSE_EQ"),
-    "HDFCBANK": (1333, "NSE_EQ"),
 }
 
-for sym, (sec, seg) in symbols.items():
-    st.write(f"{sym}: sec_id={sec}, segment={seg}")
+for name, (sec, seg) in symbols.items():
+    st.write(f"{name}: {sec}, {seg}")
 
 nifty_sec, nifty_seg = symbols["NIFTY"]
 
 # =========================
-# 3. EXPIRY LIST
+# OPTION CHAIN
 # =========================
-st.subheader("3. Expiry List (NIFTY)")
+st.subheader("3. Option Chain")
 
 try:
     exp_list = get_expiry(nifty_sec, nifty_seg)
-    if exp_list:
-        st.write(exp_list[:5])
-    else:
-        st.warning("No expiry data")
-except Exception as e:
-    st.error(f"Expiry Error: {e}")
 
-# =========================
-# 4. OPTION CHAIN
-# =========================
-st.subheader("4. Option Chain")
-
-try:
     if exp_list:
         expiry = exp_list[0]
-        oc_data = get_option_chain(nifty_sec, expiry, nifty_seg)
+        oc = get_option_chain(nifty_sec, expiry, nifty_seg)
 
-        if oc_data and "data" in oc_data:
-            spot = oc_data["data"].get("last_price")
-            oc = oc_data["data"].get("oc", {})
-            strikes = sorted([int(float(s)) for s in oc.keys()])
-
+        if oc and "data" in oc:
+            spot = oc["data"].get("last_price")
             st.write(f"Spot: {spot}")
-            st.write(f"Strikes Count: {len(strikes)}")
+            st.success("✅ Option Chain Loaded")
         else:
-            st.warning("Option Chain Empty")
+            st.warning("⚠️ Option Chain Empty")
+
 except Exception as e:
-    st.error(f"Option Chain Error: {e}")
+    st.error(f"❌ OC Error: {e}")
 
 # =========================
-# 5. MARKET QUOTES
+# MARKET QUOTES (LTP)
 # =========================
-st.subheader("5. Market Quotes")
+st.subheader("4. Market Quotes")
 
 try:
-    quote_data = []
+    ltp = get_ltp(2885, "NSE_EQ")
 
-    for name, (sec, seg) in symbols.items():
-        ltp = get_ltp(sec, seg)
-        quote_data.append({
-            "Symbol": name,
-            "LTP": ltp
-        })
-
-    df = pd.DataFrame(quote_data)
-    st.dataframe(df)
+    if ltp:
+        st.success(f"RELIANCE LTP: {ltp}")
+    else:
+        st.warning("⚠️ LTP ZERO")
 
 except Exception as e:
-    st.error(f"LTP Error: {e}")
+    st.error(f"❌ LTP Error: {e}")
 
 # =========================
-# 6. HISTORICAL DATA
+# HISTORICAL
 # =========================
-st.subheader("6. Historical Data")
+st.subheader("5. Historical Data")
 
 try:
     hist = get_historical(2885, "NSE_EQ")
 
     if hist and len(hist.get("close", [])) > 0:
-        st.success(f"Data Points: {len(hist.get('close', []))}")
+        st.success(f"Data Points: {len(hist['close'])}")
     else:
-        st.warning("No historical data")
+        st.warning("⚠️ No historical data")
 
 except Exception as e:
-    st.error(f"Historical Error: {e}")
+    st.error(f"❌ Historical Error: {e}")
 
 # =========================
-# 7. CANDLESTICK
+# CANDLE
 # =========================
-st.subheader("7. Candlestick")
+st.subheader("6. Candlestick")
 
 try:
     df = get_candle_data(2885, "NSE_EQ")
@@ -127,71 +109,82 @@ try:
         st.write(f"Trend: {trend}")
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning("No candle data")
+        st.warning("⚠️ No candle data")
 
-except Exception as e:
-    st.error(f"Candle Error: {e}")
-
-# =========================
-# 🔍 DEBUG PANEL (IMPORTANT)
-# =========================
-st.subheader("🛠 DEBUG PANEL")
-
-# TOKEN
-try:
-    token = get_token()
-    st.success("✅ Token OK")
-except Exception as e:
-    st.error(f"❌ Token Error: {e}")
-
-# LTP
-try:
-    test_ltp = get_ltp(2885, "NSE_EQ")
-    if test_ltp:
-        st.success(f"✅ LTP OK: {test_ltp}")
-    else:
-        st.warning("⚠️ LTP Zero")
-except Exception as e:
-    st.error(f"❌ LTP Error: {e}")
-
-# OPTION CHAIN
-try:
-    exp = get_expiry(13, "IDX_I")
-    if exp:
-        oc = get_option_chain(13, exp[0], "IDX_I")
-        if oc:
-            st.success("✅ Option Chain OK")
-        else:
-            st.warning("⚠️ OC Empty")
-    else:
-        st.warning("⚠️ Expiry Empty")
-except Exception as e:
-    st.error(f"❌ Option Chain Error: {e}")
-
-# HISTORICAL
-try:
-    hist = get_historical(2885, "NSE_EQ")
-    if hist and len(hist.get("close", [])) > 0:
-        st.success("✅ Historical OK")
-    else:
-        st.warning("⚠️ No Historical Data")
-except Exception as e:
-    st.error(f"❌ Historical Error: {e}")
-
-# CANDLE
-try:
-    df = get_candle_data(2885, "NSE_EQ")
-    if df is not None and len(df) > 1:
-        st.success("✅ Candle OK")
-    else:
-        st.warning("⚠️ Candle Not Enough Data")
 except Exception as e:
     st.error(f"❌ Candle Error: {e}")
 
 # =========================
+# START DEPTH FEED
+# =========================
+try:
+    from dhan_data.depth_feed import start_depth_feed, subscribe_depth
+
+    if "depth_started" not in st.session_state:
+        start_depth_feed()
+        subscribe_depth(2885, "NSE_EQ")
+        st.session_state.depth_started = True
+
+except Exception as e:
+    st.warning(f"Depth Init Issue: {e}")
+
+# =========================
+# DEBUG PANEL
+# =========================
+st.subheader("🛠 DEBUG PANEL")
+
+# LTP DEBUG
+st.write("### 📈 LTP STATUS")
+
+try:
+    ltp = get_ltp(2885, "NSE_EQ")
+
+    if ltp and ltp != 0:
+        st.success(f"✅ LTP OK: {ltp}")
+    else:
+        st.error("❌ LTP NOT WORKING")
+
+except Exception as e:
+    st.error(f"❌ LTP ERROR: {e}")
+
+# DEPTH DEBUG
+st.write("### 📊 DEPTH STATUS")
+
+try:
+    from dhan_data.depth_feed import get_depth
+
+    depth = get_depth()
+
+    if not depth:
+        st.error("❌ Depth NOT STARTED")
+
+    elif depth.get("bids") or depth.get("asks"):
+
+        st.success("✅ Depth WORKING")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write("📉 Bids")
+            st.dataframe(pd.DataFrame(depth.get("bids", [])[:5]))
+
+        with col2:
+            st.write("📈 Asks")
+            st.dataframe(pd.DataFrame(depth.get("asks", [])[:5]))
+
+    else:
+        st.warning("⚠️ Depth NO DATA")
+
+except ImportError:
+    st.error("❌ depth_feed.py missing")
+
+except Exception as e:
+    st.error(f"❌ Depth ERROR: {e}")
+
+# =========================
 # REFRESH
 # =========================
-if st.button("Refresh"):
+if st.button("🔄 Refresh"):
     st.cache_data.clear()
     st.rerun()
 
