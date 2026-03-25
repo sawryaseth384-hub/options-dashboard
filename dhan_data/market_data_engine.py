@@ -14,7 +14,7 @@ DEFAULT_INDEX_FALLBACKS = {
 DEFAULT_INDEX_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"]
 
 class TTLCache:
-    """Simple TTL cache that ignores non-positive TTL values."""
+    """Simple TTL cache that ignores non-positive TTL values and uses a lock for safety."""
     def __init__(self):
         self._store = {}
         self._lock = threading.Lock()
@@ -44,7 +44,7 @@ def _coalesce(value_map, keys, default=0):
         value = _get_nested(value_map, key)
         if value is not None:
             return _normalize_number(value)
-    return default
+    return _normalize_number(default)
 
 def _get_nested(value_map, key):
     if not isinstance(value_map, dict):
@@ -170,17 +170,36 @@ def _normalize_candles(payload):
         return []
 
     timestamps = payload.get("timestamp") or payload.get("time") or []
-    length = len(timestamps) if timestamps else len(payload.get("open", []))
+    open_values = payload.get("open") or []
+    high_values = payload.get("high") or []
+    low_values = payload.get("low") or []
+    close_values = payload.get("close") or []
+    volume_values = payload.get("volume") or []
+    oi_values = payload.get("oi") or []
+
+    lengths = [
+        len(values) for values in [
+            timestamps,
+            open_values,
+            high_values,
+            low_values,
+            close_values,
+            volume_values,
+            oi_values,
+        ]
+        if isinstance(values, list)
+    ]
+    length = min(lengths) if lengths else 0
     candles = []
     for idx in range(length):
         candles.append({
             "timestamp": timestamps[idx] if idx < len(timestamps) else None,
-            "open": payload.get("open", [None] * length)[idx],
-            "high": payload.get("high", [None] * length)[idx],
-            "low": payload.get("low", [None] * length)[idx],
-            "close": payload.get("close", [None] * length)[idx],
-            "volume": payload.get("volume", [None] * length)[idx],
-            "oi": payload.get("oi", [None] * length)[idx],
+            "open": open_values[idx] if idx < len(open_values) else None,
+            "high": high_values[idx] if idx < len(high_values) else None,
+            "low": low_values[idx] if idx < len(low_values) else None,
+            "close": close_values[idx] if idx < len(close_values) else None,
+            "volume": volume_values[idx] if idx < len(volume_values) else None,
+            "oi": oi_values[idx] if idx < len(oi_values) else None,
         })
     return candles
 
@@ -188,6 +207,16 @@ class MarketDataEngine:
     def __init__(self, client=None, cache=None):
         self.client = client or DhanApiClient()
         self.cache = cache or TTLCache()
+        self._instrument_df = None
+
+    def _get_instrument_df(self):
+        if self._instrument_df is None:
+            df = load_instruments()
+            if not df.empty and "_SYM_UPPER" not in df.columns:
+                df = df.copy()
+                df["_SYM_UPPER"] = df["SEM_TRADING_SYMBOL"].str.upper()
+            self._instrument_df = df
+        return self._instrument_df
 
     def fetch_expiry_dates(self, security_id, segment="IDX_I", cache_ttl=3600):
         cache_key = ("expiry", segment, int(security_id))
@@ -259,7 +288,7 @@ class MarketDataEngine:
     def fetch_option_chain(self, security_id, segment="IDX_I", expiry=None, cache_ttl=5):
         if expiry is None:
             expiries = self.fetch_expiry_dates(security_id, segment=segment)
-            expiry = expiries[0] if expiries else None
+            expiry = min(expiries) if expiries else None
 
         if not expiry:
             return {"chain": [], "pcr": 0, "spot_price": 0, "expiry": None}
@@ -359,13 +388,11 @@ class MarketDataEngine:
         if fallback:
             return {"symbol": symbol.upper(), "security_id": fallback[0], "segment": fallback[1]}
 
-        df = load_instruments()
+        df = self._get_instrument_df()
         if df.empty:
             return None
 
         symbol_upper = symbol.upper()
-        if "_SYM_UPPER" not in df.columns:
-            df["_SYM_UPPER"] = df["SEM_TRADING_SYMBOL"].str.upper()
         match = df[df["_SYM_UPPER"] == symbol_upper]
         if match.empty and symbol_upper == "VIX":
             match = df[df["_SYM_UPPER"].str.contains("VIX", na=False)]
@@ -499,4 +526,6 @@ class MarketDataEngine:
                     inst["segment"],
                 )
             else:
-                raise ValueError(f"Unsupported candle_type: {candle_type}")
+                raise ValueError(
+                    f"Unsupported candle_type: {candle_type}. Expected 'intraday' or 'historical'."
+                )

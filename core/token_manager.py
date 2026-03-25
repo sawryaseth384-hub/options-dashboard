@@ -34,7 +34,7 @@ def get_token():
 def _get_secret(key):
     try:
         return st.secrets[key]
-    except Exception:
+    except (KeyError, AttributeError):
         return os.getenv(key)
 
 def get_headers(content_type="application/json"):
