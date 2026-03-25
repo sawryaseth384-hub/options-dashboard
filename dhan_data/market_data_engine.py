@@ -263,7 +263,7 @@ def _normalize_quote_item(quote):
     ltp = _coalesce(quote, ["ltp", "lastPrice", "last_price", "close"])
     change = _coalesce(quote, ["netChange", "change", "net_change"])
     change_pct = _coalesce(quote, ["percentChange", "changePercent", "netChangePercent"], default=None)
-    if not change_pct and ltp:
+    if change_pct is None and ltp:
         base = ltp - change
         change_pct = round((change / base) * 100, 4) if base else 0
     return {
@@ -285,10 +285,10 @@ class MarketDataEngine:
     def _get_instrument_df(self):
         if self._instrument_df is None:
             df = load_instruments()
-            upper_col = "SEM_TRADING_SYMBOL_UPPER"
-            if not df.empty and upper_col not in df.columns:
+            upper_symbol_col = "SEM_TRADING_SYMBOL_UPPER"
+            if not df.empty and upper_symbol_col not in df.columns:
                 df = df.copy()
-                df[upper_col] = df["SEM_TRADING_SYMBOL"].str.upper()
+                df[upper_symbol_col] = df["SEM_TRADING_SYMBOL"].str.upper()
             self._instrument_df = df
         return self._instrument_df
 
@@ -548,10 +548,10 @@ class MarketDataEngine:
             return None
 
         symbol_upper = symbol.upper()
-        upper_col = "SEM_TRADING_SYMBOL_UPPER"
-        symbol_matches = df[df[upper_col] == symbol_upper]
+        upper_symbol_col = "SEM_TRADING_SYMBOL_UPPER"
+        symbol_matches = df[df[upper_symbol_col] == symbol_upper]
         if symbol_matches.empty and symbol_upper == "VIX":
-            symbol_matches = df[df[upper_col].str.contains("VIX", na=False)]
+            symbol_matches = df[df[upper_symbol_col].str.contains("VIX", na=False)]
         if symbol_matches.empty:
             return None
 
@@ -700,7 +700,7 @@ class MarketDataEngine:
                     inst["segment"],
                 )
             else:
-                raise AssertionError(
+                raise ValueError(
                     f"Unsupported candle_type: {candle_type!r}. Expected 'intraday' or 'historical'."
                 )
 

@@ -38,7 +38,7 @@ def _get_secret(key):
         return os.getenv(key)
 
 def get_headers(content_type="application/json"):
-    """Return auth headers or an empty dict if missing credentials; pass None to omit Content-Type."""
+    """Return auth headers after calling get_token() and _get_secret(); empty dict on failure."""
     token = get_token()
     client_id = _get_secret("CLIENT_ID")
 
