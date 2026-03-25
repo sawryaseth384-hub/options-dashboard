@@ -6,31 +6,38 @@ URL = "https://api.dhan.co/v2/optionchain"
 
 def get_option_chain(security_id, expiry, segment="IDX_I"):
     try:
-        if security_id is None or security_id == "":
+        if not security_id:
             raise ValueError("Security ID missing")
+
         security_id = int(security_id)
+
         if not expiry:
             raise ValueError("Expiry missing")
-        if not isinstance(expiry, str) or len(expiry.split("-")) != 3:
-            raise ValueError(f"Invalid expiry format: {expiry}")
 
         headers = get_headers()
-        headers["Content-Type"] = "application/json"
 
         payload = {
             "UnderlyingScrip": security_id,
             "UnderlyingSeg": segment,
-            "Expiry": expiry
+            "expiryDate": expiry   # ✅ FIXED
         }
 
         response = requests.post(URL, headers=headers, json=payload, timeout=10)
-        response.raise_for_status()
+
+        if response.status_code != 200:
+            st.error(f"HTTP Error: {response.status_code}")
+            st.write(response.text)
+            return {"error": "HTTP Error"}
+
         data = response.json()
 
-        if "errorCode" in data:
-            st.error(f"API Error: {data.get('errorCode')} - {data.get('errorMessage')}")
-            return {"error": data.get("errorMessage")}
-        return data
+        # 🔥 Debug print (temporary)
+        # st.write(data)
+
+        if data.get("status") != "success":
+            return {"error": data}
+
+        return data["data"]["oc"]   # ✅ correct extraction
 
     except Exception as e:
         st.error(f"Option chain error: {e}")
