@@ -41,7 +41,7 @@ def get_headers():
     }
 
 # =========================
-# SAFE API CALL
+# SAFE POST
 # =========================
 _last_call = 0
 
@@ -82,21 +82,53 @@ for k, v in symbols.items():
     st.write(k, v)
 
 # =========================
-# TEST SYMBOL
-# =========================
-sec, seg, inst = symbols["RELIANCE"]
-
-# =========================
-# 🔥 LIVE LTP
+# LIVE LTP
 # =========================
 st.subheader("📈 LIVE LTP")
-
 ltp = get_live_price()
 
 if ltp > 0:
-    st.success(f"🔥 LIVE LTP: {ltp}")
+    st.success(f"🔥 LIVE LTP: {round(ltp, 2)}")
 else:
     st.warning("⏳ Waiting for live data...")
+
+# =========================
+# MARKET DEPTH
+# =========================
+def get_depth(sec, seg):
+    payload = {seg: [int(sec)]}
+
+    data, err = safe_post(f"{BASE_URL}/marketfeed/ltp", payload)
+
+    if err:
+        return None, err
+
+    try:
+        d = data["data"][seg][str(sec)]
+
+        return {
+            "LTP": d.get("last_price"),
+            "High": d.get("high"),
+            "Low": d.get("low"),
+            "Open": d.get("open"),
+        }, None
+
+    except:
+        return None, "Depth Parse Error"
+
+st.subheader("📊 MARKET DEPTH")
+
+sec, seg, inst = symbols["RELIANCE"]
+
+depth, d_err = get_depth(sec, seg)
+
+if depth:
+    col1, col2, col3 = st.columns(3)
+    col1.metric("LTP", depth["LTP"])
+    col2.metric("High", depth["High"])
+    col3.metric("Low", depth["Low"])
+else:
+    st.warning(f"Depth Error: {d_err}")
 
 # =========================
 # HISTORICAL
@@ -120,24 +152,16 @@ def get_historical(sec, seg, inst):
     if not data or "open" not in data:
         return None, "No Data"
 
-    df = pd.DataFrame({
-        "open": data["open"],
-        "high": data["high"],
-        "low": data["low"],
-        "close": data["close"],
-        "volume": data["volume"],
-    })
-
-    return df, None
+    return pd.DataFrame(data), None
 
 st.subheader("📅 HISTORICAL")
 
-hist, h_err = get_historical(sec, seg, inst)
+hist, _ = get_historical(sec, seg, inst)
 
 if hist is not None:
     st.dataframe(hist.tail())
 else:
-    st.warning(f"Historical Error: {h_err}")
+    st.warning("No historical data")
 
 # =========================
 # CANDLE
@@ -158,26 +182,64 @@ def get_intraday(sec, seg, inst):
     if err:
         return None, err
 
-    if not data or "open" not in data:
-        return None, "No Candle Data"
-
-    df = pd.DataFrame({
-        "open": data["open"],
-        "high": data["high"],
-        "low": data["low"],
-        "close": data["close"],
-    })
-
-    return df, None
+    return pd.DataFrame(data), None
 
 st.subheader("🕯 CANDLE")
 
-candle, c_err = get_intraday(sec, seg, inst)
+candle, _ = get_intraday(sec, seg, inst)
 
 if candle is not None:
     st.line_chart(candle["close"])
 else:
-    st.warning(f"Candle Error: {c_err}")
+    st.warning("No candle data")
+
+# =========================
+# OPTION CHAIN
+# =========================
+def get_expiry(sec):
+    payload = {
+        "UnderlyingScrip": sec,
+        "UnderlyingSeg": "IDX_I"
+    }
+
+    data, err = safe_post(f"{BASE_URL}/optionchain/expirylist", payload)
+
+    if err:
+        return [], err
+
+    return data.get("data", []), None
+
+
+def get_chain(sec, expiry):
+    payload = {
+        "UnderlyingScrip": sec,
+        "UnderlyingSeg": "IDX_I",
+        "Expiry": expiry
+    }
+
+    data, err = safe_post(f"{BASE_URL}/optionchain", payload)
+
+    if err:
+        return None, err
+
+    return data.get("data", {}), None
+
+
+st.subheader("📊 OPTION CHAIN")
+
+nifty_sec, _, _ = symbols["NIFTY"]
+
+expiries, _ = get_expiry(nifty_sec)
+
+if expiries:
+    selected_exp = st.selectbox("Select Expiry", expiries)
+
+    chain, _ = get_chain(nifty_sec, selected_exp)
+
+    if chain:
+        st.write(f"Strikes: {len(chain.get('oc', {}))}")
+    else:
+        st.warning("Chain error")
 
 # =========================
 # DEBUG PANEL
@@ -185,9 +247,12 @@ else:
 st.subheader("🛠 DEBUG PANEL")
 
 st.write("Token:", "✅")
-st.write("Live LTP:", ltp)
+st.write("Live LTP:", round(ltp, 2))
+st.write("Depth:", "OK" if depth else "FAIL")
 st.write("Historical:", "OK" if hist is not None else "FAIL")
 st.write("Candle:", "OK" if candle is not None else "FAIL")
+st.write("Expiry:", "OK" if expiries else "FAIL")
+st.write("Option Chain:", "OK" if 'chain' in locals() and chain else "FAIL")
 
 # =========================
 # AUTO REFRESH
