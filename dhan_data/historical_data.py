@@ -1,54 +1,77 @@
 import requests
+import time
 from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
 
-def get_historical(security_id, segment):
-    try:
-        print("\n========== HISTORICAL DEBUG START ==========")
-        print("Security ID:", security_id)
-        print("Segment:", segment)
+# =========================
+# 🔥 HARDCORE HISTORICAL
+# =========================
+def get_historical(security_id, segment, retries=3):
+    """
+    Robust historical fetch:
+    - retry system
+    - fallback handling
+    - always returns structured data
+    """
 
-        payload = {
-            "securityId": str(security_id),
-            "exchangeSegment": segment,
-            "instrument": "EQUITY",
-            "interval": "1",   # 1 minute
-            "fromDate": "2025-03-20",
-            "toDate": "2025-03-25"
-        }
+    payload = {
+        "securityId": str(security_id),
+        "exchangeSegment": segment,
+        "interval": "1",   # 1 minute
+        "fromDate": "2025-03-25",
+        "toDate": "2025-03-25"
+    }
 
-        print("Payload:", payload)
+    for attempt in range(retries):
+        try:
+            print(f"\n🔁 Attempt {attempt+1}")
 
-        res = requests.post(
-            f"{BASE_URL}/charts/intraday",
-            headers=get_headers(),
-            json=payload
-        )
+            res = requests.post(
+                f"{BASE_URL}/charts/historical",
+                headers=get_headers(),
+                json=payload,
+                timeout=10
+            )
 
-        print("Status Code:", res.status_code)
-        print("Raw Response:", res.text)
+            print("Status:", res.status_code)
 
-        if res.status_code != 200:
-            print("❌ API FAILED")
-            return {}
+            if res.status_code != 200:
+                print("❌ Bad Status")
+                time.sleep(1)
+                continue
 
-        data = res.json()
+            data = res.json()
 
-        print("Parsed JSON:", data)
+            if "data" not in data:
+                print("❌ No 'data' key")
+                time.sleep(1)
+                continue
 
-        final_data = data.get("data", {})
+            final = data["data"]
 
-        if not final_data:
-            print("❌ EMPTY DATA RECEIVED")
-        else:
-            print("✅ DATA RECEIVED KEYS:", final_data.keys())
-            print("Sample Close:", final_data.get("close", [])[:5])
+            # 🔴 VALIDATION
+            if not final or len(final.get("close", [])) < 2:
+                print("⚠️ Not enough candles")
+                time.sleep(1)
+                continue
 
-        print("========== HISTORICAL DEBUG END ==========\n")
+            print("✅ HISTORICAL SUCCESS")
+            return final
 
-        return final_data
+        except Exception as e:
+            print("❌ ERROR:", e)
+            time.sleep(1)
 
-    except Exception as e:
-        print("❌ HISTORICAL ERROR:", e)
-        return {}
+    # =========================
+    # 🔥 FALLBACK SYSTEM
+    # =========================
+    print("🚨 FALLBACK ACTIVATED")
+
+    return {
+        "open": [],
+        "high": [],
+        "low": [],
+        "close": [],
+        "timestamp": []
+    }
