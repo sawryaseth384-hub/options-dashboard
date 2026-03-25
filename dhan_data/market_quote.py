@@ -1,47 +1,46 @@
 import requests
-import streamlit as st
+import time
 from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
+_last_call = 0
 
-# ✅ cache बढ़ाया (429 fix)
-@st.cache_data(ttl=5)
 def get_ltp(security_id, segment):
+    global _last_call
+
+    # 🔥 Rate limit control
+    wait = max(0, 1 - (time.time() - _last_call))
+    if wait > 0:
+        time.sleep(wait)
+
+    payload = {
+        "instruments": [
+            {
+                "exchangeSegment": segment,
+                "securityId": int(security_id)
+            }
+        ]
+    }
+
     try:
-        if segment == "IDX_I":
-            exchange = "IDX_I"
-        elif segment == "NSE_FNO":
-            exchange = "NSE_FNO"
-        else:
-            exchange = "NSE_EQ"
-
-        payload = {
-            "IDX_I": [],
-            "NSE_EQ": [],
-            "NSE_FNO": []
-        }
-        payload[exchange] = [int(security_id)]
-
         res = requests.post(
-            f"{BASE_URL}/marketfeed/ltp",
+            f"{BASE_URL}/marketquote",
             headers=get_headers(),
             json=payload,
             timeout=5
         )
+
+        _last_call = time.time()
 
         if res.status_code != 200:
             return 0
 
         data = res.json()
 
-        ltp = (
-            data.get("data", {})
-            .get(exchange, {})
-            .get(str(security_id), {})
-            .get("last_price", 0)
-        )
+        if "data" in data and len(data["data"]) > 0:
+            return data["data"][0].get("lastPrice", 0)
 
-        return float(ltp) if ltp else 0
+        return 0
 
     except:
         return 0
