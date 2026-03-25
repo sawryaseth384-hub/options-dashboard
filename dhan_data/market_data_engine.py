@@ -256,5 +256,6 @@ def build_market_data():
                 market_data["options"]["pcr"] = 0
 
         return market_data
-    except (AttributeError, KeyError, TypeError, ValueError):
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        print(f"Market data build failed: {exc}")
         return market_data

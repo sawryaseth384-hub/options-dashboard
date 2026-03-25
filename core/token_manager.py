@@ -8,7 +8,7 @@ AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 HEADER_ACCESS_TOKEN = "access-token"
 HEADER_CLIENT_ID = "client-id"
 
-def _read_credential(key):
+def _read_credential_with_fallback(key):
     try:
         secrets = st.secrets
         if key in secrets:
@@ -18,19 +18,19 @@ def _read_credential(key):
     return os.getenv(key)
 
 def get_client_id():
-    return _read_credential("CLIENT_ID") or _read_credential("DHAN_CLIENT_ID")
+    return _read_credential_with_fallback("CLIENT_ID") or _read_credential_with_fallback("DHAN_CLIENT_ID")
 
 def get_token():
 
-    access_token = _read_credential("ACCESS_TOKEN") or _read_credential("DHAN_ACCESS_TOKEN")
+    access_token = _read_credential_with_fallback("ACCESS_TOKEN") or _read_credential_with_fallback("DHAN_ACCESS_TOKEN")
     if access_token:
         return access_token
 
     if "token" in st.session_state:
         return st.session_state.token
 
-    totp_secret = _read_credential("TOTP_SECRET")
-    pin = _read_credential("PIN")
+    totp_secret = _read_credential_with_fallback("TOTP_SECRET")
+    pin = _read_credential_with_fallback("PIN")
     client_id = get_client_id()
     if not all([totp_secret, pin, client_id]):
         return None
