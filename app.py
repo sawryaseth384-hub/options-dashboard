@@ -1,9 +1,7 @@
 import streamlit as st
 import pandas as pd
-import time
 
 # Dhan Modules
-from dhan_data.instruments import get_symbol_data
 from dhan_data.expiry import get_expiry
 from dhan_data.option_chain import get_option_chain
 from dhan_data.market_quote import get_ltp
@@ -16,7 +14,7 @@ from core.token_manager import get_token
 # PAGE SETUP
 # =========================
 st.set_page_config(layout="wide")
-st.title("🔬 Full Dhan Modules Scan (Stable Version)")
+st.title("🔬 Full Dhan Dashboard (Stable)")
 
 # =========================
 # 1. TOKEN
@@ -28,7 +26,7 @@ st.write(f"Token: {'✅' if token else '❌'}")
 # =========================
 # 2. SYMBOL SETUP
 # =========================
-st.subheader("2. Symbol Resolution")
+st.subheader("2. Symbols")
 
 symbols = {
     "NIFTY": (13, "IDX_I"),
@@ -43,20 +41,11 @@ for sym, (sec, seg) in symbols.items():
 nifty_sec, nifty_seg = symbols["NIFTY"]
 
 # =========================
-# 3. EXPIRY LIST
+# 3. OPTION CHAIN
 # =========================
-st.subheader("3. Expiry List (NIFTY)")
+st.subheader("3. Option Chain")
+
 exp_list = get_expiry(nifty_sec, nifty_seg)
-
-if exp_list:
-    st.write(exp_list[:5])
-else:
-    st.warning("No expiry data")
-
-# =========================
-# 4. OPTION CHAIN
-# =========================
-st.subheader("4. Option Chain")
 
 if exp_list:
     expiry = exp_list[0]
@@ -68,24 +57,48 @@ if exp_list:
         strikes = sorted([int(float(s)) for s in oc.keys()])
 
         st.write(f"Spot: {spot}")
-        st.write(f"Strikes Count: {len(strikes)}")
+        st.write(f"Strikes: {len(strikes)}")
     else:
         st.error("Option Chain Failed")
+else:
+    st.warning("No expiry data")
 
 # =========================
-# 5. LTP (API BASED)
+# 4. MARKET QUOTES (FIXED)
 # =========================
-st.subheader("5. Live LTP (Stable API)")
+st.subheader("4. Market Quotes")
 
-ltp = get_ltp(nifty_sec, nifty_seg)
-st.write(f"LTP: {ltp}")
+quote_list = [
+    ("RELIANCE", 2885, "NSE_EQ"),
+    ("HDFCBANK", 1333, "NSE_EQ"),
+    ("TCS", 11536, "NSE_EQ"),
+]
+
+quote_data = []
+
+for name, sec, seg in quote_list:
+    ltp = get_ltp(sec, seg)
+    quote_data.append({
+        "Symbol": name,
+        "LTP": ltp
+    })
+
+st.dataframe(pd.DataFrame(quote_data), use_container_width=True)
 
 # =========================
-# 6. HISTORICAL DATA
+# 5. LTP TEST (IMPORTANT)
+# =========================
+st.subheader("5. LTP Test")
+
+test_ltp = get_ltp(2885, "NSE_EQ")
+st.write("RELIANCE LTP:", test_ltp)
+
+# =========================
+# 6. HISTORICAL DATA (FIXED)
 # =========================
 st.subheader("6. Historical Data")
 
-hist = get_historical(nifty_sec, nifty_seg)
+hist = get_historical(2885, "NSE_EQ")
 
 if hist:
     st.write(f"Data Points: {len(hist)}")
@@ -93,12 +106,12 @@ else:
     st.warning("No historical data")
 
 # =========================
-# 7. CANDLESTICK
+# 7. CANDLESTICK (FIXED)
 # =========================
 st.subheader("7. Candlestick")
 
-chart_sec = 26000
-chart_seg = "NSE_IDX"
+chart_sec = 2885
+chart_seg = "NSE_EQ"
 
 candle_df = get_candle_data(chart_sec, chart_seg)
 
@@ -115,6 +128,7 @@ else:
 st.subheader("🔄 Auto Refresh")
 
 if st.button("Refresh"):
+    st.cache_data.clear()
     st.rerun()
 
 st.success("✅ App Running Stable")
