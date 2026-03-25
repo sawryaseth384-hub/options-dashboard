@@ -20,6 +20,7 @@ class TTLCache:
         self._lock = threading.Lock()
 
     def get(self, key):
+        """Return cached value if present and not expired."""
         with self._lock:
             item = self._store.get(key)
             if not item:
@@ -31,6 +32,7 @@ class TTLCache:
             return value
 
     def set(self, key, value, ttl):
+        """Cache a value for ttl seconds; non-positive ttl values are ignored."""
         if ttl <= 0:
             return
         with self._lock:
@@ -204,6 +206,7 @@ def _normalize_candles(payload):
     return candles
 
 class MarketDataEngine:
+    """Data engine that fetches, normalizes, and caches Dhan market data."""
     def __init__(self, client=None, cache=None):
         self.client = client or DhanApiClient()
         self.cache = cache or TTLCache()
@@ -529,6 +532,5 @@ class MarketDataEngine:
                 )
             else:
                 raise ValueError(
-                    f"Internal error: unsupported candle_type {candle_type!r}. "
-                    "Expected 'intraday' or 'historical'."
+                    f"Unsupported candle_type: {candle_type!r}. Expected 'intraday' or 'historical'."
                 )

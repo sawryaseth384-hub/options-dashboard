@@ -7,6 +7,7 @@ from core.token_manager import get_headers
 BASE_URL = "https://api.dhan.co/v2"
 
 class DhanApiClient:
+    """HTTP client for Dhan API with retry support and auth header injection."""
     def __init__(
         self,
         base_url=BASE_URL,

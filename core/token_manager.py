@@ -38,6 +38,7 @@ def _get_secret(key):
         return os.getenv(key)
 
 def get_headers(content_type="application/json"):
+    """Return auth headers for Dhan API requests or an empty dict if missing credentials."""
     token = get_token()
     client_id = _get_secret("CLIENT_ID")
 
