@@ -1,44 +1,35 @@
-import requests
-import streamlit as st
-from core.token_manager import get_headers
-
-URL = "https://api.dhan.co/v2/optionchain"
-
 def get_option_chain(security_id, expiry, segment="IDX_I"):
     try:
-        if not security_id:
-            raise ValueError("Security ID missing")
-
-        security_id = int(security_id)
-
-        if not expiry:
-            raise ValueError("Expiry missing")
-
         headers = get_headers()
 
         payload = {
-            "UnderlyingScrip": security_id,
+            "UnderlyingScrip": int(security_id),
             "UnderlyingSeg": segment,
-            "expiryDate": expiry   # ✅ FIXED
+            "expiryDate": expiry   # ✅ correct
         }
 
-        response = requests.post(URL, headers=headers, json=payload, timeout=10)
+        res = requests.post(URL, headers=headers, json=payload, timeout=10)
 
-        if response.status_code != 200:
-            st.error(f"HTTP Error: {response.status_code}")
-            st.write(response.text)
-            return {"error": "HTTP Error"}
+        if res.status_code != 200:
+            return None, f"HTTP {res.status_code}"
 
-        data = response.json()
+        data = res.json()
 
-        # 🔥 Debug print (temporary)
+        # 🔥 DEBUG (important)
         # st.write(data)
 
         if data.get("status") != "success":
-            return {"error": data}
+            return None, data
 
-        return data["data"]["oc"]   # ✅ correct extraction
+        # ✅ HANDLE BOTH STRUCTURES
+        if "oc" in data["data"]:
+            return data["data"]["oc"], None
+
+        elif "records" in data["data"]:
+            return data["data"]["records"], None
+
+        else:
+            return None, "Unknown structure"
 
     except Exception as e:
-        st.error(f"Option chain error: {e}")
-        return {"error": str(e)}
+        return None, str(e)
