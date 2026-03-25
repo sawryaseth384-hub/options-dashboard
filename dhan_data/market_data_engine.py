@@ -52,7 +52,10 @@ def _lookup_security(symbols, fallback):
     except (AttributeError, KeyError, TypeError, ValueError):
         pass
 
-    return fallback
+    fallback_id, fallback_segment = fallback
+    if fallback_id:
+        return fallback_id, fallback_segment
+    return None, None
 
 
 def _build_instruments(items):

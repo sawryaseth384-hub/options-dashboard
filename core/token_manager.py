@@ -6,7 +6,7 @@ import streamlit as st
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
-def _read_secret(key):
+def _read_credential(key):
     try:
         secrets = st.secrets
         if key in secrets:
@@ -16,19 +16,19 @@ def _read_secret(key):
     return os.getenv(key)
 
 def get_client_id():
-    return _read_secret("CLIENT_ID") or _read_secret("DHAN_CLIENT_ID")
+    return _read_credential("CLIENT_ID") or _read_credential("DHAN_CLIENT_ID")
 
 def get_token():
 
-    access_token = _read_secret("ACCESS_TOKEN") or _read_secret("DHAN_ACCESS_TOKEN")
+    access_token = _read_credential("ACCESS_TOKEN") or _read_credential("DHAN_ACCESS_TOKEN")
     if access_token:
         return access_token
 
     if "token" in st.session_state:
         return st.session_state.token
 
-    totp_secret = _read_secret("TOTP_SECRET")
-    pin = _read_secret("PIN")
+    totp_secret = _read_credential("TOTP_SECRET")
+    pin = _read_credential("PIN")
     client_id = get_client_id()
     if not all([totp_secret, pin, client_id]):
         return None

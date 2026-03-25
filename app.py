@@ -214,9 +214,8 @@ else:
     total_put = option_chain_df["Put OI"].sum()
     pcr = None
     if isinstance(options_data, dict):
-        if "pcr" in options_data:
-            pcr = options_data.get("pcr")
-        elif "PCR" in options_data:
+        pcr = options_data.get("pcr")
+        if pcr is None:
             pcr = options_data.get("PCR")
     if pcr is None and total_call and total_call != 0:
         pcr = total_put / total_call
