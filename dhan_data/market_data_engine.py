@@ -16,7 +16,7 @@ DEFAULT_INDEX_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"]
 STANDARD_FIELDS = ("ltp", "change", "change_pct", "high", "low", "open")
 
 class TTLCache:
-    """Simple TTL cache with lazy expiry cleanup and lock-based safety."""
+    """Thread-safe TTL cache with lazy expiry cleanup."""
     def __init__(self):
         self._store = {}
         self._lock = threading.Lock()
@@ -75,7 +75,7 @@ def _normalize_number(value):
 def _extract_leg(option_leg):
     option_leg = option_leg or {}
     return {
-        "oi": _coalesce(option_leg, ["oi", "openInterest", "open_interest", "callOi", "putOi"]),
+        "oi": _coalesce(option_leg, ["oi", "openInterest", "open_interest"]),
         "ltp": _coalesce(option_leg, ["last_price", "lastPrice", "ltp"]),
         "iv": _coalesce(option_leg, ["implied_volatility", "impliedVolatility", "iv"]),
         "volume": _coalesce(option_leg, ["volume", "totalTradedVolume", "tradeVolume"]),
@@ -265,6 +265,7 @@ def _normalize_quote_item(quote):
     change_pct = _coalesce(quote, ["percentChange", "changePercent", "netChangePercent"], default=None)
     if change_pct is None and ltp:
         base = ltp - change
+        # Tolerance prevents extreme percentages when base is effectively zero.
         tolerance = max(1e-6, abs(ltp) * 1e-6)
         if abs(base) <= tolerance:
             change_pct = 0
@@ -290,6 +291,9 @@ class MarketDataEngine:
         if self._instrument_df is None:
             df = load_instruments()
             upper_symbol_col = "SEM_TRADING_SYMBOL_UPPER"
+            if "SEM_TRADING_SYMBOL" not in df.columns:
+                self._instrument_df = df.iloc[0:0]
+                return self._instrument_df
             if not df.empty and upper_symbol_col not in df.columns:
                 df = df.copy()
                 df[upper_symbol_col] = df["SEM_TRADING_SYMBOL"].str.upper()
@@ -688,7 +692,7 @@ class MarketDataEngine:
         return market_data
 
     def _attach_candles(self, targets, instruments, candle_type, interval):
-        """Attach intraday or historical candles to the provided instrument list."""
+        """Attach intraday or historical candles; candle_type must be intraday or historical."""
         target_set = {symbol.upper() for symbol in targets} if targets else None
         for inst in instruments:
             if target_set and inst["symbol"].upper() not in target_set:
