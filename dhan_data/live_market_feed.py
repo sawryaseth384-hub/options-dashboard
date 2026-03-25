@@ -2,28 +2,48 @@ import websocket
 import json
 import threading
 
-ltp_data = {}
+WS_URL = "wss://api-feed.dhan.co"
 
-def on_message(ws, message):
-    global ltp_data
-    data = json.loads(message)
-    ltp_data = data
+ws = None
+latest_data = {}
 
-def on_open(ws):
-    print("Connected to Dhan Live Feed")
 
-def start_live_feed(token, client_id):
-    url = f"wss://api-feed.dhan.co?version=2&token={token}&clientId={client_id}&authType=2"
+def start_feed(token, client_id):
+
+    global ws
+
+    url = f"{WS_URL}?version=2&token={token}&clientId={client_id}&authType=2"
+
+    def on_message(ws, message):
+        global latest_data
+        latest_data = message
+        print("LIVE:", message)
+
+    def on_open(ws):
+        print("Connected")
+
+        sub_msg = {
+            "RequestCode": 15,
+            "InstrumentCount": 1,
+            "InstrumentList": [
+                {
+                    "ExchangeSegment": "NSE_EQ",
+                    "SecurityId": "2885"
+                }
+            ]
+        }
+
+        ws.send(json.dumps(sub_msg))
 
     ws = websocket.WebSocketApp(
         url,
-        on_open=on_open,
-        on_message=on_message
+        on_message=on_message,
+        on_open=on_open
     )
 
     thread = threading.Thread(target=ws.run_forever)
-    thread.daemon = True
     thread.start()
 
-def get_live_ltp():
-    return ltp_data
+
+def get_live_data():
+    return latest_data
