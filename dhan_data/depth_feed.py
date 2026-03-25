@@ -1,13 +1,10 @@
 import websocket
 import threading
-import json
+import struct
 import time
 import streamlit as st
 from core.token_manager import get_token
 
-# =========================
-# GLOBALS
-# =========================
 ws = None
 is_connected = False
 
@@ -23,25 +20,59 @@ DEPTH_DATA = {
 def map_segment(seg):
     return {
         "NSE_EQ": 1,
-        "NSE_FNO": 2,
-        "IDX_I": 0   # ❌ INDEX NOT SUPPORTED (IMPORTANT)
+        "NSE_FNO": 2
     }.get(seg, 1)
+
+
+# =========================
+# PARSE BINARY DEPTH
+# =========================
+def parse_depth(message):
+    global DEPTH_DATA
+
+    try:
+        body = message[12:]  # skip header
+
+        bids = []
+        asks = []
+
+        for i in range(20):
+            chunk = body[i*16:(i+1)*16]
+
+            if len(chunk) < 16:
+                continue
+
+            price = struct.unpack('<f', chunk[0:4])[0]
+            qty = struct.unpack('<i', chunk[4:8])[0]
+            orders = struct.unpack('<i', chunk[8:12])[0]
+            side = struct.unpack('<i', chunk[12:16])[0]
+
+            data = {
+                "price": round(price, 2),
+                "qty": qty,
+                "orders": orders
+            }
+
+            if side == 1:
+                bids.append(data)
+            else:
+                asks.append(data)
+
+        DEPTH_DATA = {
+            "bids": bids,
+            "asks": asks
+        }
+
+    except Exception as e:
+        print("Parse Error:", e)
 
 
 # =========================
 # ON MESSAGE
 # =========================
 def on_message(ws, message):
-    global DEPTH_DATA
-
-    try:
-        data = json.loads(message)
-
-        if "Depth" in data:
-            DEPTH_DATA = data["Depth"]
-
-    except:
-        pass
+    if isinstance(message, bytes):
+        parse_depth(message)
 
 
 # =========================
@@ -51,15 +82,6 @@ def on_open(ws):
     global is_connected
     is_connected = True
     print("✅ Depth WS Connected")
-
-
-# =========================
-# ON CLOSE
-# =========================
-def on_close(ws, a, b):
-    global is_connected
-    is_connected = False
-    print("❌ Depth WS Closed")
 
 
 # =========================
@@ -76,8 +98,7 @@ def start_depth_feed():
     ws = websocket.WebSocketApp(
         url,
         on_open=on_open,
-        on_message=on_message,
-        on_close=on_close
+        on_message=on_message
     )
 
     thread = threading.Thread(target=ws.run_forever)
@@ -111,12 +132,8 @@ def subscribe_depth(security_id, segment):
         ]
     }
 
-    try:
-        ws.send(json.dumps(payload))
-        print(f"✅ Subscribed Depth: {security_id}")
-
-    except Exception as e:
-        print("❌ Subscribe Error:", e)
+    ws.send(json.dumps(payload))
+    print(f"✅ Subscribed Depth: {security_id}")
 
 
 # =========================
