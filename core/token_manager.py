@@ -1,3 +1,4 @@
+import os
 import requests
 import pyotp
 import time
@@ -29,3 +30,22 @@ def get_token():
 
     st.error("Token Failed")
     return None
+
+def _get_secret(key):
+    try:
+        return st.secrets[key]
+    except Exception:
+        return os.getenv(key)
+
+def get_headers():
+    token = get_token()
+    client_id = _get_secret("CLIENT_ID")
+
+    if not token or not client_id:
+        return {}
+
+    return {
+        "access-token": token,
+        "client-id": client_id,
+        "Content-Type": "application/json"
+    }
