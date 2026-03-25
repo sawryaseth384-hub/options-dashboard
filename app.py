@@ -156,12 +156,12 @@ def get_historical(sec, seg, inst):
 
 st.subheader("📅 HISTORICAL")
 
-hist, _ = get_historical(sec, seg, inst)
+hist, h_err = get_historical(sec, seg, inst)
 
 if hist is not None:
     st.dataframe(hist.tail())
 else:
-    st.warning("No historical data")
+    st.warning(f"Historical Error: {h_err}")
 
 # =========================
 # CANDLE
@@ -186,19 +186,19 @@ def get_intraday(sec, seg, inst):
 
 st.subheader("🕯 CANDLE")
 
-candle, _ = get_intraday(sec, seg, inst)
+candle, c_err = get_intraday(sec, seg, inst)
 
 if candle is not None:
     st.line_chart(candle["close"])
 else:
-    st.warning("No candle data")
+    st.warning(f"Candle Error: {c_err}")
 
 # =========================
-# OPTION CHAIN
+# OPTION CHAIN (FIXED)
 # =========================
 def get_expiry(sec):
     payload = {
-        "UnderlyingScrip": sec,
+        "UnderlyingScrip": int(sec),
         "UnderlyingSeg": "IDX_I"
     }
 
@@ -207,12 +207,15 @@ def get_expiry(sec):
     if err:
         return [], err
 
-    return data.get("data", []), None
+    if not data or data.get("status") != "success":
+        return [], "Invalid Expiry"
+
+    return data["data"], None
 
 
 def get_chain(sec, expiry):
     payload = {
-        "UnderlyingScrip": sec,
+        "UnderlyingScrip": int(sec),
         "UnderlyingSeg": "IDX_I",
         "Expiry": expiry
     }
@@ -222,24 +225,34 @@ def get_chain(sec, expiry):
     if err:
         return None, err
 
-    return data.get("data", {}), None
+    if not data or data.get("status") != "success":
+        return None, "Invalid Chain"
+
+    return data["data"]["oc"], None
 
 
 st.subheader("📊 OPTION CHAIN")
 
 nifty_sec, _, _ = symbols["NIFTY"]
 
-expiries, _ = get_expiry(nifty_sec)
+expiries, e_err = get_expiry(nifty_sec)
+
+chain = None
 
 if expiries:
     selected_exp = st.selectbox("Select Expiry", expiries)
 
-    chain, _ = get_chain(nifty_sec, selected_exp)
+    chain, c_err = get_chain(nifty_sec, selected_exp)
 
     if chain:
-        st.write(f"Strikes: {len(chain.get('oc', {}))}")
+        df = pd.DataFrame(chain).T
+        st.success(f"Strikes: {len(df)}")
+        st.dataframe(df.head(20))
     else:
-        st.warning("Chain error")
+        st.warning(f"Chain Error: {c_err}")
+
+else:
+    st.warning(f"Expiry Error: {e_err}")
 
 # =========================
 # DEBUG PANEL
@@ -252,7 +265,7 @@ st.write("Depth:", "OK" if depth else "FAIL")
 st.write("Historical:", "OK" if hist is not None else "FAIL")
 st.write("Candle:", "OK" if candle is not None else "FAIL")
 st.write("Expiry:", "OK" if expiries else "FAIL")
-st.write("Option Chain:", "OK" if 'chain' in locals() and chain else "FAIL")
+st.write("Option Chain:", "OK" if chain else "FAIL")
 
 # =========================
 # AUTO REFRESH
