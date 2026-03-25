@@ -225,7 +225,7 @@ def build_market_data():
 
         total_call = sum([_as_float(row.get("call_oi")) or 0 for row in option_chain_rows])
         total_put = sum([_as_float(row.get("put_oi")) or 0 for row in option_chain_rows])
-        pcr = (total_put / total_call) if total_call else 0
+        pcr = (total_put / total_call) if total_call else None
 
         market_data["options"] = {
             "chain": option_chain_rows,

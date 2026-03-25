@@ -37,6 +37,8 @@ def get_token():
             "totp": totp,
         }
         res = requests.post(AUTH_URL, params=payload, timeout=10)
+        if res.status_code != 200:
+            return None
         data = res.json()
     except Exception:
         return None
