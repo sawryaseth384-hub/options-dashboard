@@ -212,9 +212,10 @@ class MarketDataEngine:
     def _get_instrument_df(self):
         if self._instrument_df is None:
             df = load_instruments()
-            if not df.empty and "_SYM_UPPER" not in df.columns:
+            upper_col = "SEM_TRADING_SYMBOL_UPPER"
+            if not df.empty and upper_col not in df.columns:
                 df = df.copy()
-                df["_SYM_UPPER"] = df["SEM_TRADING_SYMBOL"].str.upper()
+                df[upper_col] = df["SEM_TRADING_SYMBOL"].str.upper()
             self._instrument_df = df
         return self._instrument_df
 
@@ -393,21 +394,22 @@ class MarketDataEngine:
             return None
 
         symbol_upper = symbol.upper()
-        match = df[df["_SYM_UPPER"] == symbol_upper]
-        if match.empty and symbol_upper == "VIX":
-            match = df[df["_SYM_UPPER"].str.contains("VIX", na=False)]
-        if match.empty:
+        upper_col = "SEM_TRADING_SYMBOL_UPPER"
+        symbol_matches = df[df[upper_col] == symbol_upper]
+        if symbol_matches.empty and symbol_upper == "VIX":
+            symbol_matches = df[df[upper_col].str.contains("VIX", na=False)]
+        if symbol_matches.empty:
             return None
 
-        if len(match) > 1:
+        if len(symbol_matches) > 1:
             preferred_segments = [fallback_segment, "IDX_I", "I", "NSE_EQ"]
             for seg in preferred_segments:
-                candidate = match[match["SEGMENT"] == seg]
+                candidate = symbol_matches[symbol_matches["SEGMENT"] == seg]
                 if not candidate.empty:
-                    match = candidate
+                    symbol_matches = candidate
                     break
 
-        row = match.iloc[0]
+        row = symbol_matches.iloc[0]
         segment = row.get("SEGMENT") or fallback_segment
         return {
             "symbol": symbol_upper,
@@ -527,5 +529,6 @@ class MarketDataEngine:
                 )
             else:
                 raise ValueError(
-                    f"Unsupported candle_type: {candle_type}. Expected 'intraday' or 'historical'."
+                    f"Internal error: unsupported candle_type {candle_type!r}. "
+                    "Expected 'intraday' or 'historical'."
                 )
