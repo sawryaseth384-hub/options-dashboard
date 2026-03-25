@@ -212,21 +212,30 @@ class MarketDataEngine:
     def fetch_market_quotes(self, instruments, cache_ttl=1):
         if not instruments:
             return {}
-        key_parts = sorted((_instrument_key(item["security_id"], item["segment"]) for item in instruments))
+        key_parts = sorted(
+            _instrument_key(item.get("security_id"), item.get("segment"))
+            for item in instruments
+            if item.get("security_id") is not None and item.get("segment")
+        )
         cache_key = ("marketquote", tuple(key_parts))
         cached = self.cache.get(cache_key)
         if cached is not None:
             return cached
 
-        payload = {
-            "instruments": [
-                {
-                    "exchangeSegment": inst["segment"],
-                    "securityId": int(inst["security_id"]),
-                }
-                for inst in instruments
-            ]
-        }
+        payload_instruments = []
+        for inst in instruments:
+            security_id = inst.get("security_id")
+            segment = inst.get("segment")
+            if security_id is None or not segment:
+                continue
+            payload_instruments.append({
+                "exchangeSegment": segment,
+                "securityId": int(security_id),
+            })
+        if not payload_instruments:
+            return {}
+
+        payload = {"instruments": payload_instruments}
 
         data, err = self.client.post("/marketquote", payload)
         if err or not data:
@@ -281,9 +290,9 @@ class MarketDataEngine:
 
     def fetch_intraday(self, security_id, segment, interval="1", from_date=None, to_date=None, cache_ttl=30):
         if from_date is None:
-            from_date = dt.datetime.now()
+            from_date = dt.date.today()
         if to_date is None:
-            to_date = dt.datetime.now()
+            to_date = dt.date.today()
 
         from_date = _format_date(from_date)
         to_date = _format_date(to_date)
@@ -355,7 +364,7 @@ class MarketDataEngine:
             df["_SYM_UPPER"] = df["SEM_TRADING_SYMBOL"].str.upper()
         match = df[df["_SYM_UPPER"] == symbol_upper]
         if match.empty and symbol_upper == "VIX":
-            match = df[df["_SYM_UPPER"].str.contains("VIX", case=False, na=False)]
+            match = df[df["_SYM_UPPER"].str.contains("VIX", na=False)]
         if match.empty:
             return None
 
@@ -439,20 +448,16 @@ class MarketDataEngine:
         market_data["stocks"] = stocks
 
         if option_chain_symbol or option_chain_security_id:
-            if option_chain_security_id:
-                security_id = option_chain_security_id
-                segment = option_chain_segment
-                underlying_symbol = option_chain_symbol
-            else:
+            security_id = option_chain_security_id
+            segment = option_chain_segment
+            underlying_symbol = option_chain_symbol
+
+            if security_id is None and option_chain_symbol:
                 resolved = self.resolve_symbol(option_chain_symbol, fallback_segment=option_chain_segment)
                 if resolved:
                     security_id = resolved["security_id"]
                     segment = resolved["segment"]
                     underlying_symbol = resolved["symbol"]
-                else:
-                    security_id = None
-                    segment = option_chain_segment
-                    underlying_symbol = option_chain_symbol
 
             if security_id:
                 option_data = self.fetch_option_chain(
