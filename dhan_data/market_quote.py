@@ -4,20 +4,21 @@ from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
 
-# ✅ Cache for performance
-@st.cache_data(ttl=2)  # 2 sec cache for near-live feel
+# ✅ cache add किया (important)
+@st.cache_data(ttl=2)
 def get_ltp(security_id, segment):
     try:
-        # Exchange mapping
-        segment_map = {
-            "IDX_I": "IDX_I",
-            "NSE_FNO": "NSE_FNO",
-            "NSE_EQ": "NSE_EQ"
+        # segment mapping
+        if segment == "IDX_I":
+            exchange = "IDX_I"
+        elif segment == "NSE_FNO":
+            exchange = "NSE_FNO"
+        else:
+            exchange = "NSE_EQ"
+
+        payload = {
+            exchange: [int(security_id)]
         }
-
-        exchange = segment_map.get(segment, "NSE_EQ")
-
-        payload = {exchange: [int(security_id)]}
 
         res = requests.post(
             f"{BASE_URL}/marketfeed/ltp",
@@ -26,14 +27,13 @@ def get_ltp(security_id, segment):
             timeout=5
         )
 
-        # ✅ Check status
+        # अगर API fail हो जाए
         if res.status_code != 200:
-            st.warning(f"LTP API failed: {res.status_code}")
+            st.warning(f"LTP API Error: {res.status_code}")
             return 0
 
         data = res.json()
 
-        # ✅ Safe extraction
         ltp = (
             data.get("data", {})
             .get(exchange, {})
