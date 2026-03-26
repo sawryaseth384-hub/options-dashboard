@@ -18,7 +18,7 @@ SECURITY_MAP = {
 }
 
 
-def _extract_records(payload):
+def _extract_data_list(payload):
     if isinstance(payload, list):
         return payload
     if isinstance(payload, dict):
@@ -58,7 +58,7 @@ with col1:
     if isinstance(intraday_data, dict) and "error" in intraday_data:
         st.error(intraday_data["error"])
     else:
-        intraday_records = _extract_records(intraday_data)
+        intraday_records = _extract_data_list(intraday_data)
         if intraday_records:
             st.dataframe(intraday_records, use_container_width=True)
         else:
@@ -70,7 +70,7 @@ with col2:
     if isinstance(historical_data, dict) and "error" in historical_data:
         st.error(historical_data["error"])
     else:
-        historical_records = _extract_records(historical_data)
+        historical_records = _extract_data_list(historical_data)
         if historical_records:
             st.dataframe(historical_records, use_container_width=True)
         else:

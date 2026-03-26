@@ -80,24 +80,24 @@ def get_ltp(security_id, segment):
     )
 
 
-def get_intraday(security_id, segment):
-    return safe_request(
-        "/charts/intraday",
-        params={
-            "security_id": security_id,
-            "exchange_segment": segment,
-        },
-    )
+def get_intraday(security_id, segment, extra_params=None):
+    params = {
+        "security_id": security_id,
+        "exchange_segment": segment,
+    }
+    if extra_params:
+        params.update(extra_params)
+    return safe_request("/charts/intraday", params=params)
 
 
-def get_historical(security_id, segment):
-    return safe_request(
-        "/charts/historical",
-        params={
-            "security_id": security_id,
-            "exchange_segment": segment,
-        },
-    )
+def get_historical(security_id, segment, extra_params=None):
+    params = {
+        "security_id": security_id,
+        "exchange_segment": segment,
+    }
+    if extra_params:
+        params.update(extra_params)
+    return safe_request("/charts/historical", params=params)
 
 
 def get_depth(security_id, segment):
@@ -121,11 +121,11 @@ def _normalize_contracts(payload):
     return []
 
 
-def get_option_chain(symbol):
+def get_option_chain(security_id):
     contracts = safe_request(
         "/option/contracts",
         params={
-            "security_id": symbol,
+            "security_id": security_id,
             "exchange_segment": "NFO",
         },
     )
