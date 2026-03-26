@@ -1,175 +1,55 @@
 import logging
 
-from dhan_data.client import normalize_exchange_segment, sdk_get_quote, sdk_option_contracts
+from dhan_data.client import (
+    normalize_exchange_segment,
+    sdk_option_chain,
+    sdk_option_chain_expiry_list,
+)
 
 _logger = logging.getLogger(__name__)
 
 
-def _normalize_contracts(payload):
+def _normalize_expiry_list(payload):
     if isinstance(payload, list):
         return payload
     if isinstance(payload, dict):
-        for key in ("data", "contracts", "result", "items"):
-            value = payload.get(key)
-            if isinstance(value, list):
-                return value
+        data = payload.get("data") if "data" in payload else payload
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("expiries", "expiryList", "expiry", "items"):
+                value = data.get(key)
+                if isinstance(value, list):
+                    return value
     return []
 
 
-def _first_present(data, keys):
-    if not isinstance(data, dict):
-        return None
-    for key in keys:
-        value = data.get(key)
-        if value is not None:
-            return value
-    return None
-
-
-def _extract_expiry(contract):
-    return _first_present(contract, ["expiry_date", "expiryDate", "expiry", "Expiry"])
-
-
-def _extract_strike(contract):
-    return _first_present(contract, ["strike_price", "strikePrice", "strike"])
-
-
-def _extract_option_type(contract):
-    opt_type = _first_present(contract, ["option_type", "optionType", "type"])
-    if not opt_type:
-        return None
-    opt_type = str(opt_type).upper()
-    if opt_type in {"CE", "CALL"}:
-        return "CE"
-    if opt_type in {"PE", "PUT"}:
-        return "PE"
-    return opt_type
-
-
-def _extract_security_id(contract):
-    return _first_present(contract, ["security_id", "securityId", "sid", "scripId"])
-
-
-def _resolve_option_segment(segment):
-    normalized = normalize_exchange_segment(segment)
-    if normalized in (None, "NSE_INDEX", "NSE_EQ"):
-        return "NFO"
-    return normalized
-
-
-def _extract_quote_record(payload):
-    if not payload:
-        return None
-    data = payload
-    if isinstance(payload, dict):
-        data = payload.get("data") if "data" in payload else payload
-        if isinstance(data, dict) and "data" in data:
-            data = data.get("data")
-    if isinstance(data, list):
-        return data[0] if data else None
-    if isinstance(data, dict):
-        return data
-    return None
-
-
-def _build_leg(quote_record):
-    if not isinstance(quote_record, dict):
-        return {
-            "ltp": None,
-            "oi": None,
-            "volume": None,
-            "iv": None,
-            "price_change": None,
-            "oi_change": None,
-            "last_price": None,
-        }
-    ltp_value = _first_present(quote_record, ["ltp", "lastPrice", "last_price", "price"])
-    return {
-        "ltp": ltp_value,
-        "last_price": ltp_value,
-        "oi": _first_present(quote_record, ["oi", "openInterest", "open_interest"]),
-        "volume": _first_present(quote_record, ["volume", "tradedVolume", "volumeTraded"]),
-        "iv": _first_present(quote_record, ["iv", "impliedVolatility", "implied_volatility"]),
-        "price_change": _first_present(quote_record, ["change", "priceChange", "chg"]),
-        "oi_change": _first_present(quote_record, ["oiChange", "changeinOpenInterest", "oi_change"]),
-    }
-
-
-def get_option_contracts(security_id, exchange_segment="NFO"):
-    exchange_segment = normalize_exchange_segment(exchange_segment) or "NFO"
-    data, err = sdk_option_contracts(security_id, exchange_segment)
-    if err:
-        return [], err
-    contracts = _normalize_contracts(data)
-    if not contracts:
-        return [], "No contracts found"
-    return contracts, None
-
-
 def get_expiry_list(security_id, segment="NSE_INDEX"):
-    option_segment = _resolve_option_segment(segment)
-    contracts, err = get_option_contracts(security_id, option_segment)
+    exchange_segment = normalize_exchange_segment(segment) or "NSE_INDEX"
+    data, err = sdk_option_chain_expiry_list(security_id, exchange_segment)
     if err:
         return [], err
-    expiries = sorted({expiry for expiry in (_extract_expiry(c) for c in contracts) if expiry})
+    expiries = sorted({str(expiry) for expiry in _normalize_expiry_list(data) if expiry})
     if not expiries:
         return [], "No expiry found"
     return expiries, None
 
 
 def get_option_chain(security_id, expiry=None, segment=None, exchange_segment=None):
-    underlying_segment = normalize_exchange_segment(segment) or "NSE_INDEX"
-    option_segment = _resolve_option_segment(exchange_segment or segment)
-    contracts, err = get_option_contracts(security_id, option_segment)
+    underlying_segment = normalize_exchange_segment(segment or exchange_segment) or "NSE_INDEX"
+    expiries, err = get_expiry_list(security_id, underlying_segment)
     if err:
         return None, err
-    expiries = sorted({exp for exp in (_extract_expiry(c) for c in contracts) if exp})
-    if not expiries:
+    selected_expiry = expiry or (expiries[0] if expiries else None)
+    if not selected_expiry:
         return None, "No expiry found"
-    selected_expiry = expiry or expiries[0]
-    filtered = [c for c in contracts if _extract_expiry(c) == selected_expiry]
-    if not filtered:
-        return None, f"No contracts found for expiry {selected_expiry}"
 
-    oc = {}
-    quote_cache = {}
-    for contract in filtered:
-        strike = _extract_strike(contract)
-        opt_type = _extract_option_type(contract)
-        sec_id = _extract_security_id(contract)
-        if strike is None or opt_type is None or sec_id is None:
-            continue
-        if sec_id in quote_cache:
-            record = quote_cache[sec_id]
-        else:
-            quote, quote_err = sdk_get_quote(sec_id, option_segment)
-            if quote_err:
-                _logger.warning("Quote error for %s: %s", sec_id, quote_err)
-            record = _extract_quote_record(quote)
-            quote_cache[sec_id] = record
-        leg = _build_leg(record)
-        strike_key = str(strike)
-        oc.setdefault(strike_key, {"ce": {}, "pe": {}})
-        if opt_type == "CE":
-            oc[strike_key]["ce"] = leg
-        elif opt_type == "PE":
-            oc[strike_key]["pe"] = leg
-
-    spot = None
-    spot_payload, spot_err = sdk_get_quote(security_id, underlying_segment)
-    if spot_err:
-        _logger.warning("Spot quote error for %s: %s", security_id, spot_err)
-    spot_record = _extract_quote_record(spot_payload) if not spot_err else None
-    if isinstance(spot_record, dict):
-        spot = _first_present(spot_record, ["ltp", "lastPrice", "last_price", "price"])
-
-    return {
-        "status": "success",
-        "data": {
-            "oc": oc,
-            "last_price": spot,
-            "expiry": selected_expiry,
-        },
-        "expiries": expiries,
-        "selected_expiry": selected_expiry,
-    }, None
+    data, err = sdk_option_chain(security_id, underlying_segment, selected_expiry)
+    if err:
+        return None, err
+    response = data if isinstance(data, dict) else {"data": data}
+    if "data" not in response and isinstance(data, dict):
+        response = {"data": data}
+    response["expiries"] = expiries
+    response["selected_expiry"] = selected_expiry
+    return response, None

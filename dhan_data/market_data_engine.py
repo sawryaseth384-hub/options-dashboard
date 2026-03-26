@@ -206,6 +206,15 @@ def _extract_ltp_records(payload):
     if isinstance(data, dict):
         if any(key in data for key in ("ltp", "lastPrice", "last_price", "securityId", "security_id")):
             return [data]
+        flattened = []
+        for segment_data in data.values():
+            if not isinstance(segment_data, dict):
+                continue
+            for record in segment_data.values():
+                if isinstance(record, dict):
+                    flattened.append(record)
+        if flattened:
+            return flattened
         return [v for v in data.values() if isinstance(v, dict)]
     return []
 

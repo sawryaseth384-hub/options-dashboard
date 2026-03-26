@@ -1,7 +1,7 @@
 import json
 
-from core.token_manager import get_access_token, get_client_id
-from dhan_data.client import sdk_get_quote
+from core.token_manager import get_access_token
+from dhan_data.client import normalize_option_chain_segment, sdk_get_quote
 from dhan_data.option_chain import get_expiry_list, get_option_chain
 
 
@@ -22,7 +22,9 @@ def test_expiry_list():
     return expiries
 
 def test_option_chain(expiry):
-    print(f"\n📤 Sending payload to option chain:\n{json.dumps({'UnderlyingScrip': 13, 'UnderlyingSeg': 'NSE_INDEX', 'expiryDate': expiry}, indent=2)}")
+    underlying_seg = normalize_option_chain_segment("NSE_INDEX")
+    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": underlying_seg, "Expiry": expiry}
+    print(f\"\\n📤 Sending payload to option chain:\\n{json.dumps(payload, indent=2)}\")
     data, err = get_option_chain(13, expiry=expiry, segment="NSE_INDEX")
     if err:
         print("❌ Option chain failed:", err)
@@ -37,9 +39,8 @@ def test_option_chain(expiry):
 if __name__ == "__main__":
     print("🔍 Testing Dhan API token...")
     token = get_access_token()
-    client_id = get_client_id()
-    if not token or not client_id:
-        print("❌ Missing credentials. Check CLIENT_ID and DHAN_ACCESS_TOKEN.")
+    if not token:
+        print("❌ Missing credentials. Check DHAN_ACCESS_TOKEN.")
         exit()
     if not check_quote():
         exit()
