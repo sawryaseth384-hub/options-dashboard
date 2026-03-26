@@ -7,7 +7,7 @@ BASE_URL = "https://api.dhan.co"
 EXPIRY_PLACEHOLDER_NEAREST = "nearest"  # UI placeholder when the API expiry list is unavailable.
 _logger = logging.getLogger(__name__)
 
-def get_expiry(security_id, segment="NSE_FNO"):
+def get_expiry(security_id, segment="IDX_I"):
     url = f"{BASE_URL}/v2/optionchain/expirylist"
     payload = {
         "UnderlyingScrip": int(security_id),
@@ -23,7 +23,7 @@ def get_expiry(security_id, segment="NSE_FNO"):
     return []
 
 
-def get_expiry_list(symbol, segment="NSE_FNO"):
+def get_expiry_list(symbol, segment="IDX_I"):
     """Return expiry list with a placeholder string when the API is unavailable."""
     symbol = str(symbol or "").upper()
     security_id = SECURITY_MAP.get(symbol)

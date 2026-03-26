@@ -554,7 +554,7 @@ def _build_market_data():
         if not segment:
             errors.append(f"Option chain missing segment for {symbol}")
             continue
-        option_segment = "NSE_FNO"
+        option_segment = "IDX_I" if symbol in DEFAULT_INDEXES else "NSE_FNO"
         try:
             expiries = get_expiry_list(symbol, option_segment)
         except Exception as exc:

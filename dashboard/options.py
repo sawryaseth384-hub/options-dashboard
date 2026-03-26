@@ -7,7 +7,7 @@ def get_option_chain(security_id, expiry):
     url = f"{BASE_URL}/v2/optionchain"
     payload = {
         "UnderlyingScrip": security_id,
-        "UnderlyingSeg": "NSE_FNO",
+        "UnderlyingSeg": "IDX_I",
         "Expiry": expiry
     }
 

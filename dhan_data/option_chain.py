@@ -3,7 +3,7 @@ from dhan_data.client import safe_post
 BASE_URL = "https://api.dhan.co"
 
 
-def get_option_chain(sec, expiry, segment="NSE_FNO"):
+def get_option_chain(sec, expiry, segment="IDX_I"):
     payload = {
         "UnderlyingScrip": int(sec),
         "UnderlyingSeg": segment,

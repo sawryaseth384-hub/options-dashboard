@@ -1,8 +1,9 @@
+import os
 import requests
 import json
 
-# 🔧 YAHAN APNA TOKEN AUR CLIENT ID DAALEIN
-ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc0MjY4MTk5LCJpYXQiOjE3NzQxODE3OTksInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0.E26wPlTIRooX3uhJCxWoP3gwEYiMds5FdbmPc_G3J53lFm8Eo7L3kcaYfSwTw-vLTtBqOLmqGuaBNw7L32M2Sg"
+# 🔧 Set your token via environment/secrets
+ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN") or os.getenv("ACCESS_TOKEN") or ""
 BASE_URL = "https://api.dhan.co"
 
 def check_profile():
@@ -25,7 +26,7 @@ def check_profile():
 def test_expiry_list():
     url = f"{BASE_URL}/v2/optionchain/expirylist"
     headers = {"access-token": ACCESS_TOKEN, "Content-Type": "application/json"}
-    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "NSE_FNO"}
+    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I"}
     resp = requests.post(url, headers=headers, json=payload)
     if resp.status_code == 401:
         print("❌ Unauthorized - check token")
@@ -42,7 +43,7 @@ def test_expiry_list():
 def test_option_chain(expiry):
     url = f"{BASE_URL}/v2/optionchain"
     headers = {"access-token": ACCESS_TOKEN, "Content-Type": "application/json"}
-    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "NSE_FNO", "Expiry": expiry}
+    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I", "Expiry": expiry}
     print(f"\n📤 Sending payload to option chain:\n{json.dumps(payload, indent=2)}")
     resp = requests.post(url, headers=headers, json=payload)
     print(f"📥 Response status: {resp.status_code}")
@@ -62,6 +63,9 @@ def test_option_chain(expiry):
 
 if __name__ == "__main__":
     print("🔍 Testing Dhan API token...")
+    if not ACCESS_TOKEN:
+        print("❌ Missing Dhan token in environment.")
+        exit()
     profile = check_profile()
     if not profile:
         exit()

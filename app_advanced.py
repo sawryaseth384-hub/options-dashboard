@@ -15,7 +15,7 @@ if not get_token():
     st.stop()
 
 # ---------- Helper: Fetch Expiry List ----------
-def get_expiry_list(underlying_scrip=13, segment="NSE_FNO"):
+def get_expiry_list(underlying_scrip=13, segment="IDX_I"):
     url = f"{BASE_URL}/v2/optionchain/expirylist"
     payload = {"UnderlyingScrip": underlying_scrip, "UnderlyingSeg": segment}
     data, err = safe_post(url, payload)
@@ -26,7 +26,7 @@ def get_expiry_list(underlying_scrip=13, segment="NSE_FNO"):
     return []
 
 # ---------- Helper: Fetch Option Chain ----------
-def get_option_chain(underlying_scrip=13, segment="NSE_FNO", expiry=None):
+def get_option_chain(underlying_scrip=13, segment="IDX_I", expiry=None):
     if expiry is None:
         expiries = get_expiry_list(underlying_scrip, segment)
         if isinstance(expiries, dict) and expiries.get("_error"):
