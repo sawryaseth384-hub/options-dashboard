@@ -83,9 +83,10 @@ def _build_leg(quote_record):
             "oi_change": None,
             "last_price": None,
         }
+    ltp_value = _first_present(quote_record, ["ltp", "lastPrice", "last_price", "price"])
     return {
-        "ltp": _first_present(quote_record, ["ltp", "lastPrice", "last_price", "price"]),
-        "last_price": _first_present(quote_record, ["ltp", "lastPrice", "last_price", "price"]),
+        "ltp": ltp_value,
+        "last_price": ltp_value,
         "oi": _first_present(quote_record, ["oi", "openInterest", "open_interest"]),
         "volume": _first_present(quote_record, ["volume", "tradedVolume", "volumeTraded"]),
         "iv": _first_present(quote_record, ["iv", "impliedVolatility", "implied_volatility"]),
