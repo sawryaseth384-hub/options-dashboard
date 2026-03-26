@@ -137,11 +137,15 @@ def get_option_chain(security_id):
     if not contract_list:
         return {"error": "No contracts found"}
 
-    expiries = sorted({
-        c.get("expiry_date")
-        for c in contract_list
-        if c.get("expiry_date")
-    })
+    expiries = sorted(
+        expiry
+        for expiry in {
+            c.get("expiry_date")
+            for c in contract_list
+            if c.get("expiry_date") is not None
+        }
+        if expiry
+    )
 
     if not expiries:
         return {"error": "No expiry found"}
@@ -150,10 +154,16 @@ def get_option_chain(security_id):
     filtered = [c for c in contract_list if c.get("expiry_date") == nearest_expiry]
 
     chain = []
+    ltp_cache = {}
 
     for contract in filtered:
-        quote = get_ltp(contract.get("security_id"), "NFO")
-        ltp = extract_ltp(quote) if isinstance(quote, dict) else 0
+        contract_id = contract.get("security_id")
+        if contract_id in ltp_cache:
+            ltp = ltp_cache[contract_id]
+        else:
+            quote = get_ltp(contract_id, "NFO")
+            ltp = extract_ltp(quote) if isinstance(quote, dict) else 0
+            ltp_cache[contract_id] = ltp
 
         chain.append(
             {
