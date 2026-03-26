@@ -1,9 +1,9 @@
-import streamlit as st
+from utils.secrets import get_secret
 
 
 def get_keys():
     return {
-        "CLIENT_ID": st.secrets.get("CLIENT_ID"),
-        "PIN": st.secrets.get("PIN"),
-        "TOTP_SECRET": st.secrets.get("TOTP_SECRET"),
+        "CLIENT_ID": get_secret("CLIENT_ID"),
+        "PIN": get_secret("PIN"),
+        "TOTP_SECRET": get_secret("TOTP_SECRET"),
     }
