@@ -241,7 +241,7 @@ def _validate_time_frame(time_frame):
 
 
 def _validate_expiry_code(expiry_code):
-    """Use expiryCode=0 for cash instruments; pass the Dhan instrument master expiry code for derivatives."""
+    """Use expiryCode=0 for cash instruments; derivatives use codes from Dhan's scrip master CSV (https://images.dhan.co/api-data/api-scrip-master.csv)."""
     if expiry_code in (None, ""):
         return 0, None
     try:
@@ -269,6 +269,18 @@ def extract_marketfeed_record(payload, exchange_segment, security_id):
     if not isinstance(segment_data, dict):
         return None
     return segment_data.get(str(security_id)) or segment_data.get(int(security_id))
+
+
+def _extract_depth_levels(record, depth, keys):
+    for key in keys:
+        value = record.get(key)
+        if value is not None:
+            return value
+    for key in keys:
+        value = depth.get(key)
+        if value is not None:
+            return value
+    return []
 
 
 def sdk_get_quote(security_id, exchange_segment):
@@ -308,7 +320,9 @@ def sdk_option_chain(security_id, exchange_segment, expiry):
     segment = normalize_option_chain_segment(exchange_segment)
     if not segment:
         return None, "Invalid parameters (400): exchange_segment is required"
-    expiry = str(expiry).strip() if expiry else ""
+    if expiry is None:
+        return None, "Invalid parameters (400): expiry is required"
+    expiry = str(expiry).strip()
     if not expiry:
         return None, "Invalid parameters (400): expiry is required"
     params = {
@@ -419,6 +433,6 @@ def sdk_get_market_depth(security_id, exchange_segment):
     if not isinstance(record, dict):
         return data, None
     depth = record.get("depth") if isinstance(record.get("depth"), dict) else {}
-    bids = record.get("bids") or record.get("buy") or depth.get("bids") or depth.get("buy") or []
-    asks = record.get("asks") or record.get("sell") or depth.get("asks") or depth.get("sell") or []
+    bids = _extract_depth_levels(record, depth, ["bids", "buy"])
+    asks = _extract_depth_levels(record, depth, ["asks", "sell"])
     return {"bids": bids, "asks": asks, "record": record}, None
