@@ -60,7 +60,7 @@ def _show_credential_status():
             "(primary) or environment variables."
         )
         st.code('CLIENT_ID = "your_client_id"\nDHAN_ACCESS_TOKEN = "your_access_token"', language="toml")
-        st.info("Once updated, reload this page.")
+        st.info("Copy .streamlit/secrets.toml.example to .streamlit/secrets.toml, then reload this page.")
         return False
     return True
 

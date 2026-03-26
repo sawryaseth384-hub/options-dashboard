@@ -49,7 +49,7 @@ if not client_id or not token:
         "(primary) or environment variables."
     )
     st.code('CLIENT_ID = "your_client_id"\nDHAN_ACCESS_TOKEN = "your_access_token"', language="toml")
-    st.info("Once updated, reload this page to fetch live data.")
+    st.info("Copy .streamlit/secrets.toml.example to .streamlit/secrets.toml, then reload this page.")
     st.stop()
 
 
