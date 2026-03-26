@@ -22,6 +22,10 @@ def _auth_error(message):
     return {"_error": message}, message
 
 
+def _has_auth_header(headers):
+    return bool(headers.get("Authorization") or headers.get("access-token"))
+
+
 class DhanApiClient:
     def __init__(self, base_url=BASE_URL, retries=DEFAULT_RETRIES, timeout=10):
         self.base_url = base_url
@@ -45,11 +49,11 @@ class DhanApiClient:
     def request(self, method, url, payload=None, params=None, headers=None, timeout=None):
         resolved_url = url if url.startswith("http") else _full_url(url)
         resolved_headers = self.get_headers(headers)
-        if "Authorization" not in resolved_headers and "access-token" not in resolved_headers:
+        if not _has_auth_header(resolved_headers):
             refreshed = self.refresh_token()
             if refreshed:
                 resolved_headers = self.get_headers(headers)
-        if "Authorization" not in resolved_headers and "access-token" not in resolved_headers:
+        if not _has_auth_header(resolved_headers):
             return None, "Missing Dhan token"
         json_payload = payload if method.upper() in {"POST", "PUT", "PATCH"} else None
         try:

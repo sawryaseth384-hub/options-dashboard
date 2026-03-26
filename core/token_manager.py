@@ -11,7 +11,9 @@ _logger = logging.getLogger(__name__)
 
 DEFAULT_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 MAX_TOKEN_ATTEMPTS = 3
-TOKEN_TTL_SECONDS = 23 * 60 * 60
+TOKEN_VALIDITY_SECONDS = 24 * 60 * 60
+TOKEN_REFRESH_BUFFER_SECONDS = 60 * 60
+TOKEN_TTL_SECONDS = TOKEN_VALIDITY_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS
 EPOCH_MS_THRESHOLD = 10_000_000_000
 EPOCH_S_THRESHOLD = 1_000_000_000
 TOKEN_SESSION_KEY = "dhan_access_token"
@@ -151,6 +153,7 @@ def _is_expired(expires_at):
 
 
 def generate_totp(secret=None):
+    """Generate a TOTP code using the configured secret."""
     secret = secret or _get_secret_value("TOTP_SECRET")
     if not secret:
         _logger.warning("TOTP secret missing in secrets.")
@@ -215,6 +218,7 @@ def get_access_token(force_refresh=False):
 
 
 def get_token(force_refresh=False):
+    """Legacy alias for get_access_token."""
     return get_access_token(force_refresh=force_refresh)
 
 
