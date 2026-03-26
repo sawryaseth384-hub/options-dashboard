@@ -1,10 +1,11 @@
 import requests
 from core.token_manager import get_headers
 
-url = "https://api.dhan.co/v2/charts/intraday"
+BASE_URL = "https://api.dhan.co"
+url = f"{BASE_URL}/v2/charts/intraday"
 payload = {
     "securityId": "13",                 # NIFTY
-    "exchangeSegment": "NSE_EQ",        # Always NSE_EQ for charts
+    "exchangeSegment": "IDX_I",         # IDX_I for indices
     "instrument": "INDEX",              # INDEX for NIFTY, EQUITY for stocks
     "interval": "5",                    # 5 minute candles
     "oi": False,
@@ -13,4 +14,7 @@ payload = {
 }
 res = requests.post(url, headers=get_headers(), json=payload)
 print("Status:", res.status_code)
-print("Response:", res.json())
+if res.status_code == 401:
+    print("Response:", {"_error": "Unauthorized - check token"})
+else:
+    print("Response:", res.json())

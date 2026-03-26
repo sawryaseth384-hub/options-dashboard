@@ -3,12 +3,12 @@ import logging
 from dhan_data.client import safe_post
 from dhan_data.security_map import SECURITY_MAP
 
-BASE_URL = "https://api.dhan.co/v2"
+BASE_URL = "https://api.dhan.co"
 EXPIRY_PLACEHOLDER_NEAREST = "nearest"  # UI placeholder when the API expiry list is unavailable.
 _logger = logging.getLogger(__name__)
 
 def get_expiry(security_id, segment="IDX_I"):
-    url = f"{BASE_URL}/optionchain/expirylist"
+    url = f"{BASE_URL}/v2/optionchain/expirylist"
     payload = {
         "UnderlyingScrip": int(security_id),
         "UnderlyingSeg": segment
@@ -29,7 +29,7 @@ def get_expiry_list(symbol, segment="IDX_I"):
     security_id = SECURITY_MAP.get(symbol)
     if not security_id:
         return [EXPIRY_PLACEHOLDER_NEAREST]
-    url = f"{BASE_URL}/optionchain/expirylist"
+    url = f"{BASE_URL}/v2/optionchain/expirylist"
     payload = {
         "UnderlyingScrip": int(security_id),
         "UnderlyingSeg": segment

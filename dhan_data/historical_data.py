@@ -1,7 +1,7 @@
 import streamlit as st
 from dhan_data.client import safe_post
 
-BASE_URL = "https://api.dhan.co/v2"
+BASE_URL = "https://api.dhan.co"
 
 @st.cache_data(ttl=30)
 def get_historical(security_id, segment, from_date="2025-03-01", to_date="2025-03-25"):
@@ -24,7 +24,7 @@ def get_historical(security_id, segment, from_date="2025-03-01", to_date="2025-0
         "toDate": to_date
     }
 
-    data, err = safe_post(f"{BASE_URL}/charts/historical", payload, timeout=10)
+    data, err = safe_post(f"{BASE_URL}/v2/charts/historical", payload, timeout=10)
     if err or not data:
         return {}
     if not isinstance(data, dict) or "open" not in data:
