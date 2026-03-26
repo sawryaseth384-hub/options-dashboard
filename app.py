@@ -50,14 +50,23 @@ def _safe_call(label, func, *args, **kwargs):
 
 
 def _show_credential_status():
-    client_id = token_manager.get_client_id()
-    token = token_manager.get_access_token()
+    client_id, token = token_manager.get_credential_status()
     st.sidebar.subheader("Credentials")
-    st.sidebar.write(f"CLIENT_ID loaded: {'Yes' if client_id else 'No'}")
-    st.sidebar.write(f"DHAN_ACCESS_TOKEN loaded: {'Yes' if token else 'No'}")
+    st.sidebar.write(f"CLIENT_ID loaded: {bool(client_id)}")
+    st.sidebar.write(f"DHAN_ACCESS_TOKEN loaded: {bool(token)}")
+    if not client_id or not token:
+        st.error(
+            "Missing credentials. Set CLIENT_ID and DHAN_ACCESS_TOKEN in Streamlit secrets "
+            "(primary) or environment variables."
+        )
+        st.code('CLIENT_ID = "your_client_id"\nDHAN_ACCESS_TOKEN = "your_access_token"', language="toml")
+        st.info("Once updated, reload this page.")
+        return False
+    return True
 
 
-_show_credential_status()
+if not _show_credential_status():
+    st.stop()
 
 
 symbol = st.selectbox("Select Symbol", list(SECURITY_MAP.keys()))

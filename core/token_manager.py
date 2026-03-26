@@ -36,6 +36,12 @@ def _get_secret_value(key):
     return str(value).strip() if value else ""
 
 
+def get_credential_status():
+    client_id = _get_secret_value("CLIENT_ID")
+    token = _get_secret_value("DHAN_ACCESS_TOKEN")
+    return client_id or None, token or None
+
+
 def _report_missing_secrets():
     global _SECRETS_WARNED
     if _SECRETS_WARNED:
