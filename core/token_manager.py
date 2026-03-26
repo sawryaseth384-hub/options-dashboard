@@ -39,7 +39,7 @@ def _get_secret_value(key):
 def get_credential_status():
     client_id = _get_secret_value("CLIENT_ID")
     token = _get_secret_value("DHAN_ACCESS_TOKEN")
-    return client_id if client_id else None, token if token else None
+    return client_id, token
 
 
 def _report_missing_secrets():
