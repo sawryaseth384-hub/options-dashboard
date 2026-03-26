@@ -12,8 +12,6 @@ AUTH_ERROR_MARKERS = ("Unauthorized", "Missing Dhan token")
 
 def _full_url(path):
     path = path.lstrip("/")
-    if BASE_URL.rstrip("/").endswith("/v2") and path.startswith("v2/"):
-        path = path[3:]
     return f"{BASE_URL.rstrip('/')}/{path}"
 
 
