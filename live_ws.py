@@ -21,7 +21,9 @@ def decode_ltp(message):
 
 def start_ws():
 
-    url = f"wss://api-feed.dhan.co?version=2&token={st.secrets['ACCESS_TOKEN']}&clientId={st.secrets['CLIENT_ID']}&authType=2"
+    token = st.secrets.get("DHAN_ACCESS_TOKEN") or st.secrets.get("ACCESS_TOKEN")
+    client_id = st.secrets.get("CLIENT_ID") or st.secrets.get("DHAN_CLIENT_ID") or ""
+    url = f"wss://api-feed.dhan.co?version=2&token={token}&clientId={client_id}&authType=2"
 
     def on_open(ws):
         print("✅ Connected")

@@ -3,12 +3,15 @@ import json
 
 # 🔧 YAHAN APNA TOKEN AUR CLIENT ID DAALEIN
 ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc0MjY4MTk5LCJpYXQiOjE3NzQxODE3OTksInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjk5MjMwIn0.E26wPlTIRooX3uhJCxWoP3gwEYiMds5FdbmPc_G3J53lFm8Eo7L3kcaYfSwTw-vLTtBqOLmqGuaBNw7L32M2Sg"
-CLIENT_ID = "1106299230"
+BASE_URL = "https://api.dhan.co"
 
 def check_profile():
-    url = "https://api.dhan.co/v2/profile"
-    headers = {"access-token": ACCESS_TOKEN, "client-id": CLIENT_ID}
+    url = f"{BASE_URL}/v2/profile"
+    headers = {"access-token": ACCESS_TOKEN}
     resp = requests.get(url, headers=headers)
+    if resp.status_code == 401:
+        print("❌ Unauthorized - check token")
+        return None
     if resp.status_code == 200:
         data = resp.json()
         print("✅ Token valid.")
@@ -20,10 +23,13 @@ def check_profile():
         return None
 
 def test_expiry_list():
-    url = "https://api.dhan.co/v2/optionchain/expirylist"
-    headers = {"access-token": ACCESS_TOKEN, "client-id": CLIENT_ID, "Content-Type": "application/json"}
-    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I"}
+    url = f"{BASE_URL}/v2/optionchain/expirylist"
+    headers = {"access-token": ACCESS_TOKEN, "Content-Type": "application/json"}
+    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "NSE_FNO"}
     resp = requests.post(url, headers=headers, json=payload)
+    if resp.status_code == 401:
+        print("❌ Unauthorized - check token")
+        return None
     if resp.status_code == 200:
         data = resp.json()
         if data.get("status") == "success":
@@ -34,12 +40,15 @@ def test_expiry_list():
     return None
 
 def test_option_chain(expiry):
-    url = "https://api.dhan.co/v2/optionchain"
-    headers = {"access-token": ACCESS_TOKEN, "client-id": CLIENT_ID, "Content-Type": "application/json"}
-    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I", "Expiry": expiry}
+    url = f"{BASE_URL}/v2/optionchain"
+    headers = {"access-token": ACCESS_TOKEN, "Content-Type": "application/json"}
+    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "NSE_FNO", "Expiry": expiry}
     print(f"\n📤 Sending payload to option chain:\n{json.dumps(payload, indent=2)}")
     resp = requests.post(url, headers=headers, json=payload)
     print(f"📥 Response status: {resp.status_code}")
+    if resp.status_code == 401:
+        print("❌ Unauthorized - check token")
+        return
     try:
         data = resp.json()
         print("Response data:", json.dumps(data, indent=2)[:500])

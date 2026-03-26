@@ -2,7 +2,7 @@ import time
 import requests
 from core.token_manager import get_headers
 
-BASE_URL = "https://api.dhan.co/v2"
+BASE_URL = "https://api.dhan.co"
 
 
 def _full_url(path):
@@ -10,16 +10,33 @@ def _full_url(path):
     return f"{BASE_URL}/{path}"
 
 
+def _auth_error(message):
+    return {"_error": message}, message
+
+
+def _resolve_headers(headers):
+    resolved = headers or get_headers()
+    token = resolved.get("access-token") if isinstance(resolved, dict) else None
+    if not token:
+        return resolved, "Missing Dhan token"
+    return resolved, None
+
+
 def safe_post(url, payload, headers=None, retries=3, timeout=10):
     last_error = None
+    headers, token_error = _resolve_headers(headers)
+    if token_error:
+        return _auth_error(token_error)
     for attempt in range(1, retries + 1):
         try:
             res = requests.post(
                 url,
-                headers=headers or get_headers(),
+                headers=headers,
                 json=payload,
                 timeout=timeout
             )
+            if res.status_code == 401:
+                return _auth_error("Unauthorized - check token")
             if res.status_code != 200:
                 last_error = f"HTTP {res.status_code}"
             else:
@@ -36,14 +53,19 @@ def safe_post(url, payload, headers=None, retries=3, timeout=10):
 
 def safe_get(url, headers=None, params=None, retries=3, timeout=5):
     last_error = None
+    headers, token_error = _resolve_headers(headers)
+    if token_error:
+        return _auth_error(token_error)
     for attempt in range(1, retries + 1):
         try:
             res = requests.get(
                 url,
-                headers=headers or get_headers(),
+                headers=headers,
                 params=params,
                 timeout=timeout
             )
+            if res.status_code == 401:
+                return _auth_error("Unauthorized - check token")
             if res.status_code != 200:
                 last_error = f"HTTP {res.status_code}"
             else:

@@ -1,33 +1,21 @@
-import requests
-from core.token_manager import get_headers
+from dhan_data.client import safe_post
 
-BASE_URL = "https://api.dhan.co/v2"
+BASE_URL = "https://api.dhan.co"
 
 def get_option_chain(security_id, expiry):
 
-    url = f"{BASE_URL}/optionchain/optionchain"
-    headers = get_headers()
-
+    url = f"{BASE_URL}/v2/optionchain"
     payload = {
         "UnderlyingScrip": security_id,
-        "UnderlyingSeg": "IDX_I",
+        "UnderlyingSeg": "NSE_FNO",
         "Expiry": expiry
     }
 
     try:
-        res = requests.post(url, headers=headers, json=payload)
-
-        # ✅ DEBUG (IMPORTANT)
-        print("STATUS:", res.status_code)
-        print("RAW RESPONSE:", res.text)
-
-        # ✅ SAFE JSON PARSE
-        try:
-            data = res.json()
-        except:
-            return {"error": res.text}
-
+        data, err = safe_post(url, payload)
+        if err:
+            return {"_error": err}
         return data
 
     except Exception as e:
-        return {"error": str(e)}
+        return {"_error": str(e)}

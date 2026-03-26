@@ -2,6 +2,7 @@ import datetime as dt
 import logging
 import streamlit as st
 
+from core.token_manager import get_token
 from dhan_data.client import BASE_URL, DhanApiClient, safe_post
 from dhan_data.expiry import EXPIRY_PLACEHOLDER_NEAREST, get_expiry_list
 from dhan_data.instruments import get_symbol_data, load_instruments
@@ -167,17 +168,24 @@ def _empty_market_data(errors=None):
 @st.cache_data(ttl=5)
 def _fetch_ltp(instrument_key):
     try:
-        instruments = [
-            {"exchangeSegment": seg, "securityId": sec_id}
-            for seg, sec_id in instrument_key
-        ]
-        payload = {"instruments": instruments}
-        data, err = safe_post(f"{BASE_URL}/marketfeed/ltp", payload, timeout=5)
+        records = []
+        for seg, sec_id in instrument_key:
+            payload = {"securityId": str(sec_id), "exchangeSegment": seg}
+            data, err = safe_post(f"{BASE_URL}/v2/market/quote", payload, timeout=5)
+            if err:
+                return [], err
+            extracted = _extract_ltp_records(data)
+            if not extracted and isinstance(data, dict):
+                record = data.get("data") if "data" in data else data
+                if isinstance(record, dict):
+                    extracted = [record]
+            for record in extracted:
+                if isinstance(record, dict) and "securityId" not in record and "security_id" not in record:
+                    record["securityId"] = sec_id
+            records.extend(extracted)
     except Exception as exc:
         return [], str(exc)
-    if err or not data:
-        return [], err
-    return _extract_ltp_records(data), None
+    return records, None
 
 
 def _extract_ltp_records(payload):
@@ -189,6 +197,8 @@ def _extract_ltp_records(payload):
     if isinstance(data, list):
         return data
     if isinstance(data, dict):
+        if any(key in data for key in ("ltp", "lastPrice", "last_price", "securityId", "security_id")):
+            return [data]
         return [v for v in data.values() if isinstance(v, dict)]
     return []
 
@@ -211,7 +221,7 @@ def _map_ltp_record(record):
 def _fetch_expiry_list(security_id, segment):
     try:
         payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": segment}
-        data, err = safe_post(f"{BASE_URL}/optionchain/expirylist", payload, timeout=10)
+        data, err = safe_post(f"{BASE_URL}/v2/optionchain/expirylist", payload, timeout=10)
     except Exception as exc:
         _logger.warning("Expiry list fetch failed: %s", exc)
         return []
@@ -229,10 +239,10 @@ def _fetch_option_chain(security_id, segment, expiry):
     try:
         payload = {
             "UnderlyingScrip": int(security_id),
-            "UnderlyingSeg": segment,
+            "UnderlyingSeg": segment or "NSE_FNO",
             "expiryDate": expiry
         }
-        data, err = safe_post(f"{BASE_URL}/optionchain", payload, timeout=10)
+        data, err = safe_post(f"{BASE_URL}/v2/optionchain", payload, timeout=10)
         return data, err
     except Exception as exc:
         return {}, str(exc)
@@ -380,7 +390,7 @@ def _fetch_intraday(security_id, segment):
             "fromDate": from_date,
             "toDate": to_date
         }
-        data, err = safe_post(f"{BASE_URL}/charts/intraday", payload, timeout=10)
+        data, err = safe_post(f"{BASE_URL}/v2/charts/intraday", payload, timeout=10)
     except Exception as exc:
         return [], str(exc)
     if err or not data:
@@ -403,7 +413,7 @@ def _fetch_historical(security_id, segment):
             "fromDate": start.strftime("%Y-%m-%d"),
             "toDate": end.strftime("%Y-%m-%d")
         }
-        data, err = safe_post(f"{BASE_URL}/charts/historical", payload, timeout=10)
+        data, err = safe_post(f"{BASE_URL}/v2/charts/historical", payload, timeout=10)
     except Exception as exc:
         return [], str(exc)
     if err or not data:
@@ -459,6 +469,8 @@ def _detect_volume_spike(intraday_rows):
 @st.cache_data(ttl=10)
 def _build_market_data():
     errors = []
+    if not get_token():
+        return {"_error": "Missing Dhan token"}
 
     index_symbols = ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"]
     stock_symbols = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK"]
@@ -542,8 +554,9 @@ def _build_market_data():
         if not segment:
             errors.append(f"Option chain missing segment for {symbol}")
             continue
+        option_segment = "NSE_FNO"
         try:
-            expiries = get_expiry_list(symbol, segment)
+            expiries = get_expiry_list(symbol, option_segment)
         except Exception as exc:
             errors.append(f"{symbol} expiry error: {exc}")
             expiries = [EXPIRY_PLACEHOLDER_NEAREST]
@@ -556,7 +569,7 @@ def _build_market_data():
         for expiry in [current_expiry, next_expiry]:
             if not expiry:
                 continue
-            raw_chain, err = _fetch_option_chain(sec_id, segment, expiry)
+            raw_chain, err = _fetch_option_chain(sec_id, option_segment, expiry)
             if err:
                 errors.append(f"{symbol} option chain error: {err}")
                 continue
@@ -618,14 +631,21 @@ def _build_market_data():
     depth_symbol = "RELIANCE"
     sec_id, seg = _resolve_symbol(depth_symbol, STOCK_FALLBACKS)
     if sec_id and seg:
-        payload = {"instruments": [{"exchangeSegment": seg, "securityId": sec_id}]}
         try:
-            depth_data, err = safe_post(f"{BASE_URL}/marketfeed/quote", payload, timeout=10)
+            depth_payload = {"securityId": str(sec_id), "exchangeSegment": seg}
+            depth_data, err = safe_post(f"{BASE_URL}/v2/market/depth", depth_payload, timeout=10)
         except Exception as exc:
             depth_data, err = {}, str(exc)
         if err:
             errors.append(f"Depth error: {err}")
             depth_data = {}
+
+    auth_errors = [
+        err for err in errors
+        if "Unauthorized - check token" in err or "Missing Dhan token" in err
+    ]
+    if auth_errors:
+        return {"_error": auth_errors[0]}
 
     market_data = {
         "indian": indian_section,

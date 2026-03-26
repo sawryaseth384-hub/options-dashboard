@@ -1,45 +1,46 @@
 import streamlit as st
-import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime
 
+from core.token_manager import get_token
+from dhan_data.client import safe_post
+
 st.set_page_config(page_title="🔥 AI Option Trading System", layout="wide")
 
-# ---------- Authentication ----------
-ACCESS_TOKEN = st.secrets["ACCESS_TOKEN"]
-CLIENT_ID = st.secrets["CLIENT_ID"]
-headers = {
-    "access-token": ACCESS_TOKEN,
-    "client-id": CLIENT_ID,
-    "Content-Type": "application/json"
-}
+BASE_URL = "https://api.dhan.co"
+
+if not get_token():
+    st.error("Dhan API Unauthorized. Check token in secrets.")
+    st.stop()
 
 # ---------- Helper: Fetch Expiry List ----------
-def get_expiry_list(underlying_scrip=13, segment="IDX_I"):
-    url = "https://api.dhan.co/v2/optionchain/expirylist"
+def get_expiry_list(underlying_scrip=13, segment="NSE_FNO"):
+    url = f"{BASE_URL}/v2/optionchain/expirylist"
     payload = {"UnderlyingScrip": underlying_scrip, "UnderlyingSeg": segment}
-    resp = requests.post(url, headers=headers, json=payload)
-    if resp.status_code == 200:
-        data = resp.json()
-        if data.get("status") == "success":
-            return data.get("data", [])
+    data, err = safe_post(url, payload)
+    if err:
+        return {"_error": err}
+    if data.get("status") == "success":
+        return data.get("data", [])
     return []
 
 # ---------- Helper: Fetch Option Chain ----------
-def get_option_chain(underlying_scrip=13, segment="IDX_I", expiry=None):
+def get_option_chain(underlying_scrip=13, segment="NSE_FNO", expiry=None):
     if expiry is None:
         expiries = get_expiry_list(underlying_scrip, segment)
+        if isinstance(expiries, dict) and expiries.get("_error"):
+            return expiries
         if not expiries:
             return None
         expiry = expiries[0]
-    url = "https://api.dhan.co/v2/optionchain"
+    url = f"{BASE_URL}/v2/optionchain"
     payload = {"UnderlyingScrip": underlying_scrip, "UnderlyingSeg": segment, "Expiry": expiry}
-    resp = requests.post(url, headers=headers, json=payload)
-    if resp.status_code == 200:
-        data = resp.json()
-        if data.get("status") == "success":
-            return data
+    data, err = safe_post(url, payload)
+    if err:
+        return {"_error": err}
+    if data.get("status") == "success":
+        return data
     return None
 
 # ---------- Dashboard UI ----------
@@ -53,6 +54,9 @@ security_id = security_map[symbol]
 
 # Fetch expiry list
 expiries = get_expiry_list(security_id)
+if isinstance(expiries, dict) and expiries.get("_error"):
+    st.error("Dhan API Unauthorized. Check token in secrets.")
+    st.stop()
 if not expiries:
     st.error("No expiry dates found. Check your token and Data API subscription.")
     st.stop()
@@ -61,6 +65,9 @@ selected_expiry = st.selectbox("Select Expiry", expiries)
 
 # Fetch option chain
 option_data = get_option_chain(security_id, expiry=selected_expiry)
+if isinstance(option_data, dict) and option_data.get("_error"):
+    st.error("Dhan API Unauthorized. Check token in secrets.")
+    st.stop()
 if not option_data or "data" not in option_data or "oc" not in option_data["data"]:
     st.error("Option chain data not available.")
     st.stop()

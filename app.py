@@ -205,7 +205,7 @@ if not market_data:
     st.warning("No Data")
     st.stop()
 if isinstance(market_data, dict) and market_data.get("_error"):
-    st.error(f"Data refresh failed: {market_data['_error']}")
+    st.error("Dhan API Unauthorized. Check token in secrets.")
     st.stop()
 
 indian_section = _get_section(market_data, ["indian", "indices", "indian_market", "market", "header", "headers"])

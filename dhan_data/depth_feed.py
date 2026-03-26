@@ -44,8 +44,7 @@ def start_depth_feed():
     ws = websocket.WebSocketApp(
         "wss://api-feed.dhan.co",
         header=[
-            f"access-token: {headers['access-token']}",
-            f"client-id: {headers['client-id']}"
+            f"access-token: {headers.get('access-token', '')}"
         ],
         on_open=on_open,
         on_message=on_message,
