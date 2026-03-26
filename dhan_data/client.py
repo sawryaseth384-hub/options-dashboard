@@ -20,7 +20,6 @@ SEGMENT_ALIASES = {
     "IDX_I": "NSE_INDEX",
     "NSE_INDEX": "NSE_INDEX",
     "NSE_FNO": "NFO",
-    "NSE_FO": "NFO",
     "NFO": "NFO",
     "FNO": "NFO",
 }
@@ -241,6 +240,19 @@ def _validate_time_frame(time_frame):
     return value, None
 
 
+def _validate_expiry_code(expiry_code):
+    """Use expiryCode=0 for cash instruments; pass the Dhan instrument master expiry code for derivatives."""
+    if expiry_code is None or expiry_code == "":
+        return 0, None
+    try:
+        value = int(expiry_code)
+    except (TypeError, ValueError):
+        return None, _log_validation_error("Invalid parameters (400): expiry_code must be an integer")
+    if value < 0:
+        return None, _log_validation_error("Invalid parameters (400): expiry_code must be non-negative")
+    return value, None
+
+
 def extract_marketfeed_record(payload, exchange_segment, security_id):
     if not isinstance(payload, dict):
         return None
@@ -314,6 +326,7 @@ def sdk_intraday_daily_minute_charts(
     from_date,
     to_date,
     time_frame=5,
+    expiry_code=None,
 ):
     security_id, err = _validate_security_id(security_id)
     if err:
@@ -330,8 +343,10 @@ def sdk_intraday_daily_minute_charts(
     time_frame, err = _validate_time_frame(time_frame)
     if err:
         return None, err
+    expiry_code, err = _validate_expiry_code(expiry_code)
+    if err:
+        return None, err
     segment_key = _marketfeed_segment(exchange_segment)
-    expiry_code = 0  # Default expiryCode=0; update if derivatives require a specific expiry code.
     params = {
         "securityId": str(security_id),
         "exchangeSegment": segment_key,
@@ -352,6 +367,7 @@ def sdk_historical_minute_charts(
     from_date,
     to_date,
     time_frame=5,
+    expiry_code=None,
 ):
     security_id, err = _validate_security_id(security_id)
     if err:
@@ -368,8 +384,10 @@ def sdk_historical_minute_charts(
     time_frame, err = _validate_time_frame(time_frame)
     if err:
         return None, err
+    expiry_code, err = _validate_expiry_code(expiry_code)
+    if err:
+        return None, err
     segment_key = _marketfeed_segment(exchange_segment)
-    expiry_code = 0  # Default expiryCode=0; update if derivatives require a specific expiry code.
     params = {
         "securityId": str(security_id),
         "exchangeSegment": segment_key,

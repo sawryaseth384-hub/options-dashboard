@@ -120,6 +120,7 @@ def get_intraday(security_id, segment, extra_params=None):
     from_date = extra_params.get("fromDate") or dt.datetime.combine(today, dt.time(9, 15)).strftime("%Y-%m-%d %H:%M:%S")
     to_date = extra_params.get("toDate") or dt.datetime.combine(today, dt.time(15, 30)).strftime("%Y-%m-%d %H:%M:%S")
     time_frame = extra_params.get("time_frame") or extra_params.get("interval") or 5
+    expiry_code = extra_params.get("expiryCode") or extra_params.get("expiry_code")
     data, err = sdk_intraday_daily_minute_charts(
         security_id,
         segment,
@@ -127,6 +128,7 @@ def get_intraday(security_id, segment, extra_params=None):
         from_date,
         to_date,
         time_frame=time_frame,
+        expiry_code=expiry_code,
     )
     if err:
         return {"error": err}
@@ -144,6 +146,7 @@ def get_historical(security_id, segment, extra_params=None):
         end = end or today.strftime("%Y-%m-%d")
         start = start or (today - dt.timedelta(days=30)).strftime("%Y-%m-%d")
     time_frame = extra_params.get("time_frame") or extra_params.get("interval") or 5
+    expiry_code = extra_params.get("expiryCode") or extra_params.get("expiry_code")
     data, err = sdk_historical_minute_charts(
         security_id,
         segment,
@@ -151,6 +154,7 @@ def get_historical(security_id, segment, extra_params=None):
         start,
         end,
         time_frame=time_frame,
+        expiry_code=expiry_code,
     )
     if err:
         return {"error": err}
