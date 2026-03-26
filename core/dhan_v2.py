@@ -5,7 +5,7 @@ import requests
 BASE_URL = "https://api.dhan.co/v2"
 
 
-def _get_token():
+def _get_access_token():
     token = os.getenv("DHAN_ACCESS_TOKEN")
     if token:
         return token.strip()
@@ -15,13 +15,13 @@ def _get_token():
         secret_token = st.secrets.get("DHAN_ACCESS_TOKEN")
         if secret_token:
             return str(secret_token).strip()
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
     return None
 
 
 def get_headers():
-    token = _get_token()
+    token = _get_access_token()
     headers = {"Content-Type": "application/json"}
     if token:
         headers["access-token"] = token
@@ -56,7 +56,7 @@ def safe_request(endpoint, method="GET", params=None, payload=None):
         return response.json()
 
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": f"{method} {endpoint} failed: {exc}"}
 
 
 def extract_ltp(payload):
@@ -161,7 +161,7 @@ def get_option_chain(security_id, exchange_segment="NFO"):
         if contract_id in ltp_cache:
             ltp = ltp_cache[contract_id]
         else:
-            quote = get_ltp(contract_id, "NFO")
+            quote = get_ltp(contract_id, exchange_segment)
             ltp = extract_ltp(quote) if isinstance(quote, dict) else None
             if ltp is None:
                 ltp = 0
