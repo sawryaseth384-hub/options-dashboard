@@ -50,6 +50,13 @@ def _extract_security_id(contract):
     return _first_present(contract, ["security_id", "securityId", "sid", "scripId"])
 
 
+def _resolve_option_segment(segment):
+    normalized = normalize_exchange_segment(segment)
+    if normalized in (None, "NSE_INDEX", "NSE_EQ"):
+        return "NFO"
+    return normalized
+
+
 def _extract_quote_record(payload):
     if not payload:
         return None
@@ -99,7 +106,8 @@ def get_option_contracts(security_id, exchange_segment="NFO"):
 
 
 def get_expiry_list(security_id, segment="NSE_INDEX"):
-    contracts, err = get_option_contracts(security_id, "NFO")
+    option_segment = _resolve_option_segment(segment)
+    contracts, err = get_option_contracts(security_id, option_segment)
     if err:
         return [], err
     expiries = sorted({expiry for expiry in (_extract_expiry(c) for c in contracts) if expiry})
@@ -109,8 +117,9 @@ def get_expiry_list(security_id, segment="NSE_INDEX"):
 
 
 def get_option_chain(security_id, expiry=None, segment=None, exchange_segment=None):
-    underlying_segment = normalize_exchange_segment(exchange_segment or segment or "NSE_INDEX") or "NSE_INDEX"
-    contracts, err = get_option_contracts(security_id, "NFO")
+    underlying_segment = normalize_exchange_segment(segment or "NSE_INDEX") or "NSE_INDEX"
+    option_segment = _resolve_option_segment(exchange_segment or segment)
+    contracts, err = get_option_contracts(security_id, option_segment)
     if err:
         return None, err
     expiries = sorted({exp for exp in (_extract_expiry(c) for c in contracts) if exp})
@@ -132,7 +141,7 @@ def get_option_chain(security_id, expiry=None, segment=None, exchange_segment=No
         if sec_id in quote_cache:
             record = quote_cache[sec_id]
         else:
-            quote, quote_err = sdk_get_quote(sec_id, "NFO")
+            quote, quote_err = sdk_get_quote(sec_id, option_segment)
             if quote_err:
                 _logger.warning("Quote error for %s: %s", sec_id, quote_err)
             record = _extract_quote_record(quote)

@@ -383,7 +383,7 @@ def sdk_option_contracts(security_id, exchange_segment):
 def sdk_intraday_daily_minute_charts(security_id, exchange_segment, instrument_type, from_date, to_date, time_frame=5):
     exchange_segment = normalize_exchange_segment(exchange_segment)
     params = {
-        "security_id": str(security_id),
+        "security_id": int(security_id),
         "exchange_segment": exchange_segment,
         "instrument_type": instrument_type,
         "from_date": from_date,
@@ -402,7 +402,7 @@ def sdk_intraday_daily_minute_charts(security_id, exchange_segment, instrument_t
 def sdk_historical_minute_charts(security_id, exchange_segment, instrument_type, from_date, to_date, time_frame=5):
     exchange_segment = normalize_exchange_segment(exchange_segment)
     params = {
-        "security_id": str(security_id),
+        "security_id": int(security_id),
         "exchange_segment": exchange_segment,
         "instrument_type": instrument_type,
         "from_date": from_date,

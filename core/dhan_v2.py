@@ -14,6 +14,13 @@ from dhan_data.security_map import SECURITY_MAP
 _logger = logging.getLogger(__name__)
 
 
+def _to_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return value
+
+
 def _extract_quote_records(payload):
     if not payload:
         return []
@@ -148,13 +155,14 @@ def _flatten_option_chain(data):
         for strike, row in chain.items():
             ce = row.get("ce") or row.get("CE") or {}
             pe = row.get("pe") or row.get("PE") or {}
+            strike_value = _to_float(strike)
             if ce:
-                rows.append({"strike": strike, "type": "CE", "ltp": ce.get("last_price") or ce.get("ltp")})
+                rows.append({"strike": strike_value, "type": "CE", "ltp": ce.get("last_price") or ce.get("ltp")})
             if pe:
-                rows.append({"strike": strike, "type": "PE", "ltp": pe.get("last_price") or pe.get("ltp")})
+                rows.append({"strike": strike_value, "type": "PE", "ltp": pe.get("last_price") or pe.get("ltp")})
     elif isinstance(chain, list):
         for row in chain:
-            strike = row.get("strike") or row.get("strike_price") or row.get("strikePrice")
+            strike = _to_float(row.get("strike") or row.get("strike_price") or row.get("strikePrice"))
             opt_type = row.get("option_type") or row.get("optionType") or row.get("type")
             rows.append({"strike": strike, "type": opt_type, "ltp": row.get("ltp")})
     return rows
