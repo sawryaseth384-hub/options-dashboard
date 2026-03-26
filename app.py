@@ -9,6 +9,7 @@ except Exception as exc:
 
 st.set_page_config(page_title="Trading Dashboard", layout="wide")
 st.title("📈 Trading Dashboard")
+MARKET_DATA_CACHE_TTL = 60
 
 
 def _get_section(data, keys):
@@ -52,7 +53,7 @@ def _to_float(value):
         return None
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=MARKET_DATA_CACHE_TTL, show_spinner=False)
 def load_market_data():
     try:
         return build_market_data()

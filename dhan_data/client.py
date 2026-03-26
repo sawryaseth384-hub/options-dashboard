@@ -104,7 +104,9 @@ def _get_default_client():
 
 
 def safe_request(method, url, client, payload=None, params=None, headers=None, retries=None, timeout=None):
-    attempts = retries or getattr(client, "retries", DEFAULT_RETRIES) or DEFAULT_RETRIES
+    attempts = retries if retries is not None else getattr(client, "retries", DEFAULT_RETRIES)
+    if attempts is None:
+        attempts = DEFAULT_RETRIES
     last_error = None
     for attempt in range(1, attempts + 1):
         try:
