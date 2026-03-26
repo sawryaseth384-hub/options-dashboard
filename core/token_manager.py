@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 
 import pyotp
@@ -8,14 +7,11 @@ import streamlit as st
 
 _logger = logging.getLogger(__name__)
 _TOKEN_LOGGED = False
-AUTH_URL = os.getenv("DHAN_AUTH_URL", "https://auth.dhan.co/app/generateAccessToken")
+DEFAULT_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 MAX_TOKEN_ATTEMPTS = 3
 
 
-def _get_config_value(key):
-    value = os.getenv(key)
-    if value:
-        return value.strip()
+def _get_secret_value(key):
     try:
         secret_value = st.secrets.get(key)
     except Exception:
@@ -65,7 +61,8 @@ def _generate_totp(secret):
 def _request_access_token(client_id, pin, totp):
     if not client_id or not pin or not totp:
         return None, "Missing credentials for token generation"
-    url = f"{AUTH_URL}?dhanClientId={client_id}&pin={pin}&totp={totp}"
+    auth_url = _get_secret_value("DHAN_AUTH_URL") or DEFAULT_AUTH_URL
+    url = f"{auth_url}?dhanClientId={client_id}&pin={pin}&totp={totp}"
     try:
         response = requests.post(url, timeout=10)
     except Exception as exc:
@@ -86,12 +83,13 @@ def get_token(force_refresh=False):
     cached = st.session_state.get("token")
     if cached and not force_refresh:
         return cached
-    client_id = _get_config_value("CLIENT_ID")
-    pin = _get_config_value("PIN")
-    totp_secret = _get_config_value("TOTP_SECRET")
-    if not client_id or not pin or not totp_secret:
+    credentials = get_credentials()
+    if credentials.get("_error"):
         _logger.warning("Missing CLIENT_ID, PIN, or TOTP_SECRET in secrets.")
         return None
+    client_id = credentials["client_id"]
+    pin = credentials["pin"]
+    totp_secret = credentials["totp_secret"]
     for attempt in range(1, MAX_TOKEN_ATTEMPTS + 1):
         totp = _generate_totp(totp_secret)
         if not totp:
@@ -111,11 +109,25 @@ def get_client_id():
     cached = st.session_state.get("client_id")
     if cached:
         return cached
-    client_id = _get_config_value("CLIENT_ID")
+    client_id = _get_secret_value("CLIENT_ID")
     if client_id:
         st.session_state.client_id = client_id
         return client_id
     return None
+
+
+def get_credentials():
+    client_id = _get_secret_value("CLIENT_ID")
+    pin = _get_secret_value("PIN")
+    totp_secret = _get_secret_value("TOTP_SECRET")
+    st.write("DEBUG:", bool(client_id), bool(pin), bool(totp_secret))
+    if not client_id or not pin or not totp_secret:
+        return {"_error": "Missing credentials"}
+    return {
+        "client_id": client_id,
+        "pin": pin,
+        "totp_secret": totp_secret,
+    }
 
 
 def clear_token():
