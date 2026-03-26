@@ -1,85 +1,69 @@
-import datetime as dt
 import logging
 import time
-from urllib.parse import urlparse
 
-import pyotp
-import requests
-import streamlit as st
+try:
+    import streamlit as st
+except Exception:  # pragma: no cover - streamlit not available in some contexts
+    st = None
 
 from utils.secrets import get_secret
 
 _logger = logging.getLogger(__name__)
 
-DEFAULT_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
-MAX_TOKEN_ATTEMPTS = 3
-TOKEN_VALIDITY_SECONDS = 24 * 60 * 60  # fallback lifespan when API expiry is unavailable
-TOKEN_REFRESH_BUFFER_SECONDS = 60 * 60  # refresh one hour early to avoid mid-session expiry
-TOKEN_TTL_SECONDS = max(TOKEN_VALIDITY_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS, 0)
-EPOCH_MS_THRESHOLD = 10_000_000_000  # treat larger numbers as millisecond epoch
-EPOCH_S_THRESHOLD = 1_000_000_000  # treat numbers above as seconds epoch
 TOKEN_SESSION_KEY = "dhan_access_token"
 TOKEN_EXPIRY_KEY = "dhan_access_token_expiry"
 
 _TOKEN_LOGGED = False
-_TOKEN_EXPIRY_WARNED = False
 _TOKEN_MISSING_WARNED = False
+_TOKEN_EXPIRED_WARNED = False
 _SECRETS_WARNED = False
 _TOKEN_CACHE = {"token": None, "expires_at": None}
 
-CLIENT_ID = get_secret("CLIENT_ID")
-PIN = get_secret("PIN")
-TOTP_SECRET = get_secret("TOTP_SECRET")
-ACCESS_TOKEN = get_secret("DHAN_ACCESS_TOKEN")
-
-print("CLIENT_ID:", CLIENT_ID is not None)
-print("TOKEN:", ACCESS_TOKEN is not None)
 
 def _show_streamlit_error(message):
+    if st is None:
+        return
     try:
         st.error(message)
     except Exception:
         pass
 
 
+def _get_secret_value(key):
+    value = get_secret(key)
+    return str(value).strip() if value else ""
+
+
 def _report_missing_secrets():
     global _SECRETS_WARNED
     if _SECRETS_WARNED:
         return
-    missing = [name for name, value in {"CLIENT_ID": CLIENT_ID, "PIN": PIN, "TOTP_SECRET": TOTP_SECRET}.items() if not value]
+    client_id = _get_secret_value("CLIENT_ID")
+    token = _get_secret_value("DHAN_ACCESS_TOKEN")
+    missing = [name for name, value in {"CLIENT_ID": client_id, "DHAN_ACCESS_TOKEN": token}.items() if not value]
     if not missing:
         return
     _SECRETS_WARNED = True
-    _logger.warning("Missing secrets: %s", ", ".join(missing))
-    _show_streamlit_error("Missing credentials in Streamlit secrets. Update CLIENT_ID, PIN, and TOTP_SECRET.")
+    _logger.warning("Missing credentials: %s", ", ".join(missing))
+    _show_streamlit_error(f"Missing credentials in Streamlit secrets. Update {', '.join(missing)}.")
 
 
-def _report_missing_token(error=None):
+def _report_missing_token():
     global _TOKEN_MISSING_WARNED
     if _TOKEN_MISSING_WARNED:
         return
     _TOKEN_MISSING_WARNED = True
-    if error:
-        _logger.warning("Missing token. %s", error)
-    else:
-        _logger.warning("Missing token.")
-    _show_streamlit_error("Missing token. Please set DHAN_ACCESS_TOKEN or credentials in Streamlit secrets.")
+    _logger.warning("Missing Dhan access token.")
+    _show_streamlit_error("Missing access token. Set CLIENT_ID and DHAN_ACCESS_TOKEN in Streamlit secrets.")
 
 
-_report_missing_secrets()
-
-
-def _get_secret_value(key):
-    if key == "CLIENT_ID":
-        return str(CLIENT_ID).strip() if CLIENT_ID else ""
-    if key == "PIN":
-        return str(PIN).strip() if PIN else ""
-    if key == "TOTP_SECRET":
-        return str(TOTP_SECRET).strip() if TOTP_SECRET else ""
-    if key == "DHAN_ACCESS_TOKEN":
-        return str(ACCESS_TOKEN).strip() if ACCESS_TOKEN else ""
-    value = get_secret(key)
-    return str(value).strip() if value else ""
+def _report_expired_token():
+    global _TOKEN_EXPIRED_WARNED
+    if _TOKEN_EXPIRED_WARNED:
+        return
+    _TOKEN_EXPIRED_WARNED = True
+    _logger.warning("Cached access token expired.")
+    _show_streamlit_error("Token expired. Update DHAN_ACCESS_TOKEN in Streamlit secrets.")
 
 
 def _mask_token(token):
@@ -97,83 +81,13 @@ def _log_token_once(token):
     _logger.info("Dhan access token loaded: %s", _mask_token(token))
 
 
-def _extract_access_token(payload):
-    if not isinstance(payload, dict):
-        return None
-    for key in ("accessToken", "access_token", "access-token", "token"):
-        token = payload.get(key)
-        if token:
-            return token
-    nested = payload.get("data") or payload.get("result")
-    if isinstance(nested, dict):
-        for key in ("accessToken", "access_token", "access-token", "token"):
-            token = nested.get(key)
-            if token:
-                return token
-    return None
-
-
-def _parse_expiry(value):
-    """Convert expiry values to epoch seconds.
-
-    Numeric values above EPOCH_MS_THRESHOLD are treated as epoch milliseconds,
-    above EPOCH_S_THRESHOLD as epoch seconds, and smaller values are treated as
-    relative seconds (expiresIn style).
-    """
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        numeric = float(value)
-        if numeric > EPOCH_MS_THRESHOLD:
-            return numeric / 1000
-        if numeric > EPOCH_S_THRESHOLD:
-            return numeric
-        return time.time() + numeric
-    if isinstance(value, str):
-        stripped = value.strip()
-        if not stripped:
-            return None
-        if stripped.isdigit():
-            return _parse_expiry(int(stripped))
-        try:
-            parsed = dt.datetime.fromisoformat(stripped.replace("Z", "+00:00"))
-        except Exception:
-            return None
-        return parsed.timestamp()
-    return None
-
-
-def _extract_expiry(payload):
-    if not isinstance(payload, dict):
-        return None
-    possible = (
-        payload.get("expiresIn"),
-        payload.get("tokenValidity"),
-        payload.get("validTill"),
-        payload.get("expiry"),
-        payload.get("expiresAt"),
-    )
-    nested = payload.get("data") or payload.get("result") or {}
-    if isinstance(nested, dict):
-        possible += (
-            nested.get("expiresIn"),
-            nested.get("tokenValidity"),
-            nested.get("validTill"),
-            nested.get("expiry"),
-            nested.get("expiresAt"),
-        )
-    for value in possible:
-        expiry = _parse_expiry(value)
-        if expiry:
-            return expiry
-    return None
-
-
 def _get_cached_token():
     token = _TOKEN_CACHE.get("token")
     expires_at = _TOKEN_CACHE.get("expires_at")
     if token:
         return token, expires_at
+    if st is None:
+        return None, None
     try:
         token = st.session_state.get(TOKEN_SESSION_KEY)
         expires_at = st.session_state.get(TOKEN_EXPIRY_KEY)
@@ -186,110 +100,41 @@ def _get_cached_token():
 def _cache_token(token, expires_at=None):
     if not token:
         return
-    if not expires_at:
-        expires_at = time.time() + TOKEN_TTL_SECONDS
     _TOKEN_CACHE["token"] = token
     _TOKEN_CACHE["expires_at"] = expires_at
+    if st is None:
+        return
     try:
         st.session_state[TOKEN_SESSION_KEY] = token
-        st.session_state[TOKEN_EXPIRY_KEY] = expires_at
+        if expires_at is not None:
+            st.session_state[TOKEN_EXPIRY_KEY] = expires_at
     except Exception:
         pass
 
 
 def _is_expired(expires_at):
     if not expires_at:
-        return True
+        return False
     try:
         return time.time() >= float(expires_at)
     except Exception:
-        return True
-
-
-def generate_totp(secret=None):
-    """Generate a TOTP code using the configured secret."""
-    secret = secret or _get_secret_value("TOTP_SECRET")
-    if not secret:
-        _logger.warning("TOTP secret missing in secrets.")
-        return None
-    try:
-        return pyotp.TOTP(secret).now()
-    except Exception as exc:
-        _logger.warning("TOTP generation failed: %s", exc)
-        return None
-
-
-def _login():
-    client_id = _get_secret_value("CLIENT_ID")
-    pin = _get_secret_value("PIN")
-    totp_secret = _get_secret_value("TOTP_SECRET")
-    if not client_id or not pin or not totp_secret:
-        _logger.warning("Missing CLIENT_ID, PIN, or TOTP_SECRET in secrets.")
-        _report_missing_secrets()
-        return None, None, "Missing credentials for token generation"
-    totp = generate_totp(totp_secret)
-    if not totp:
-        return None, None, "Failed to generate TOTP code"
-    auth_url = _get_secret_value("DHAN_AUTH_URL") or DEFAULT_AUTH_URL
-    parsed_url = urlparse(auth_url)
-    if parsed_url.scheme != "https" or not parsed_url.netloc:
-        return None, None, "Auth URL must be a valid HTTPS endpoint"
-    payload = {"dhanClientId": client_id, "pin": pin, "totp": totp}
-    try:
-        response = requests.post(auth_url, json=payload, timeout=10, verify=True)
-        if response.status_code != 200:
-            _logger.warning("Auth endpoint returned %s, retrying with query params.", response.status_code)
-            response = requests.post(auth_url, params=payload, timeout=10, verify=True)
-    except Exception as exc:
-        return None, None, str(exc)
-    if response.status_code != 200:
-        return None, None, f"HTTP {response.status_code}"
-    try:
-        payload = response.json()
-    except Exception as exc:
-        return None, None, f"Invalid JSON response: {exc}"
-    token = _extract_access_token(payload)
-    if not token:
-        return None, None, "Access token missing in response"
-    expiry = _extract_expiry(payload)
-    return token, expiry, None
-
-
-def login_and_get_token():
-    token, expiry, error = _login()
-    if token:
-        _cache_token(token, expiry)
-        _log_token_once(token)
-        return token
-    _logger.warning("Token login failed: %s", error)
-    return None
+        return False
 
 
 def get_access_token(force_refresh=False):
-    global _TOKEN_EXPIRY_WARNED
     cached_token, expires_at = _get_cached_token()
-    cached_token_present = bool(cached_token)
-    if cached_token and not expires_at and not _TOKEN_EXPIRY_WARNED:
-        _TOKEN_EXPIRY_WARNED = True
-        _logger.warning("Cached token missing expiry metadata; refresh will be attempted.")
-    if cached_token and not force_refresh and not _is_expired(expires_at):
+    if cached_token and _is_expired(expires_at):
+        clear_token()
+        _report_expired_token()
+        cached_token = None
+    if cached_token and not force_refresh:
         return cached_token
-    if not cached_token and not force_refresh:
-        configured_token = _get_secret_value("DHAN_ACCESS_TOKEN")
-        if configured_token:
-            _cache_token(configured_token)
-            _log_token_once(configured_token)
-            return configured_token
-    for attempt in range(1, MAX_TOKEN_ATTEMPTS + 1):
-        token = login_and_get_token()
-        if token:
-            if cached_token_present or force_refresh:
-                _logger.info("Token refreshed.")
-            else:
-                _logger.info("Token generated.")
-            return token
-        if attempt < MAX_TOKEN_ATTEMPTS:
-            time.sleep(0.5 * attempt)
+    configured_token = _get_secret_value("DHAN_ACCESS_TOKEN")
+    if configured_token:
+        _cache_token(configured_token, expires_at)
+        _log_token_once(configured_token)
+        return configured_token
+    _report_missing_secrets()
     _report_missing_token()
     return None
 
@@ -300,28 +145,16 @@ def get_token(force_refresh=False):
 
 
 def get_client_id():
-    cached = None
-    try:
-        cached = st.session_state.get("client_id")
-    except Exception:
-        cached = None
-    if cached:
-        return cached
     client_id = _get_secret_value("CLIENT_ID")
-    if client_id:
-        try:
-            st.session_state.client_id = client_id
-        except Exception:
-            pass
-        return client_id
-    return None
+    if not client_id:
+        _report_missing_secrets()
+    return client_id or None
 
 
 def get_credentials():
     client_id = _get_secret_value("CLIENT_ID")
-    pin = _get_secret_value("PIN")
-    totp_secret = _get_secret_value("TOTP_SECRET")
-    credentials = {"CLIENT_ID": client_id, "PIN": pin, "TOTP_SECRET": totp_secret}
+    token = _get_secret_value("DHAN_ACCESS_TOKEN")
+    credentials = {"CLIENT_ID": client_id, "DHAN_ACCESS_TOKEN": token}
     missing = [name for name, value in credentials.items() if not value]
     if missing:
         _logger.debug("Missing credentials: %s", ", ".join(missing))
@@ -333,6 +166,8 @@ def get_credentials():
 def clear_token():
     _TOKEN_CACHE["token"] = None
     _TOKEN_CACHE["expires_at"] = None
+    if st is None:
+        return
     try:
         if TOKEN_SESSION_KEY in st.session_state:
             del st.session_state[TOKEN_SESSION_KEY]
