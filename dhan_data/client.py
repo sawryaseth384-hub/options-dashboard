@@ -126,6 +126,8 @@ def safe_request(method, url, client, payload=None, params=None, headers=None, r
         if error is None and data is not None:
             return data, None
         last_error = error or last_error
+        if error and any(marker in error for marker in ("Unauthorized", "Missing Dhan token")):
+            break
         if attempt < attempts:
             time.sleep(0.5 * attempt)
     _logger.warning("Request failed after %s attempts: %s", attempts, last_error)

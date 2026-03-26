@@ -11,7 +11,7 @@ _TOKEN_LOGGED = False
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 
 
-def _get_secret_value(key):
+def _get_env_or_secret_value(key):
     value = os.getenv(key)
     if value:
         return value.strip()
@@ -85,9 +85,9 @@ def get_token(force_refresh=False):
     cached = st.session_state.get("token")
     if cached and not force_refresh:
         return cached
-    client_id = _get_secret_value("CLIENT_ID")
-    pin = _get_secret_value("PIN")
-    totp_secret = _get_secret_value("TOTP_SECRET")
+    client_id = _get_env_or_secret_value("CLIENT_ID")
+    pin = _get_env_or_secret_value("PIN")
+    totp_secret = _get_env_or_secret_value("TOTP_SECRET")
     if not client_id or not pin or not totp_secret:
         _logger.warning("Missing CLIENT_ID, PIN, or TOTP_SECRET in secrets.")
         return None
@@ -110,7 +110,7 @@ def get_client_id():
     cached = st.session_state.get("client_id")
     if cached:
         return cached
-    client_id = _get_secret_value("CLIENT_ID")
+    client_id = _get_env_or_secret_value("CLIENT_ID")
     if client_id:
         st.session_state.client_id = client_id
         return client_id
