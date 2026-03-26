@@ -11,7 +11,7 @@ _logger = logging.getLogger(__name__)
 
 DEFAULT_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 MAX_TOKEN_ATTEMPTS = 3
-TOKEN_VALIDITY_SECONDS = 24 * 60 * 60  # full token lifespan
+TOKEN_VALIDITY_SECONDS = 24 * 60 * 60  # fallback lifespan when API expiry is unavailable
 TOKEN_REFRESH_BUFFER_SECONDS = 60 * 60  # refresh one hour early to avoid mid-session expiry
 TOKEN_TTL_SECONDS = TOKEN_VALIDITY_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS
 EPOCH_MS_THRESHOLD = 10_000_000_000  # treat larger numbers as millisecond epoch
@@ -187,7 +187,7 @@ def _login():
         return None, None, "Auth URL must use HTTPS"
     payload = {"dhanClientId": client_id, "pin": pin, "totp": totp}
     try:
-        response = requests.post(auth_url, json=payload, timeout=10)
+        response = requests.post(auth_url, json=payload, timeout=10, verify=True)
     except Exception as exc:
         return None, None, str(exc)
     if response.status_code != 200:
@@ -260,6 +260,7 @@ def get_credentials():
     credentials = {"CLIENT_ID": client_id, "PIN": pin, "TOTP_SECRET": totp_secret}
     missing = [name for name, value in credentials.items() if not value]
     if missing:
+        _logger.debug("Missing credentials: %s", ", ".join(missing))
         _logger.warning("Missing required credentials.")
         return {"_error": "Missing required credentials"}
     return {
