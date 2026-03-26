@@ -206,6 +206,7 @@ if not market_data:
     st.stop()
 if isinstance(market_data, dict) and market_data.get("_error"):
     st.error("Dhan API Unauthorized. Check token in secrets.")
+    st.caption(f"Details: {market_data['_error']}")
     st.stop()
 
 indian_section = _get_section(market_data, ["indian", "indices", "indian_market", "market", "header", "headers"])

@@ -243,9 +243,9 @@ def _fetch_expiry_list(security_id, segment):
 
 
 @st.cache_data(ttl=30)
-def _fetch_option_chain(security_id, segment, expiry):
+def _fetch_option_chain(security_id, segment, expiry, symbol=None):
     try:
-        segment = _normalize_option_segment(segment)
+        segment = _normalize_option_segment(segment, symbol)
         payload = {
             "UnderlyingScrip": int(security_id),
             "UnderlyingSeg": segment,
@@ -578,7 +578,7 @@ def _build_market_data():
         for expiry in [current_expiry, next_expiry]:
             if not expiry:
                 continue
-            raw_chain, err = _fetch_option_chain(sec_id, option_segment, expiry)
+            raw_chain, err = _fetch_option_chain(sec_id, option_segment, expiry, symbol=symbol)
             if err:
                 errors.append(f"{symbol} option chain error: {err}")
                 continue
