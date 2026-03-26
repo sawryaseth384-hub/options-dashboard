@@ -2,9 +2,15 @@ import os
 
 
 def get_secret(key, default=None):
+    env_value = os.getenv(key, default)
     try:
         import streamlit as st
 
-        return st.secrets.get(key, os.getenv(key, default))
+        value = st.secrets.get(key, None)
+        if value is None:
+            return env_value
+        if isinstance(value, str) and not value.strip():
+            return env_value
+        return value
     except Exception:
-        return os.getenv(key, default)
+        return env_value

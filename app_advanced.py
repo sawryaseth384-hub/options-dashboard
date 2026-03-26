@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-from core.token_manager import get_token
+from core import token_manager
 from dhan_data.option_chain import get_expiry_list as fetch_expiry_list, get_option_chain as fetch_option_chain
 
 st.set_page_config(page_title="🔥 AI Option Trading System", layout="wide")
@@ -33,10 +33,24 @@ def get_option_chain(underlying_scrip=13, segment="NSE_INDEX", expiry=None):
 st.title("🔥 AI Option Trading Dashboard")
 st.markdown("### Live Data + AI Signals")
 
-token_available = bool(get_token())
-if not token_available:
-    st.error("Missing access token. Set CLIENT_ID and DHAN_ACCESS_TOKEN in Streamlit secrets.")
-    st.info("Once updated, reload this page to fetch live data.")
+
+def _show_credential_status():
+    client_id, token = token_manager.get_credential_status()
+    st.sidebar.subheader("Credentials")
+    st.sidebar.write(f"CLIENT_ID loaded: {bool(client_id)}")
+    st.sidebar.write(f"DHAN_ACCESS_TOKEN loaded: {bool(token)}")
+    return client_id, token
+
+
+client_id, token = _show_credential_status()
+if not client_id or not token:
+    st.error(
+        "Missing credentials. Set CLIENT_ID and DHAN_ACCESS_TOKEN in Streamlit secrets "
+        "(primary) or environment variables."
+    )
+    st.code('CLIENT_ID = "your_client_id"\nDHAN_ACCESS_TOKEN = "your_access_token"', language="toml")
+    st.info("Copy .streamlit/secrets.toml.example to .streamlit/secrets.toml, then reload this page.")
+    st.stop()
 
 
 def render_dashboard():
@@ -147,5 +161,4 @@ def render_dashboard():
     st.caption("Data refreshes on page reload. Update DHAN_ACCESS_TOKEN if it expires.")
 
 
-if token_available:
-    render_dashboard()
+render_dashboard()
