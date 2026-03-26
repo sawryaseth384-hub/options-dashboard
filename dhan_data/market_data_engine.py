@@ -52,7 +52,11 @@ _logger = logging.getLogger(__name__)
 
 
 def _get_client():
-    return DhanApiClient()
+    client = st.session_state.get("dhan_api_client")
+    if client is None:
+        client = DhanApiClient()
+        st.session_state["dhan_api_client"] = client
+    return client
 
 
 def _as_float(value):

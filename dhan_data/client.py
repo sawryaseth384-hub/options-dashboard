@@ -7,6 +7,7 @@ from core import token_manager
 
 BASE_URL = "https://api.dhan.co"
 DEFAULT_RETRIES = 3
+AUTH_ERROR_MARKERS = ("Unauthorized", "Missing Dhan token")
 
 
 def _full_url(path):
@@ -75,6 +76,8 @@ class DhanApiClient:
                 )
             except Exception as exc:
                 return None, str(exc)
+            if response.status_code == 401:
+                return None, "Unauthorized - token refresh failed"
         if response.status_code != 200:
             return None, f"HTTP {response.status_code}"
         try:
@@ -123,7 +126,7 @@ def safe_request(method, url, client, payload=None, params=None, headers=None, r
         if error is None and data is not None:
             return data, None
         last_error = error or last_error
-        if error and any(marker in error for marker in ("Unauthorized", "Missing Dhan token")):
+        if error and any(marker in error for marker in AUTH_ERROR_MARKERS):
             break
         if attempt < attempts:
             time.sleep(0.5 * attempt)
