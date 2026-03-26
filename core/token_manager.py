@@ -7,7 +7,7 @@ _TOKEN_LOGGED = False
 
 
 def _get_env_value(key):
-    """Return a stripped environment/secret value or an empty string."""
+    """Return a stripped environment or Streamlit secret value, or an empty string."""
     value = os.getenv(key)
     if value:
         return value.strip()

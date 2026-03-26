@@ -92,6 +92,14 @@ def _normalize_segment(segment, symbol=None):
     return seg
 
 
+def _normalize_option_segment(segment, symbol=None):
+    if segment is not None and str(segment).strip():
+        return segment
+    if symbol in DEFAULT_INDEXES:
+        return "IDX_I"
+    return "NSE_FNO"
+
+
 def _find_symbol_in_master(symbol_aliases):
     aliases = {_normalize_symbol(sym) for sym in symbol_aliases if sym}
     if not aliases:
@@ -237,9 +245,10 @@ def _fetch_expiry_list(security_id, segment):
 @st.cache_data(ttl=30)
 def _fetch_option_chain(security_id, segment, expiry):
     try:
+        segment = _normalize_option_segment(segment)
         payload = {
             "UnderlyingScrip": int(security_id),
-            "UnderlyingSeg": segment or "NSE_FNO",
+            "UnderlyingSeg": segment,
             "expiryDate": expiry
         }
         data, err = safe_post(f"{BASE_URL}/v2/optionchain", payload, timeout=10)
@@ -554,7 +563,7 @@ def _build_market_data():
         if not segment:
             errors.append(f"Option chain missing segment for {symbol}")
             continue
-        option_segment = "IDX_I" if symbol in DEFAULT_INDEXES else "NSE_FNO"
+        option_segment = _normalize_option_segment(segment, symbol)
         try:
             expiries = get_expiry_list(symbol, option_segment)
         except Exception as exc:
