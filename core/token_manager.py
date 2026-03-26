@@ -14,6 +14,8 @@ TOKEN_SESSION_KEY = "dhan_access_token"
 TOKEN_EXPIRY_KEY = "dhan_access_token_expiry"
 
 _TOKEN_LOGGED = False
+_TOKEN_STATUS_LOGGED = False
+_CLIENT_ID_STATUS_LOGGED = False
 _TOKEN_MISSING_WARNED = False
 _TOKEN_EXPIRED_WARNED = False
 _SECRETS_WARNED = False
@@ -45,7 +47,9 @@ def _report_missing_secrets():
         return
     _SECRETS_WARNED = True
     _logger.warning("Missing credentials: %s", ", ".join(missing))
-    _show_streamlit_error(f"Missing credentials in Streamlit secrets. Update {', '.join(missing)}.")
+    _show_streamlit_error(
+        f"Missing credentials. Set {', '.join(missing)} in Streamlit secrets or environment variables."
+    )
 
 
 def _report_missing_token():
@@ -54,7 +58,9 @@ def _report_missing_token():
         return
     _TOKEN_MISSING_WARNED = True
     _logger.warning("Missing Dhan access token.")
-    _show_streamlit_error("Missing access token. Set CLIENT_ID and DHAN_ACCESS_TOKEN in Streamlit secrets.")
+    _show_streamlit_error(
+        "Missing access token. Set CLIENT_ID and DHAN_ACCESS_TOKEN in Streamlit secrets or environment variables."
+    )
 
 
 def _report_expired_token():
@@ -79,6 +85,22 @@ def _log_token_once(token):
         return
     _TOKEN_LOGGED = True
     _logger.info("Dhan access token loaded: %s", _mask_token(token))
+
+
+def _log_client_id_status(client_id):
+    global _CLIENT_ID_STATUS_LOGGED
+    if _CLIENT_ID_STATUS_LOGGED:
+        return
+    _CLIENT_ID_STATUS_LOGGED = True
+    _logger.info("CLIENT_ID loaded: %s", "yes" if client_id else "no")
+
+
+def _log_token_status(token):
+    global _TOKEN_STATUS_LOGGED
+    if _TOKEN_STATUS_LOGGED:
+        return
+    _TOKEN_STATUS_LOGGED = True
+    _logger.info("DHAN_ACCESS_TOKEN loaded: %s", "yes" if token else "no")
 
 
 def _get_cached_token():
@@ -128,14 +150,17 @@ def get_access_token(force_refresh=False):
         _report_expired_token()
         cached_token = None
     if cached_token and not force_refresh:
+        _log_token_status(cached_token)
         return cached_token
     configured_token = _get_secret_value("DHAN_ACCESS_TOKEN")
     if configured_token:
         _cache_token(configured_token, expires_at)
         _log_token_once(configured_token)
+        _log_token_status(configured_token)
         return configured_token
     _report_missing_secrets()
     _report_missing_token()
+    _log_token_status(None)
     return None
 
 
@@ -148,6 +173,7 @@ def get_client_id():
     client_id = _get_secret_value("CLIENT_ID")
     if not client_id:
         _report_missing_secrets()
+    _log_client_id_status(client_id)
     return client_id or None
 
 
