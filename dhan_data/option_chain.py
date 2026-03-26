@@ -1,22 +1,26 @@
-def get_option_chain(sec, expiry):
+from dhan_data.client import safe_post
+
+
+def get_option_chain(sec, expiry, segment="IDX_I"):
     payload = {
         "UnderlyingScrip": int(sec),
-        "UnderlyingSeg": "IDX_I",
-        "expiryDate": expiry   # ✅ FIXED
+        "UnderlyingSeg": segment,
+        "expiryDate": expiry
     }
 
     data, err = safe_post("https://api.dhan.co/v2/optionchain", payload)
-
     if err:
         return None, err
-
-    if not data or data.get("status") != "success":
+    if not data or data.get("status") not in (None, "success"):
         return None, data
 
-    # ✅ handle both formats
-    if "oc" in data["data"]:
-        return data["data"]["oc"], None
-    elif "records" in data["data"]:
-        return data["data"]["records"], None
+    payload_data = data.get("data") if isinstance(data, dict) else None
+    if not payload_data:
+        return None, "No data"
+
+    if "oc" in payload_data:
+        return payload_data.get("oc"), None
+    if "records" in payload_data:
+        return payload_data.get("records"), None
 
     return None, "Parse Error"

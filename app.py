@@ -73,12 +73,12 @@ def render_header_row(title, symbols, section):
 
 def normalize_stocks(stocks):
     if stocks is None:
-        return pd.DataFrame(columns=["Symbol", "LTP", "Change %", "High", "Low"])
+        return pd.DataFrame(columns=["Symbol", "LTP", "Volume", "Change %", "High", "Low"])
     if isinstance(stocks, dict):
         stocks = stocks.get("data") or stocks.get("stocks") or []
     df = pd.DataFrame(stocks)
     if df.empty:
-        return pd.DataFrame(columns=["Symbol", "LTP", "Change %", "High", "Low"])
+        return pd.DataFrame(columns=["Symbol", "LTP", "Volume", "Change %", "High", "Low"])
     rename_map = {
         "symbol": "Symbol",
         "name": "Symbol",
@@ -86,6 +86,7 @@ def normalize_stocks(stocks):
         "ltp": "LTP",
         "last_price": "LTP",
         "price": "LTP",
+        "volume": "Volume",
         "change_pct": "Change %",
         "changePercent": "Change %",
         "change_percentage": "Change %",
@@ -95,50 +96,90 @@ def normalize_stocks(stocks):
         "low": "Low",
     }
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
-    for col in ["Symbol", "LTP", "Change %", "High", "Low"]:
+    for col in ["Symbol", "LTP", "Volume", "Change %", "High", "Low"]:
         if col not in df.columns:
             df[col] = None
-    return df[["Symbol", "LTP", "Change %", "High", "Low"]]
+    return df[["Symbol", "LTP", "Volume", "Change %", "High", "Low"]]
 
 
 def normalize_option_chain(options_data):
     if options_data is None:
-        return pd.DataFrame(columns=["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"])
+        return pd.DataFrame(columns=[
+            "Strike", "Call LTP", "Call OI", "Call Volume", "Call IV",
+            "Put LTP", "Put OI", "Put Volume", "Put IV"
+        ])
     if isinstance(options_data, dict):
         chain = options_data.get("chain") or options_data.get("oc") or options_data.get("option_chain")
     else:
         chain = options_data
     if chain is None:
-        return pd.DataFrame(columns=["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"])
+        return pd.DataFrame(columns=[
+            "Strike", "Call LTP", "Call OI", "Call Volume", "Call IV",
+            "Put LTP", "Put OI", "Put Volume", "Put IV"
+        ])
     if isinstance(chain, list):
         df = pd.DataFrame(chain)
-        rename_map = {
-            "strike": "Strike",
-            "call_oi": "Call OI",
-            "put_oi": "Put OI",
-            "call_ltp": "Call LTP",
-            "put_ltp": "Put LTP",
-        }
-        df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
-        for col in ["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"]:
+        if "ce" in df.columns or "pe" in df.columns:
+            rows = []
+            for row in chain:
+                ce = row.get("ce") or {}
+                pe = row.get("pe") or {}
+                rows.append({
+                    "Strike": row.get("strike"),
+                    "Call LTP": ce.get("ltp"),
+                    "Call OI": ce.get("oi"),
+                    "Call Volume": ce.get("volume"),
+                    "Call IV": ce.get("iv"),
+                    "Put LTP": pe.get("ltp"),
+                    "Put OI": pe.get("oi"),
+                    "Put Volume": pe.get("volume"),
+                    "Put IV": pe.get("iv")
+                })
+            df = pd.DataFrame(rows)
+        else:
+            rename_map = {
+                "strike": "Strike",
+                "call_oi": "Call OI",
+                "put_oi": "Put OI",
+                "call_ltp": "Call LTP",
+                "put_ltp": "Put LTP",
+            }
+            df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+        for col in [
+            "Strike", "Call LTP", "Call OI", "Call Volume", "Call IV",
+            "Put LTP", "Put OI", "Put Volume", "Put IV"
+        ]:
             if col not in df.columns:
                 df[col] = None
-        return df[["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"]]
+        return df[[
+            "Strike", "Call LTP", "Call OI", "Call Volume", "Call IV",
+            "Put LTP", "Put OI", "Put Volume", "Put IV"
+        ]]
     rows = []
     for strike, row in chain.items():
         call = row.get("CE") or row.get("ce") or {}
         put = row.get("PE") or row.get("pe") or {}
         rows.append({
             "Strike": _to_float(strike),
-            "Call OI": call.get("oi"),
-            "Put OI": put.get("oi"),
             "Call LTP": call.get("ltp") or call.get("last_price"),
+            "Call OI": call.get("oi"),
+            "Call Volume": call.get("volume"),
+            "Call IV": call.get("iv"),
             "Put LTP": put.get("ltp") or put.get("last_price"),
+            "Put OI": put.get("oi"),
+            "Put Volume": put.get("volume"),
+            "Put IV": put.get("iv")
         })
     df = pd.DataFrame(rows)
     if df.empty:
-        return pd.DataFrame(columns=["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"])
-    return df[["Strike", "Call OI", "Put OI", "Call LTP", "Put LTP"]]
+        return pd.DataFrame(columns=[
+            "Strike", "Call LTP", "Call OI", "Call Volume", "Call IV",
+            "Put LTP", "Put OI", "Put Volume", "Put IV"
+        ])
+    return df[[
+        "Strike", "Call LTP", "Call OI", "Call Volume", "Call IV",
+        "Put LTP", "Put OI", "Put Volume", "Put IV"
+    ]]
 
 
 def resolve_spot_price(options_data, market_data):
@@ -146,7 +187,7 @@ def resolve_spot_price(options_data, market_data):
     if isinstance(options_data, dict):
         spot = options_data.get("spot") or options_data.get("underlying_ltp") or options_data.get("ltp")
     if spot is None:
-        spot = _get_value(_get_section(market_data, ["indices", "indian_market", "market"]), ["NIFTY", "BANKNIFTY"])
+        spot = _get_value(_find_symbol(_get_section(market_data, ["indian", "indices", "indian_market", "market"]), "NIFTY"), ["ltp", "LTP"])
     return _to_float(spot)
 
 
@@ -166,7 +207,7 @@ if isinstance(market_data, dict) and market_data.get("_error"):
     st.error(f"Data refresh failed: {market_data['_error']}")
     st.stop()
 
-indian_section = _get_section(market_data, ["indices", "indian_market", "market", "header", "headers"])
+indian_section = _get_section(market_data, ["indian", "indices", "indian_market", "market", "header", "headers"])
 global_section = _get_section(market_data, ["global", "commodities", "global_commodities"])
 currency_section = _get_section(market_data, ["currency", "currencies", "fx"])
 
@@ -183,7 +224,8 @@ if stocks_df.empty:
 else:
     stocks_df["Change %"] = pd.to_numeric(stocks_df["Change %"], errors="coerce")
     stocks_df["LTP"] = pd.to_numeric(stocks_df["LTP"], errors="coerce")
-    sort_by = st.selectbox("Sort By", ["Change %", "LTP", "Symbol"], index=0)
+    stocks_df["Volume"] = pd.to_numeric(stocks_df["Volume"], errors="coerce")
+    sort_by = st.selectbox("Sort By", ["Change %", "LTP", "Volume", "Symbol"], index=0)
     sorted_df = stocks_df.sort_values(sort_by, ascending=False, na_position="last")
     st.dataframe(sorted_df, use_container_width=True)
 
@@ -201,7 +243,25 @@ st.divider()
 st.subheader("📊 Options Analytics")
 
 options_data = market_data.get("options") if isinstance(market_data, dict) else None
-option_chain_df = normalize_option_chain(options_data)
+options_by_symbol = options_data.get("by_symbol") if isinstance(options_data, dict) else {}
+available_symbols = list(options_by_symbol.keys()) if options_by_symbol else []
+default_symbol = options_data.get("selected_symbol") if isinstance(options_data, dict) else None
+symbol_index = available_symbols.index(default_symbol) if default_symbol in available_symbols else 0
+selected_symbol = st.selectbox("Underlying", available_symbols or ["NIFTY"], index=symbol_index)
+symbol_data = options_by_symbol.get(selected_symbol, {}) if options_by_symbol else {}
+expiry_list = symbol_data.get("expiries") or []
+default_expiry = options_data.get("selected_expiry") if isinstance(options_data, dict) else None
+expiry_index = expiry_list.index(default_expiry) if default_expiry in expiry_list else 0
+selected_expiry = st.selectbox("Expiry", expiry_list or ["No Data"], index=expiry_index)
+chain_data = symbol_data.get("chains", {}).get(selected_expiry, {}) if symbol_data else {}
+options_view = {
+    "chain": chain_data.get("chain_filtered") or chain_data.get("chain"),
+    "pcr": chain_data.get("pcr"),
+    "atm": chain_data.get("atm"),
+    "oi_analysis": chain_data.get("oi_analysis"),
+    "spot": chain_data.get("spot")
+}
+option_chain_df = normalize_option_chain(options_view)
 if option_chain_df.empty:
     st.warning("No Data")
 else:
@@ -209,16 +269,14 @@ else:
     option_chain_df["Put OI"] = pd.to_numeric(option_chain_df["Put OI"], errors="coerce")
     total_call = option_chain_df["Call OI"].sum()
     total_put = option_chain_df["Put OI"].sum()
-    pcr = None
-    if isinstance(options_data, dict):
-        pcr = options_data.get("pcr") or options_data.get("PCR")
+    pcr = options_view.get("pcr")
     if pcr is None and total_call and total_call != 0:
         pcr = total_put / total_call
     st.metric("PCR (Put/Call Ratio)", "No Data" if pcr is None else f"{pcr:.2f}")
 
-    spot_price = resolve_spot_price(options_data, market_data)
-    atm_strike = None
-    if spot_price is not None and not option_chain_df["Strike"].isna().all():
+    spot_price = resolve_spot_price(options_view, market_data)
+    atm_strike = options_view.get("atm")
+    if atm_strike is None and spot_price is not None and not option_chain_df["Strike"].isna().all():
         option_chain_df["Strike"] = pd.to_numeric(option_chain_df["Strike"], errors="coerce")
         strike_diff = (option_chain_df["Strike"] - spot_price).abs()
         atm_index = strike_diff.idxmin()
@@ -230,6 +288,15 @@ else:
         return ["background-color: #ffeeba" if row["Strike"] == atm_strike else "" for _ in row]
 
     st.dataframe(option_chain_df.style.apply(highlight_atm, axis=1), use_container_width=True)
+
+    oi_data = options_view.get("oi_analysis") or {}
+    summary = oi_data.get("summary") if isinstance(oi_data, dict) else None
+    if isinstance(summary, dict):
+        st.markdown("#### OI Analysis")
+        summary_df = pd.DataFrame(
+            [{"Signal": key, "Count": value} for key, value in summary.items()]
+        )
+        st.dataframe(summary_df, use_container_width=True)
 
 st.divider()
 st.subheader("📉 Intraday Chart")
@@ -250,5 +317,27 @@ else:
         if intraday_df.empty:
             st.warning("No Data")
         else:
-            intraday_df["EMA"] = intraday_df["close"].ewm(span=21).mean()
-            st.line_chart(intraday_df[["close", "EMA"]])
+        intraday_df["EMA"] = intraday_df["close"].ewm(span=21).mean()
+        st.line_chart(intraday_df[["close", "EMA"]])
+
+volume_spike = {}
+if isinstance(market_data, dict):
+    volume_spike = market_data.get("volume_spike") or {}
+if volume_spike:
+    spike = volume_spike.get("spike")
+    if spike:
+        st.warning("Volume spike detected")
+    elif spike is False:
+        st.info("No volume spike detected")
+
+st.divider()
+st.subheader("🧪 Debug Panel")
+meta = market_data.get("_meta") if isinstance(market_data, dict) else {}
+with st.expander("API Status & Errors", expanded=False):
+    errors = meta.get("errors") if isinstance(meta, dict) else None
+    if errors:
+        st.error("API issues detected:")
+        for err in errors:
+            st.write(f"- {err}")
+    else:
+        st.success("API status: OK")
