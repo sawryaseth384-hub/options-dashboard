@@ -54,7 +54,7 @@ def _show_credential_status():
     token = token_manager.get_access_token()
     st.sidebar.subheader("Credentials")
     st.sidebar.write(f"CLIENT_ID loaded: {'Yes' if client_id else 'No'}")
-    st.sidebar.write(f"TOKEN loaded: {'Yes' if token else 'No'}")
+    st.sidebar.write(f"DHAN_ACCESS_TOKEN loaded: {'Yes' if token else 'No'}")
 
 
 _show_credential_status()
