@@ -124,12 +124,12 @@ def _normalize_contracts(payload):
     return []
 
 
-def get_option_chain(security_id):
+def get_option_chain(security_id, exchange_segment="NFO"):
     contracts = safe_request(
         "/option/contracts",
         params={
             "security_id": security_id,
-            "exchange_segment": "NFO",
+            "exchange_segment": exchange_segment,
         },
     )
 
