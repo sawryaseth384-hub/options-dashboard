@@ -582,8 +582,6 @@ def _build_market_data():
         chain_data = symbol_data.get("chains", {}).get(default_expiry, {})
         default_chain = chain_data.get("chain_filtered") or chain_data.get("chain") or []
         default_pcr = chain_data.get("pcr")
-        if default_pcr is None and not default_chain:
-            default_pcr = 0
         default_atm = chain_data.get("atm")
         default_oi = chain_data.get("oi_analysis") or {}
     if default_pcr is None and not default_chain:
