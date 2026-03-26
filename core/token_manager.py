@@ -8,7 +8,7 @@ import streamlit as st
 
 _logger = logging.getLogger(__name__)
 _TOKEN_LOGGED = False
-AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
+AUTH_URL = os.getenv("DHAN_AUTH_URL", "https://auth.dhan.co/app/generateAccessToken")
 MAX_TOKEN_ATTEMPTS = 3
 
 

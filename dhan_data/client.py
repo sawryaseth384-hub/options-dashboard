@@ -47,6 +47,10 @@ class DhanApiClient:
         resolved_url = url if url.startswith("http") else _full_url(url)
         resolved_headers = self.get_headers(headers)
         if "access-token" not in resolved_headers:
+            refreshed = self.refresh_token()
+            if refreshed:
+                resolved_headers = self.get_headers(headers)
+        if "access-token" not in resolved_headers:
             return None, "Missing Dhan token"
         json_payload = payload if method.upper() in {"POST", "PUT", "PATCH"} else None
         try:
@@ -107,9 +111,7 @@ def _get_default_client():
 
 
 def safe_request(method, url, client, payload=None, params=None, headers=None, retries=None, timeout=None):
-    attempts = retries if retries is not None else getattr(client, "retries", DEFAULT_RETRIES)
-    if attempts is None:
-        attempts = DEFAULT_RETRIES
+    attempts = retries if retries is not None else client.retries
     last_error = None
     for attempt in range(1, attempts + 1):
         try:
