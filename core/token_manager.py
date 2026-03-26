@@ -183,6 +183,8 @@ def _login():
     if not totp:
         return None, None, "TOTP generation failed"
     auth_url = _get_secret_value("DHAN_AUTH_URL") or DEFAULT_AUTH_URL
+    if not auth_url.lower().startswith("https://"):
+        return None, None, "Auth URL must use HTTPS"
     payload = {"dhanClientId": client_id, "pin": pin, "totp": totp}
     try:
         response = requests.post(auth_url, json=payload, timeout=10)
@@ -258,7 +260,7 @@ def get_credentials():
     credentials = {"CLIENT_ID": client_id, "PIN": pin, "TOTP_SECRET": totp_secret}
     missing = [name for name, value in credentials.items() if not value]
     if missing:
-        _logger.warning("Missing required credentials: %s", ", ".join(missing))
+        _logger.warning("Missing required credentials.")
         return {"_error": "Missing required credentials"}
     return {
         "client_id": client_id,
