@@ -8,7 +8,7 @@ def get_option_chain():
     if err:
         return {"_error": err}
     if not expiries:
-        return {"_error": "No expiry found"}
+        return {"_error": "Expiry list empty"}
     data, err = fetch_option_chain(NIFTY_SECURITY_ID, expiry=expiries[0], segment="NSE_INDEX")
     if err:
         return {"_error": err}
