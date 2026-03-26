@@ -536,7 +536,10 @@ def _build_market_data():
         if not sec_id:
             errors.append(f"Option chain missing securityId for {symbol}")
             continue
-        segment = segment or "IDX_I"
+        segment = _normalize_segment(segment, symbol)
+        if not segment:
+            errors.append(f"Option chain missing segment for {symbol}")
+            continue
         try:
             expiries = get_expiry_list(symbol, segment)
         except Exception as exc:

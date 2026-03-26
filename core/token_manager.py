@@ -2,12 +2,16 @@ import os
 import streamlit as st
 
 
+def _get_env_value(key):
+    value = os.getenv(key)
+    return value.strip() if value else ""
+
+
 def get_token():
     cached = st.session_state.get("token")
     if cached:
         return cached
-    access_token = os.getenv("DHAN_ACCESS_TOKEN")
-    access_token = access_token.strip() if access_token else ""
+    access_token = _get_env_value("DHAN_ACCESS_TOKEN")
     if access_token:
         st.session_state.token = access_token
         return access_token
@@ -18,8 +22,7 @@ def get_client_id():
     cached = st.session_state.get("client_id")
     if cached:
         return cached
-    client_id = os.getenv("DHAN_CLIENT_ID")
-    client_id = client_id.strip() if client_id else ""
+    client_id = _get_env_value("DHAN_CLIENT_ID")
     if client_id:
         st.session_state.client_id = client_id
         return client_id
