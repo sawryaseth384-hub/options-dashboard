@@ -1,9 +1,8 @@
-import requests
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
 import time
-from core.token_manager import get_headers
+from dhan_data.client import safe_post
 
 BASE_URL = "https://api.dhan.co"
 _last_expired_call = 0
@@ -34,9 +33,8 @@ def get_expired_options(security_id, segment, option_type="CALL"):
             "fromDate": from_date.strftime("%Y-%m-%d"),
             "toDate": to_date.strftime("%Y-%m-%d")
         }
-        res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
-        raw = res.json()
-        if not raw or "data" not in raw:
+        raw, err = safe_post(url, payload, timeout=10)
+        if err or not raw or "data" not in raw:
             return None
         key = "ce" if option_type == "CALL" else "pe"
         data = raw["data"].get(key)

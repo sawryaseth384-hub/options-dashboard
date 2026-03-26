@@ -1,14 +1,13 @@
-import os
 import requests
 import json
 
-# 🔧 Set your token via environment/secrets
-ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN") or os.getenv("ACCESS_TOKEN") or ""
+from core.token_manager import get_access_token, get_headers
+
 BASE_URL = "https://api.dhan.co"
 
 def check_profile():
     url = f"{BASE_URL}/v2/profile"
-    headers = {"access-token": ACCESS_TOKEN}
+    headers = get_headers()
     resp = requests.get(url, headers=headers)
     if resp.status_code == 401:
         print("❌ Unauthorized - check token")
@@ -25,7 +24,7 @@ def check_profile():
 
 def test_expiry_list():
     url = f"{BASE_URL}/v2/optionchain/expirylist"
-    headers = {"access-token": ACCESS_TOKEN, "Content-Type": "application/json"}
+    headers = get_headers()
     payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I"}
     resp = requests.post(url, headers=headers, json=payload)
     if resp.status_code == 401:
@@ -42,7 +41,7 @@ def test_expiry_list():
 
 def test_option_chain(expiry):
     url = f"{BASE_URL}/v2/optionchain"
-    headers = {"access-token": ACCESS_TOKEN, "Content-Type": "application/json"}
+    headers = get_headers()
     payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I", "Expiry": expiry}
     print(f"\n📤 Sending payload to option chain:\n{json.dumps(payload, indent=2)}")
     resp = requests.post(url, headers=headers, json=payload)
@@ -63,8 +62,9 @@ def test_option_chain(expiry):
 
 if __name__ == "__main__":
     print("🔍 Testing Dhan API token...")
-    if not ACCESS_TOKEN:
-        print("❌ Missing Dhan token in environment.")
+    token = get_access_token()
+    if not token:
+        print("❌ Missing Dhan token. Check CLIENT_ID, PIN, and TOTP_SECRET.")
         exit()
     profile = check_profile()
     if not profile:

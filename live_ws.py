@@ -2,7 +2,7 @@ import websocket
 import json
 import threading
 import struct
-import streamlit as st
+from core.token_manager import get_access_token, get_client_id
 
 # 👉 global store
 live_data = {
@@ -21,8 +21,11 @@ def decode_ltp(message):
 
 def start_ws():
 
-    token = st.secrets.get("DHAN_ACCESS_TOKEN") or st.secrets.get("ACCESS_TOKEN")
-    client_id = st.secrets.get("CLIENT_ID") or st.secrets.get("DHAN_CLIENT_ID") or ""
+    token = get_access_token()
+    client_id = get_client_id() or ""
+    if not token or not client_id:
+        print("❌ Missing token or client id for websocket.")
+        return
     url = f"wss://api-feed.dhan.co?version=2&token={token}&clientId={client_id}&authType=2"
 
     def on_open(ws):
