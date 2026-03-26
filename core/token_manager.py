@@ -201,7 +201,7 @@ def login_and_get_token():
 
 def get_access_token(force_refresh=False):
     cached_token, expires_at = _get_cached_token()
-    if cached_token and not force_refresh and not _is_expired(expires_at):
+    if cached_token and expires_at and not force_refresh and not _is_expired(expires_at):
         return cached_token
     for attempt in range(1, MAX_TOKEN_ATTEMPTS + 1):
         token = login_and_get_token()
