@@ -298,6 +298,7 @@ else:
 st.divider()
 st.subheader("📉 Intraday Chart")
 
+intraday_df = None
 intraday_data = _get_section(market_data, ["intraday", "chart", "intraday_data"])
 if intraday_data is None:
     st.warning("No Data")
@@ -308,14 +309,19 @@ else:
         intraday_df = pd.DataFrame(intraday_data)
     if intraday_df.empty or "close" not in intraday_df.columns:
         st.warning("No Data")
+        intraday_df = None
     else:
         intraday_df["close"] = pd.to_numeric(intraday_df["close"], errors="coerce")
         intraday_df = intraday_df.dropna(subset=["close"])
         if intraday_df.empty:
             st.warning("No Data")
-        else:
-        intraday_df["EMA"] = intraday_df["close"].ewm(span=21).mean()
-        st.line_chart(intraday_df[["close", "EMA"]])
+            intraday_df = None
+
+if intraday_df is not None and not intraday_df.empty:
+    intraday_df["EMA"] = intraday_df["close"].ewm(span=21).mean()
+    st.line_chart(intraday_df[["close", "EMA"]])
+else:
+    intraday_df = None
 
 volume_spike = {}
 if isinstance(market_data, dict):
