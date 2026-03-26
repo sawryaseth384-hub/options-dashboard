@@ -24,7 +24,7 @@ def get_expiry(security_id, segment="IDX_I"):
 
 
 def get_expiry_list(symbol, segment="IDX_I"):
-    """Return expiry list with a 'nearest' placeholder when unavailable."""
+    """Return expiry list with a 'nearest' placeholder for UI selection when unavailable."""
     symbol = str(symbol or "").upper()
     security_id = SECURITY_MAP.get(symbol)
     if not security_id:

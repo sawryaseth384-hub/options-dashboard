@@ -38,6 +38,14 @@ STOCK_FALLBACKS = {
     if symbol not in DEFAULT_INDEXES
 }
 
+SEGMENT_ALIASES = {
+    "D": "NSE_EQ",
+    "EQ": "NSE_EQ",
+    "NSE_EQ": "NSE_EQ",
+    "I": "IDX_I",
+    "IDX_I": "IDX_I"
+}
+
 _logger = logging.getLogger(__name__)
 
 
@@ -76,10 +84,8 @@ def _normalize_segment(segment, symbol=None):
             return "NSE_EQ"
         return None
     seg = str(segment).upper()
-    if seg in {"D", "EQ", "NSE_EQ"}:
-        return "NSE_EQ"
-    if seg in {"I", "IDX_I"}:
-        return "IDX_I"
+    if seg in SEGMENT_ALIASES:
+        return SEGMENT_ALIASES[seg]
     return seg
 
 
@@ -526,9 +532,10 @@ def _build_market_data():
     options_by_symbol = {}
     for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"]:
         sec_id, segment = _resolve_symbol(symbol, INDEX_FALLBACKS)
-        if not sec_id or not segment:
+        if not sec_id:
             errors.append(f"Option chain missing securityId for {symbol}")
             continue
+        segment = segment or "IDX_I"
         try:
             expiries = get_expiry_list(symbol, segment)
         except Exception as exc:
@@ -586,6 +593,8 @@ def _build_market_data():
         default_oi = chain_data.get("oi_analysis") or {}
     if default_pcr is None and not default_chain:
         default_pcr = 0
+        if default_symbol:
+            _logger.info("PCR fallback used for %s", default_symbol)
 
     intraday_rows = []
     historical_rows = []
