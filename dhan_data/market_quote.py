@@ -1,7 +1,7 @@
 import time
 from dhan_data.client import safe_post
 
-BASE_URL = "https://api.dhan.co"
+BASE_URL = "https://api.dhan.co/v2"
 _last_call = 0
 
 
@@ -17,7 +17,7 @@ def get_ltp(security_id, segment):
         "exchangeSegment": segment
     }
 
-    data, err = safe_post(f"{BASE_URL}/v2/market/quote", payload, timeout=5)
+    data, err = safe_post(f"{BASE_URL}/market/quote", payload, timeout=5)
     _last_call = time.time()
     if err or not data:
         return 0

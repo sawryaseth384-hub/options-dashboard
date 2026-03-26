@@ -188,7 +188,7 @@ def _fetch_ltp(instrument_key):
         client = _get_client()
         for seg, sec_id in instrument_key:
             payload = {"securityId": str(sec_id), "exchangeSegment": seg}
-            data, err = safe_request("POST", f"{BASE_URL}/v2/market/quote", client, payload=payload, timeout=5)
+            data, err = safe_request("POST", f"{BASE_URL}/market/quote", client, payload=payload, timeout=5)
             if err:
                 return [], err
             extracted = _extract_ltp_records(data)
@@ -239,7 +239,7 @@ def _fetch_expiry_list(security_id, segment):
     try:
         payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": segment}
         client = _get_client()
-        data, err = safe_request("POST", f"{BASE_URL}/v2/optionchain/expirylist", client, payload=payload, timeout=10)
+        data, err = safe_request("POST", f"{BASE_URL}/optionchain/expirylist", client, payload=payload, timeout=10)
     except Exception as exc:
         _logger.warning("Expiry list fetch failed: %s", exc)
         return []
@@ -262,7 +262,7 @@ def _fetch_option_chain(security_id, segment, expiry, symbol=None):
             "expiryDate": expiry
         }
         client = _get_client()
-        data, err = safe_request("POST", f"{BASE_URL}/v2/optionchain", client, payload=payload, timeout=10)
+        data, err = safe_request("POST", f"{BASE_URL}/optionchain", client, payload=payload, timeout=10)
         return data, err
     except Exception as exc:
         return {}, str(exc)
@@ -411,7 +411,7 @@ def _fetch_intraday(security_id, segment):
             "toDate": to_date
         }
         client = _get_client()
-        data, err = safe_request("POST", f"{BASE_URL}/v2/charts/intraday", client, payload=payload, timeout=10)
+        data, err = safe_request("POST", f"{BASE_URL}/charts/intraday", client, payload=payload, timeout=10)
     except Exception as exc:
         return [], str(exc)
     if err or not data:
@@ -435,7 +435,7 @@ def _fetch_historical(security_id, segment):
             "toDate": end.strftime("%Y-%m-%d")
         }
         client = _get_client()
-        data, err = safe_request("POST", f"{BASE_URL}/v2/charts/historical", client, payload=payload, timeout=10)
+        data, err = safe_request("POST", f"{BASE_URL}/charts/historical", client, payload=payload, timeout=10)
     except Exception as exc:
         return [], str(exc)
     if err or not data:
@@ -657,7 +657,7 @@ def _build_market_data():
         try:
             depth_payload = {"securityId": str(sec_id), "exchangeSegment": seg}
             client = _get_client()
-            depth_data, err = safe_request("POST", f"{BASE_URL}/v2/market/depth", client, payload=depth_payload, timeout=10)
+            depth_data, err = safe_request("POST", f"{BASE_URL}/market/depth", client, payload=depth_payload, timeout=10)
         except Exception as exc:
             depth_data, err = {}, str(exc)
         if err:
