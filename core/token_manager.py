@@ -12,6 +12,8 @@ _logger = logging.getLogger(__name__)
 DEFAULT_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 MAX_TOKEN_ATTEMPTS = 3
 TOKEN_TTL_SECONDS = 23 * 60 * 60
+EPOCH_MS_THRESHOLD = 10_000_000_000
+EPOCH_S_THRESHOLD = 1_000_000_000
 TOKEN_SESSION_KEY = "dhan_access_token"
 TOKEN_EXPIRY_KEY = "dhan_access_token_expiry"
 
@@ -66,9 +68,9 @@ def _parse_expiry(value):
         return None
     if isinstance(value, (int, float)):
         numeric = float(value)
-        if numeric > 10_000_000_000:
+        if numeric > EPOCH_MS_THRESHOLD:
             return numeric / 1000
-        if numeric > 1_000_000_000:
+        if numeric > EPOCH_S_THRESHOLD:
             return numeric
         return time.time() + numeric
     if isinstance(value, str):
@@ -141,11 +143,11 @@ def _cache_token(token, expires_at=None):
 
 def _is_expired(expires_at):
     if not expires_at:
-        return False
+        return True
     try:
         return time.time() >= float(expires_at)
     except Exception:
-        return False
+        return True
 
 
 def generate_totp(secret=None):
@@ -201,7 +203,7 @@ def login_and_get_token():
 
 def get_access_token(force_refresh=False):
     cached_token, expires_at = _get_cached_token()
-    if cached_token and expires_at and not force_refresh and not _is_expired(expires_at):
+    if cached_token and not force_refresh and not _is_expired(expires_at):
         return cached_token
     for attempt in range(1, MAX_TOKEN_ATTEMPTS + 1):
         token = login_and_get_token()
@@ -238,8 +240,9 @@ def get_credentials():
     client_id = _get_secret_value("CLIENT_ID")
     pin = _get_secret_value("PIN")
     totp_secret = _get_secret_value("TOTP_SECRET")
-    if not client_id or not pin or not totp_secret:
-        return {"_error": "Missing credentials"}
+    missing = [name for name, value in (("CLIENT_ID", client_id), ("PIN", pin), ("TOTP_SECRET", totp_secret)) if not value]
+    if missing:
+        return {"_error": f"Missing credentials: {', '.join(missing)}"}
     return {
         "client_id": client_id,
         "pin": pin,
