@@ -3,8 +3,8 @@ import logging
 import streamlit as st
 
 from core.token_manager import get_token
-from dhan_data.client import BASE_URL, DhanApiClient, safe_post
-from dhan_data.expiry import EXPIRY_PLACEHOLDER_NEAREST, get_expiry_list
+from dhan_data.client import BASE_URL, DhanApiClient, safe_request
+from dhan_data.expiry import EXPIRY_PLACEHOLDER_NEAREST
 from dhan_data.instruments import get_symbol_data, load_instruments
 from dhan_data.security_map import SECURITY_MAP
 
@@ -49,6 +49,14 @@ SEGMENT_ALIASES = {
 }
 
 _logger = logging.getLogger(__name__)
+
+
+def _get_client():
+    client = st.session_state.get("dhan_api_client")
+    if client is None:
+        client = DhanApiClient()
+        st.session_state["dhan_api_client"] = client
+    return client
 
 
 def _as_float(value):
@@ -177,9 +185,10 @@ def _empty_market_data(errors=None):
 def _fetch_ltp(instrument_key):
     try:
         records = []
+        client = _get_client()
         for seg, sec_id in instrument_key:
             payload = {"securityId": str(sec_id), "exchangeSegment": seg}
-            data, err = safe_post(f"{BASE_URL}/v2/market/quote", payload, timeout=5)
+            data, err = safe_request("POST", f"{BASE_URL}/v2/market/quote", client, payload=payload, timeout=5)
             if err:
                 return [], err
             extracted = _extract_ltp_records(data)
@@ -229,7 +238,8 @@ def _map_ltp_record(record):
 def _fetch_expiry_list(security_id, segment):
     try:
         payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": segment}
-        data, err = safe_post(f"{BASE_URL}/v2/optionchain/expirylist", payload, timeout=10)
+        client = _get_client()
+        data, err = safe_request("POST", f"{BASE_URL}/v2/optionchain/expirylist", client, payload=payload, timeout=10)
     except Exception as exc:
         _logger.warning("Expiry list fetch failed: %s", exc)
         return []
@@ -251,7 +261,8 @@ def _fetch_option_chain(security_id, segment, expiry, symbol=None):
             "UnderlyingSeg": segment,
             "expiryDate": expiry
         }
-        data, err = safe_post(f"{BASE_URL}/v2/optionchain", payload, timeout=10)
+        client = _get_client()
+        data, err = safe_request("POST", f"{BASE_URL}/v2/optionchain", client, payload=payload, timeout=10)
         return data, err
     except Exception as exc:
         return {}, str(exc)
@@ -399,7 +410,8 @@ def _fetch_intraday(security_id, segment):
             "fromDate": from_date,
             "toDate": to_date
         }
-        data, err = safe_post(f"{BASE_URL}/v2/charts/intraday", payload, timeout=10)
+        client = _get_client()
+        data, err = safe_request("POST", f"{BASE_URL}/v2/charts/intraday", client, payload=payload, timeout=10)
     except Exception as exc:
         return [], str(exc)
     if err or not data:
@@ -422,7 +434,8 @@ def _fetch_historical(security_id, segment):
             "fromDate": start.strftime("%Y-%m-%d"),
             "toDate": end.strftime("%Y-%m-%d")
         }
-        data, err = safe_post(f"{BASE_URL}/v2/charts/historical", payload, timeout=10)
+        client = _get_client()
+        data, err = safe_request("POST", f"{BASE_URL}/v2/charts/historical", client, payload=payload, timeout=10)
     except Exception as exc:
         return [], str(exc)
     if err or not data:
@@ -479,7 +492,8 @@ def _detect_volume_spike(intraday_rows):
 def _build_market_data():
     errors = []
     if not get_token():
-        return {"_error": "Missing Dhan token"}
+        errors.append("Missing Dhan credentials (CLIENT_ID, PIN, or TOTP_SECRET).")
+        return _empty_market_data(errors)
 
     index_symbols = ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"]
     stock_symbols = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK"]
@@ -565,7 +579,7 @@ def _build_market_data():
             continue
         option_segment = _normalize_option_segment(segment, symbol)
         try:
-            expiries = get_expiry_list(symbol, option_segment)
+            expiries = _fetch_expiry_list(sec_id, option_segment)
         except Exception as exc:
             errors.append(f"{symbol} expiry error: {exc}")
             expiries = [EXPIRY_PLACEHOLDER_NEAREST]
@@ -642,19 +656,13 @@ def _build_market_data():
     if sec_id and seg:
         try:
             depth_payload = {"securityId": str(sec_id), "exchangeSegment": seg}
-            depth_data, err = safe_post(f"{BASE_URL}/v2/market/depth", depth_payload, timeout=10)
+            client = _get_client()
+            depth_data, err = safe_request("POST", f"{BASE_URL}/v2/market/depth", client, payload=depth_payload, timeout=10)
         except Exception as exc:
             depth_data, err = {}, str(exc)
         if err:
             errors.append(f"Depth error: {err}")
             depth_data = {}
-
-    auth_errors = [
-        err for err in errors
-        if "Unauthorized - check token" in err or "Missing Dhan token" in err
-    ]
-    if auth_errors:
-        return {"_error": auth_errors[0]}
 
     market_data = {
         "indian": indian_section,

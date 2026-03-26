@@ -7,3 +7,4 @@ streamlit-autorefresh
 python-dotenv
 websocket-client
 pyotp
+requests
