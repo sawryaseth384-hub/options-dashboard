@@ -39,7 +39,7 @@ if isinstance(ltp_data, dict) and "error" in ltp_data:
     st.error(ltp_data["error"])
 else:
     ltp_value = extract_ltp(ltp_data)
-    st.metric("LTP", "No Data" if not ltp_value else f"{ltp_value:.2f}")
+    st.metric("LTP", "No Data" if ltp_value is None else f"{ltp_value:.2f}")
 
 st.subheader("📊 Option Chain")
 chain = get_option_chain(security_id)

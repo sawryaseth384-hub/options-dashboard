@@ -22,10 +22,10 @@ def _get_token():
 
 def get_headers():
     token = _get_token()
-    return {
-        "access-token": token or "",
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["access-token"] = token
+    return headers
 
 
 def safe_request(endpoint, method="GET", params=None, payload=None):
@@ -61,13 +61,16 @@ def safe_request(endpoint, method="GET", params=None, payload=None):
 
 def extract_ltp(payload):
     if not isinstance(payload, dict):
-        return 0
+        return None
     if "last_traded_price" in payload:
-        return payload.get("last_traded_price", 0)
+        return payload.get("last_traded_price")
     nested = payload.get("data") or payload.get("result")
     if isinstance(nested, dict):
-        return nested.get("last_traded_price") or nested.get("ltp") or 0
-    return 0
+        if "last_traded_price" in nested:
+            return nested.get("last_traded_price")
+        if "ltp" in nested:
+            return nested.get("ltp")
+    return None
 
 
 def get_ltp(security_id, segment):
@@ -137,15 +140,12 @@ def get_option_chain(security_id):
     if not contract_list:
         return {"error": "No contracts found"}
 
-    expiries = sorted(
-        expiry
-        for expiry in {
-            c.get("expiry_date")
-            for c in contract_list
-            if c.get("expiry_date") is not None
-        }
-        if expiry
-    )
+    expiry_values = [
+        c.get("expiry_date")
+        for c in contract_list
+        if c.get("expiry_date") is not None
+    ]
+    expiries = sorted({expiry for expiry in expiry_values if expiry})
 
     if not expiries:
         return {"error": "No expiry found"}
@@ -162,7 +162,9 @@ def get_option_chain(security_id):
             ltp = ltp_cache[contract_id]
         else:
             quote = get_ltp(contract_id, "NFO")
-            ltp = extract_ltp(quote) if isinstance(quote, dict) else 0
+            ltp = extract_ltp(quote) if isinstance(quote, dict) else None
+            if ltp is None:
+                ltp = 0
             ltp_cache[contract_id] = ltp
 
         chain.append(
