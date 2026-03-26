@@ -22,7 +22,13 @@ def get_ltp(security_id, segment):
     if not isinstance(record, dict):
         return None, "No LTP record found in response"
 
-    ltp = record.get("ltp") or record.get("lastPrice") or record.get("last_price") or record.get("price")
+    ltp = record.get("ltp")
+    if ltp is None:
+        ltp = record.get("lastPrice")
+    if ltp is None:
+        ltp = record.get("last_price")
+    if ltp is None:
+        ltp = record.get("price")
     if ltp is None:
         return None, "LTP value missing in response"
     return ltp, None

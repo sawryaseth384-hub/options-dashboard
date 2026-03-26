@@ -331,7 +331,7 @@ def sdk_intraday_daily_minute_charts(
     if err:
         return None, err
     segment_key = _marketfeed_segment(exchange_segment)
-    expiry_code = 0  # Cash instruments use expiryCode=0 in Dhan charts APIs.
+    expiry_code = 0  # Default expiryCode=0; update if derivatives require a specific expiry code.
     params = {
         "securityId": str(security_id),
         "exchangeSegment": segment_key,
@@ -369,7 +369,7 @@ def sdk_historical_minute_charts(
     if err:
         return None, err
     segment_key = _marketfeed_segment(exchange_segment)
-    expiry_code = 0  # Cash instruments use expiryCode=0 in Dhan charts APIs.
+    expiry_code = 0  # Default expiryCode=0; update if derivatives require a specific expiry code.
     params = {
         "securityId": str(security_id),
         "exchangeSegment": segment_key,
