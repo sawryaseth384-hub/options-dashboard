@@ -3,6 +3,7 @@ import streamlit as st
 
 
 def _get_env_value(key):
+    """Return a stripped environment variable value or an empty string."""
     value = os.getenv(key)
     return value.strip() if value else ""
 

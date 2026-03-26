@@ -1,3 +1,5 @@
+"""Dhan API security IDs for commonly used symbols."""
+
 SECURITY_MAP = {
     "RELIANCE": 2885,
     "TCS": 11536,

@@ -78,6 +78,7 @@ def _normalize_symbol(symbol):
 
 
 def _normalize_segment(segment, symbol=None):
+    """Normalize segment codes and fallback based on symbol type."""
     if not segment:
         if symbol in DEFAULT_INDEXES:
             return "IDX_I"
@@ -137,6 +138,7 @@ def _build_placeholder_section(symbols):
 
 
 def _empty_market_data(errors=None):
+    """Return a safe empty market data payload for the dashboard."""
     return {
         "indian": {},
         "global": _build_placeholder_section(GLOBAL_PLACEHOLDERS),
