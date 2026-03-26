@@ -22,35 +22,38 @@ def _auth_error(message):
     return {"_error": message}, message
 
 
+def _has_auth_header(headers):
+    return bool(headers.get("Authorization") or headers.get("access-token"))
+
+
 class DhanApiClient:
     def __init__(self, base_url=BASE_URL, retries=DEFAULT_RETRIES, timeout=10):
         self.base_url = base_url
         self.retries = retries
         self.timeout = timeout
-        self.token = token_manager.get_token()
+        self.token = token_manager.get_access_token()
 
     def get_headers(self, extra=None):
-        headers = {"Content-Type": "application/json"}
-        token = self.token or token_manager.get_token()
+        token = self.token or token_manager.get_access_token()
         if token:
             self.token = token
-            headers["access-token"] = token
+        headers = token_manager.get_headers()
         if extra:
             headers.update(extra)
         return headers
 
     def refresh_token(self):
-        self.token = token_manager.get_token(force_refresh=True)
+        self.token = token_manager.get_access_token(force_refresh=True)
         return self.token
 
     def request(self, method, url, payload=None, params=None, headers=None, timeout=None):
         resolved_url = url if url.startswith("http") else _full_url(url)
         resolved_headers = self.get_headers(headers)
-        if "access-token" not in resolved_headers:
+        if not _has_auth_header(resolved_headers):
             refreshed = self.refresh_token()
             if refreshed:
                 resolved_headers = self.get_headers(headers)
-        if "access-token" not in resolved_headers:
+        if not _has_auth_header(resolved_headers):
             return None, "Missing Dhan token"
         json_payload = payload if method.upper() in {"POST", "PUT", "PATCH"} else None
         try:
