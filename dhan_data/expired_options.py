@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import time
 from dhan_data.client import safe_post
 
-BASE_URL = "https://api.dhan.co"
+BASE_URL = "https://api.dhan.co/v2"
 _last_expired_call = 0
 
 def get_expired_options(security_id, segment, option_type="CALL"):
@@ -16,7 +16,7 @@ def get_expired_options(security_id, segment, option_type="CALL"):
     _last_expired_call = time.time()
 
     try:
-        url = f"{BASE_URL}/v2/charts/rollingoption"
+        url = f"{BASE_URL}/charts/rollingoption"
         to_date = datetime.now()
         from_date = to_date - timedelta(days=5)
         instrument = "OPTIDX" if segment == "IDX_I" else "OPTSTK"

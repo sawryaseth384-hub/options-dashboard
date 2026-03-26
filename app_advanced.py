@@ -8,7 +8,7 @@ from dhan_data.client import safe_post
 
 st.set_page_config(page_title="🔥 AI Option Trading System", layout="wide")
 
-BASE_URL = "https://api.dhan.co"
+BASE_URL = "https://api.dhan.co/v2"
 
 if not get_token():
     st.error("Dhan API Unauthorized. Check token in secrets.")
@@ -16,7 +16,7 @@ if not get_token():
 
 # ---------- Helper: Fetch Expiry List ----------
 def get_expiry_list(underlying_scrip=13, segment="IDX_I"):
-    url = f"{BASE_URL}/v2/optionchain/expirylist"
+    url = f"{BASE_URL}/optionchain/expirylist"
     payload = {"UnderlyingScrip": underlying_scrip, "UnderlyingSeg": segment}
     data, err = safe_post(url, payload)
     if err:
@@ -34,8 +34,8 @@ def get_option_chain(underlying_scrip=13, segment="IDX_I", expiry=None):
         if not expiries:
             return None
         expiry = expiries[0]
-    url = f"{BASE_URL}/v2/optionchain"
-    payload = {"UnderlyingScrip": underlying_scrip, "UnderlyingSeg": segment, "Expiry": expiry}
+    url = f"{BASE_URL}/optionchain"
+    payload = {"UnderlyingScrip": underlying_scrip, "UnderlyingSeg": segment, "expiryDate": expiry}
     data, err = safe_post(url, payload)
     if err:
         return {"_error": err}

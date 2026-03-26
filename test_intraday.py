@@ -1,8 +1,8 @@
 import requests
 from core.token_manager import get_headers
 
-BASE_URL = "https://api.dhan.co"
-url = f"{BASE_URL}/v2/charts/intraday"
+BASE_URL = "https://api.dhan.co/v2"
+url = f"{BASE_URL}/charts/intraday"
 payload = {
     "securityId": "13",                 # NIFTY
     "exchangeSegment": "IDX_I",         # IDX_I for indices

@@ -5,7 +5,7 @@ import requests
 
 from core import token_manager
 
-BASE_URL = "https://api.dhan.co"
+BASE_URL = "https://api.dhan.co/v2"
 DEFAULT_RETRIES = 3
 AUTH_ERROR_MARKERS = ("Unauthorized", "Missing Dhan token")
 

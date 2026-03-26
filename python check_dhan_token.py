@@ -3,10 +3,10 @@ import json
 
 from core.token_manager import get_access_token, get_headers
 
-BASE_URL = "https://api.dhan.co"
+BASE_URL = "https://api.dhan.co/v2"
 
 def check_profile():
-    url = f"{BASE_URL}/v2/profile"
+    url = f"{BASE_URL}/profile"
     headers = get_headers()
     resp = requests.get(url, headers=headers)
     if resp.status_code == 401:
@@ -23,7 +23,7 @@ def check_profile():
         return None
 
 def test_expiry_list():
-    url = f"{BASE_URL}/v2/optionchain/expirylist"
+    url = f"{BASE_URL}/optionchain/expirylist"
     headers = get_headers()
     payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I"}
     resp = requests.post(url, headers=headers, json=payload)
@@ -40,9 +40,9 @@ def test_expiry_list():
     return None
 
 def test_option_chain(expiry):
-    url = f"{BASE_URL}/v2/optionchain"
+    url = f"{BASE_URL}/optionchain"
     headers = get_headers()
-    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I", "Expiry": expiry}
+    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I", "expiryDate": expiry}
     print(f"\n📤 Sending payload to option chain:\n{json.dumps(payload, indent=2)}")
     resp = requests.post(url, headers=headers, json=payload)
     print(f"📥 Response status: {resp.status_code}")
