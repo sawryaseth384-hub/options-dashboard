@@ -1,30 +1,28 @@
-import datetime as dt
-import streamlit as st
+from dhan_data.client import DhanApiClient
+from dhan_data.instruments import get_symbol_data
 
-from dhan_data.client import safe_post
-from dhan_data.instruments import get_symbol_data, load_instruments
 
-BASE_URL = "https://api.dhan.co/v2"
-
-INDEX_FALLBACKS = {
-    "NIFTY": (13, "IDX_I"),
-    "BANKNIFTY": (25, "IDX_I"),
-    "FINNIFTY": (27, "IDX_I"),
+DEFAULT_INDEXES = {
+    "NIFTY": {"security_id": 13, "segment": "IDX_I"},
+    "BANKNIFTY": {"security_id": 25, "segment": "IDX_I"},
+    "FINNIFTY": {"security_id": 27, "segment": "IDX_I"},
 }
 
-STOCK_FALLBACKS = {
-    "RELIANCE": (2885, "NSE_EQ"),
-    "TCS": (11536, "NSE_EQ"),
-    "HDFCBANK": (1333, "NSE_EQ"),
-    "INFY": (4083, "NSE_EQ"),
-    "ICICIBANK": (495, "NSE_EQ"),
-}
+DEFAULT_STOCKS = [
+    "RELIANCE",
+    "TCS",
+    "HDFCBANK",
+    "INFY",
+    "ICICIBANK",
+    "SBIN",
+    "ITC",
+    "LT",
+]
 
-GLOBAL_PLACEHOLDERS = ["DOW", "NASDAQ", "GIFT", "CRUDE", "GOLD"]
-CURRENCY_PLACEHOLDERS = ["USDINR", "DXY"]
+VIX_ALIASES = ["INDIAVIX", "VIX"]
 
 
-def _to_float(value):
+def _as_float(value):
     try:
         return float(value)
     except Exception:

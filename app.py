@@ -25,8 +25,9 @@ def _find_symbol(section, symbol):
     if section is None:
         return None
     if isinstance(section, dict):
-        if symbol in section:
-            return section[symbol]
+        for key, value in section.items():
+            if str(key).upper() == symbol:
+                return value
     if isinstance(section, list):
         for item in section:
             name = str(item.get("symbol") or item.get("name") or item.get("ticker") or item.get("Symbol") or "").upper()
@@ -208,12 +209,8 @@ if isinstance(market_data, dict) and market_data.get("_error"):
     st.stop()
 
 indian_section = _get_section(market_data, ["indian", "indices", "indian_market", "market", "header", "headers"])
-global_section = _get_section(market_data, ["global", "commodities", "global_commodities"])
-currency_section = _get_section(market_data, ["currency", "currencies", "fx"])
 
 render_header_row("Indian Market", ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"], indian_section)
-render_header_row("Global + Commodity", ["DOW", "NASDAQ", "GIFT", "CRUDE"], global_section)
-render_header_row("Currency", ["USDINR", "DXY"], currency_section)
 
 st.divider()
 st.subheader("📋 Live Market Scanner")
