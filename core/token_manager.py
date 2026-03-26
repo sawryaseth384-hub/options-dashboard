@@ -1,6 +1,5 @@
 import datetime as dt
 import logging
-import os
 import time
 from urllib.parse import urlparse
 
@@ -24,15 +23,26 @@ _TOKEN_LOGGED = False
 _TOKEN_EXPIRY_WARNED = False
 _TOKEN_CACHE = {"token": None, "expires_at": None}
 
+CLIENT_ID = st.secrets.get("CLIENT_ID")
+PIN = st.secrets.get("PIN")
+TOTP_SECRET = st.secrets.get("TOTP_SECRET")
+
+print("CLIENT_ID:", CLIENT_ID)
+print("PIN:", PIN)
+print("TOTP_SECRET:", TOTP_SECRET)
+
+if not CLIENT_ID or not PIN or not TOTP_SECRET:
+    raise ValueError("Secrets not loaded properly")
+
 
 def _get_secret_value(key):
-    value = None
-    try:
-        value = st.secrets.get(key)
-    except Exception:
-        value = None
-    if not value:
-        value = os.getenv(key)
+    if key == "CLIENT_ID":
+        return str(CLIENT_ID).strip() if CLIENT_ID else ""
+    if key == "PIN":
+        return str(PIN).strip() if PIN else ""
+    if key == "TOTP_SECRET":
+        return str(TOTP_SECRET).strip() if TOTP_SECRET else ""
+    value = st.secrets.get(key)
     return str(value).strip() if value else ""
 
 
