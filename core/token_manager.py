@@ -7,6 +7,8 @@ import pyotp
 import requests
 import streamlit as st
 
+from utils.secrets import get_secret
+
 _logger = logging.getLogger(__name__)
 
 DEFAULT_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
@@ -21,18 +23,50 @@ TOKEN_EXPIRY_KEY = "dhan_access_token_expiry"
 
 _TOKEN_LOGGED = False
 _TOKEN_EXPIRY_WARNED = False
+_TOKEN_MISSING_WARNED = False
+_SECRETS_WARNED = False
 _TOKEN_CACHE = {"token": None, "expires_at": None}
 
-CLIENT_ID = st.secrets.get("CLIENT_ID")
-PIN = st.secrets.get("PIN")
-TOTP_SECRET = st.secrets.get("TOTP_SECRET")
+CLIENT_ID = get_secret("CLIENT_ID")
+PIN = get_secret("PIN")
+TOTP_SECRET = get_secret("TOTP_SECRET")
+ACCESS_TOKEN = get_secret("DHAN_ACCESS_TOKEN")
 
-print("CLIENT_ID:", CLIENT_ID)
-print("PIN:", PIN)
-print("TOTP_SECRET:", TOTP_SECRET)
+print("CLIENT_ID:", CLIENT_ID is not None)
+print("TOKEN:", ACCESS_TOKEN is not None)
 
-if not CLIENT_ID or not PIN or not TOTP_SECRET:
-    raise ValueError("Secrets not loaded properly")
+def _show_streamlit_error(message):
+    try:
+        st.error(message)
+    except Exception:
+        pass
+
+
+def _report_missing_secrets():
+    global _SECRETS_WARNED
+    if _SECRETS_WARNED:
+        return
+    missing = [name for name, value in {"CLIENT_ID": CLIENT_ID, "PIN": PIN, "TOTP_SECRET": TOTP_SECRET}.items() if not value]
+    if not missing:
+        return
+    _SECRETS_WARNED = True
+    _logger.warning("Missing secrets: %s", ", ".join(missing))
+    _show_streamlit_error("Missing credentials in Streamlit secrets. Update CLIENT_ID, PIN, and TOTP_SECRET.")
+
+
+def _report_missing_token(error=None):
+    global _TOKEN_MISSING_WARNED
+    if _TOKEN_MISSING_WARNED:
+        return
+    _TOKEN_MISSING_WARNED = True
+    if error:
+        _logger.warning("Missing token. %s", error)
+    else:
+        _logger.warning("Missing token.")
+    _show_streamlit_error("Missing token. Please set DHAN_ACCESS_TOKEN or credentials in Streamlit secrets.")
+
+
+_report_missing_secrets()
 
 
 def _get_secret_value(key):
@@ -42,7 +76,9 @@ def _get_secret_value(key):
         return str(PIN).strip() if PIN else ""
     if key == "TOTP_SECRET":
         return str(TOTP_SECRET).strip() if TOTP_SECRET else ""
-    value = st.secrets.get(key)
+    if key == "DHAN_ACCESS_TOKEN":
+        return str(ACCESS_TOKEN).strip() if ACCESS_TOKEN else ""
+    value = get_secret(key)
     return str(value).strip() if value else ""
 
 
@@ -189,6 +225,7 @@ def _login():
     totp_secret = _get_secret_value("TOTP_SECRET")
     if not client_id or not pin or not totp_secret:
         _logger.warning("Missing CLIENT_ID, PIN, or TOTP_SECRET in secrets.")
+        _report_missing_secrets()
         return None, None, "Missing credentials for token generation"
     totp = generate_totp(totp_secret)
     if not totp:
@@ -237,6 +274,12 @@ def get_access_token(force_refresh=False):
         _logger.warning("Cached token missing expiry metadata; refresh will be attempted.")
     if cached_token and not force_refresh and not _is_expired(expires_at):
         return cached_token
+    if not cached_token and not force_refresh:
+        configured_token = _get_secret_value("DHAN_ACCESS_TOKEN")
+        if configured_token:
+            _cache_token(configured_token)
+            _log_token_once(configured_token)
+            return configured_token
     for attempt in range(1, MAX_TOKEN_ATTEMPTS + 1):
         token = login_and_get_token()
         if token:
@@ -247,6 +290,7 @@ def get_access_token(force_refresh=False):
             return token
         if attempt < MAX_TOKEN_ATTEMPTS:
             time.sleep(0.5 * attempt)
+    _report_missing_token()
     return None
 
 
