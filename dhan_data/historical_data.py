@@ -4,13 +4,13 @@ from dhan_data.client import safe_post
 BASE_URL = "https://api.dhan.co/v2"
 
 @st.cache_data(ttl=30)
-def _normalize_historical_payload(payload):
+def _normalize_historical_response(payload):
     """Normalize v2 historical responses into standard OHLC arrays."""
     if not isinstance(payload, dict):
         return {}
     data = payload.get("data") if "data" in payload else payload
-    if isinstance(data, dict) and isinstance(data.get("candles"), dict):
-        data = data.get("candles")
+    if isinstance(data, dict) and "candles" in data and isinstance(data["candles"], dict):
+        data = data["candles"]
     if not isinstance(data, dict):
         return {}
     if "open" not in data and "o" not in data:
@@ -48,7 +48,7 @@ def get_historical(security_id, segment, from_date="2025-03-01", to_date="2025-0
     data, err = safe_post(f"{BASE_URL}/charts/historical", payload, timeout=10)
     if err or not data:
         return {}
-    data = _normalize_historical_payload(data)
+    data = _normalize_historical_response(data)
     if not data or "open" not in data:
         return {}
     return data
