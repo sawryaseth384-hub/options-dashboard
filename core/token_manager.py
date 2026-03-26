@@ -11,11 +11,11 @@ _logger = logging.getLogger(__name__)
 
 DEFAULT_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 MAX_TOKEN_ATTEMPTS = 3
-TOKEN_VALIDITY_SECONDS = 24 * 60 * 60
-TOKEN_REFRESH_BUFFER_SECONDS = 60 * 60
+TOKEN_VALIDITY_SECONDS = 24 * 60 * 60  # full token lifespan
+TOKEN_REFRESH_BUFFER_SECONDS = 60 * 60  # refresh one hour early
 TOKEN_TTL_SECONDS = TOKEN_VALIDITY_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS
-EPOCH_MS_THRESHOLD = 10_000_000_000
-EPOCH_S_THRESHOLD = 1_000_000_000
+EPOCH_MS_THRESHOLD = 10_000_000_000  # treat larger numbers as millisecond epoch
+EPOCH_S_THRESHOLD = 1_000_000_000  # treat numbers above as seconds epoch
 TOKEN_SESSION_KEY = "dhan_access_token"
 TOKEN_EXPIRY_KEY = "dhan_access_token_expiry"
 
@@ -244,7 +244,8 @@ def get_credentials():
     client_id = _get_secret_value("CLIENT_ID")
     pin = _get_secret_value("PIN")
     totp_secret = _get_secret_value("TOTP_SECRET")
-    missing = [name for name, value in (("CLIENT_ID", client_id), ("PIN", pin), ("TOTP_SECRET", totp_secret)) if not value]
+    credentials = {"CLIENT_ID": client_id, "PIN": pin, "TOTP_SECRET": totp_secret}
+    missing = [name for name, value in credentials.items() if not value]
     if missing:
         return {"_error": f"Missing credentials: {', '.join(missing)}"}
     return {
@@ -271,5 +272,5 @@ def get_headers():
     token = get_access_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
-        headers["access-token"] = token
+        headers["access-token"] = token  # legacy compatibility
     return headers
