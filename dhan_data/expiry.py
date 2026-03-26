@@ -1,7 +1,10 @@
+import logging
+
 from dhan_data.client import safe_post
 from dhan_data.security_map import SECURITY_MAP
 
 BASE_URL = "https://api.dhan.co/v2"
+_logger = logging.getLogger(__name__)
 
 def get_expiry(security_id, segment="IDX_I"):
     url = f"{BASE_URL}/optionchain/expirylist"
@@ -31,7 +34,8 @@ def get_expiry_list(symbol, segment="IDX_I"):
     }
     try:
         data, err = safe_post(url, payload, timeout=10)
-    except Exception:
+    except Exception as exc:
+        _logger.warning("Expiry list fallback for %s: %s", symbol, exc)
         return ["nearest"]
     if err or not data:
         return ["nearest"]

@@ -1,4 +1,5 @@
 import datetime as dt
+import logging
 import streamlit as st
 
 from dhan_data.client import BASE_URL, DhanApiClient, safe_post
@@ -8,9 +9,9 @@ from dhan_data.security_map import SECURITY_MAP
 
 
 DEFAULT_INDEXES = {
-    "NIFTY": {"security_id": int(SECURITY_MAP.get("NIFTY", 13)), "segment": "IDX_I"},
-    "BANKNIFTY": {"security_id": int(SECURITY_MAP.get("BANKNIFTY", 25)), "segment": "IDX_I"},
-    "FINNIFTY": {"security_id": int(SECURITY_MAP.get("FINNIFTY", 27)), "segment": "IDX_I"},
+    "NIFTY": {"security_id": SECURITY_MAP["NIFTY"], "segment": "IDX_I"},
+    "BANKNIFTY": {"security_id": SECURITY_MAP["BANKNIFTY"], "segment": "IDX_I"},
+    "FINNIFTY": {"security_id": SECURITY_MAP["FINNIFTY"], "segment": "IDX_I"},
 }
 
 DEFAULT_STOCKS = [
@@ -32,10 +33,12 @@ INDEX_FALLBACKS = {
     for symbol, data in DEFAULT_INDEXES.items()
 }
 STOCK_FALLBACKS = {
-    symbol: (int(sec_id), "NSE_EQ")
+    symbol: (sec_id, "NSE_EQ")
     for symbol, sec_id in SECURITY_MAP.items()
     if symbol not in DEFAULT_INDEXES
 }
+
+_logger = logging.getLogger(__name__)
 
 
 def _as_float(value):
@@ -200,7 +203,8 @@ def _fetch_expiry_list(security_id, segment):
     try:
         payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": segment}
         data, err = safe_post(f"{BASE_URL}/optionchain/expirylist", payload, timeout=10)
-    except Exception:
+    except Exception as exc:
+        _logger.warning("Expiry list fetch failed: %s", exc)
         return []
     if err or not data:
         return []
@@ -526,8 +530,9 @@ def _build_market_data():
             errors.append(f"Option chain missing securityId for {symbol}")
             continue
         try:
-            expiries = get_expiry_list(symbol)
-        except Exception:
+            expiries = get_expiry_list(symbol, seg)
+        except Exception as exc:
+            errors.append(f"{symbol} expiry error: {exc}")
             expiries = ["nearest"]
         if not expiries:
             expiries = ["nearest"]
@@ -577,6 +582,8 @@ def _build_market_data():
         chain_data = symbol_data.get("chains", {}).get(default_expiry, {})
         default_chain = chain_data.get("chain_filtered") or chain_data.get("chain") or []
         default_pcr = chain_data.get("pcr")
+        if default_pcr is None:
+            default_pcr = 0
         default_atm = chain_data.get("atm")
         default_oi = chain_data.get("oi_analysis") or {}
 

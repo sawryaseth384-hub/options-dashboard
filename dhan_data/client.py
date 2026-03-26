@@ -25,8 +25,8 @@ def safe_post(url, payload, headers=None, retries=3, timeout=10):
             else:
                 try:
                     return res.json(), None
-                except Exception:
-                    last_error = "Invalid JSON response"
+                except Exception as exc:
+                    last_error = f"Invalid JSON response: {exc}"
         except Exception as exc:
             last_error = str(exc)
         if attempt < retries:
