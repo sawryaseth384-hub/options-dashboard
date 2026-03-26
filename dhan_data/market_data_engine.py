@@ -3,7 +3,7 @@ import logging
 import streamlit as st
 
 from dhan_data.client import BASE_URL, DhanApiClient, safe_post
-from dhan_data.expiry import DEFAULT_EXPIRY_FALLBACK, get_expiry_list
+from dhan_data.expiry import EXPIRY_PLACEHOLDER_NEAREST, get_expiry_list
 from dhan_data.instruments import get_symbol_data, load_instruments
 from dhan_data.security_map import SECURITY_MAP
 
@@ -38,6 +38,7 @@ STOCK_FALLBACKS = {
     if symbol not in DEFAULT_INDEXES
 }
 
+# D/EQ -> equity segment, I -> index segment from the scrip master feed.
 SEGMENT_ALIASES = {
     "D": "NSE_EQ",
     "EQ": "NSE_EQ",
@@ -540,9 +541,9 @@ def _build_market_data():
             expiries = get_expiry_list(symbol, segment)
         except Exception as exc:
             errors.append(f"{symbol} expiry error: {exc}")
-            expiries = [DEFAULT_EXPIRY_FALLBACK]
+            expiries = [EXPIRY_PLACEHOLDER_NEAREST]
         if not expiries:
-            expiries = [DEFAULT_EXPIRY_FALLBACK]
+            expiries = [EXPIRY_PLACEHOLDER_NEAREST]
             errors.append(f"Option expiry missing for {symbol}")
         current_expiry = expiries[0] if expiries else None
         next_expiry = expiries[1] if len(expiries) > 1 else None
@@ -593,8 +594,7 @@ def _build_market_data():
         default_oi = chain_data.get("oi_analysis") or {}
     if default_pcr is None and not default_chain:
         default_pcr = 0
-        if default_symbol:
-            _logger.info("PCR fallback used for %s", default_symbol)
+        _logger.info("PCR fallback used for %s", default_symbol or "unknown")
 
     intraday_rows = []
     historical_rows = []

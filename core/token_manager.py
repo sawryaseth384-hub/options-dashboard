@@ -7,7 +7,8 @@ def get_token():
     if cached:
         return cached
     access_token = os.getenv("DHAN_ACCESS_TOKEN")
-    if access_token and access_token.strip():
+    access_token = access_token.strip() if access_token else ""
+    if access_token:
         st.session_state.token = access_token
         return access_token
     return None
@@ -18,7 +19,8 @@ def get_client_id():
     if cached:
         return cached
     client_id = os.getenv("DHAN_CLIENT_ID")
-    if client_id and client_id.strip():
+    client_id = client_id.strip() if client_id else ""
+    if client_id:
         st.session_state.client_id = client_id
         return client_id
     return None
