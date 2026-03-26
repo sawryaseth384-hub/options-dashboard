@@ -83,7 +83,8 @@ def get_sdk_client():
     token = token_manager.get_access_token()
     client_id = token_manager.get_client_id()
     if not token or not client_id:
-        return None, "Missing credentials. Set CLIENT_ID and DHAN_ACCESS_TOKEN in Streamlit secrets."
+        _logger.warning("Missing credentials for DhanHQ SDK client.")
+        return None, "Missing credentials. Set CLIENT_ID and DHAN_ACCESS_TOKEN in Streamlit secrets or environment."
     cached_client, cached_token, cached_client_id = _get_cached_sdk_client()
     if cached_client and cached_token == token and cached_client_id == client_id:
         return cached_client, None
@@ -167,6 +168,19 @@ def _redact_params(params):
     return redacted
 
 
+def _log_api_status(context, params, error=None):
+    safe_params = _redact_params(params)
+    if error:
+        _logger.warning("%s failed: %s | params=%s", context, error, safe_params)
+    else:
+        _logger.info("%s success | params=%s", context, safe_params)
+
+
+def _log_validation_error(message):
+    _logger.warning(message)
+    return message
+
+
 def _normalize_sdk_error(payload, params=None, context="DhanHQ"):
     if payload is None:
         return f"{context} error: empty response"
@@ -179,13 +193,14 @@ def _normalize_sdk_error(payload, params=None, context="DhanHQ"):
     status_code = _extract_status_code(payload)
     message = _extract_error_message(payload)
     if status_code == 401 or (message and "unauthorized" in message.lower()):
-        return "Token expired (401). Update DHAN_ACCESS_TOKEN in Streamlit secrets."
+        return "Token expired or invalid"
     if status_code == 404:
         return "Endpoint not found (404). Update the DhanHQ SDK."
     if status_code == 400:
         safe_params = _redact_params(params)
-        _logger.warning("Invalid parameters (400) for %s: %s", context, safe_params)
-        return f"Invalid parameters (400): {safe_params}"
+        detail = message or safe_params
+        _logger.warning("Invalid parameters (400) for %s: %s", context, detail)
+        return f"Invalid parameters (400): {detail}"
     if message:
         return f"{context} error: {message}"
     return f"{context} error: unexpected response"
@@ -194,44 +209,55 @@ def _normalize_sdk_error(payload, params=None, context="DhanHQ"):
 def _sdk_call(method_name, context, params, fallback_methods=None):
     client, err = get_sdk_client()
     if err:
+        _log_api_status(context, params, err)
         return None, err
     method, resolved = _resolve_sdk_method(client, method_name, fallback_methods)
     if not method:
-        return None, f"DhanHQ SDK method missing: {method_name}"
+        error = f"DhanHQ SDK method missing: {method_name}"
+        _log_api_status(context, params, error)
+        return None, error
     try:
         payload = _call_with_signature(method, **params)
     except Exception as exc:
-        return None, f"{context} error: {exc}"
+        error = f"{context} error: {exc}"
+        _log_api_status(context, params, error)
+        return None, error
     error = _normalize_sdk_error(payload, params=params, context=context)
     if error:
+        _log_api_status(context, params, error)
         return None, error
+    _log_api_status(context, params, None)
     return payload, None
 
 
 def _validate_security_id(security_id):
     if security_id is None or security_id == "":
-        return None, "Invalid parameters (400): security_id is required"
+        return None, _log_validation_error("Invalid parameters (400): security_id is required")
     try:
         return int(security_id), None
     except (TypeError, ValueError):
-        return None, "Invalid parameters (400): security_id must be an integer"
+        return None, _log_validation_error("Invalid parameters (400): security_id must be an integer")
 
 
 def _validate_exchange_segment(exchange_segment):
     normalized = normalize_exchange_segment(exchange_segment)
     if not normalized:
-        return None, "Invalid parameters (400): exchange_segment is required"
+        return None, _log_validation_error("Invalid parameters (400): exchange_segment is required")
     if normalized not in VALID_SEGMENTS:
-        return None, f"Invalid parameters (400): exchange_segment must be one of {sorted(VALID_SEGMENTS)}"
+        return None, _log_validation_error(
+            f"Invalid parameters (400): exchange_segment must be one of {sorted(VALID_SEGMENTS)}"
+        )
     return normalized, None
 
 
 def _validate_instrument_type(instrument_type):
     if not instrument_type:
-        return None, "Invalid parameters (400): instrument_type is required"
+        return None, _log_validation_error("Invalid parameters (400): instrument_type is required")
     normalized = str(instrument_type).strip().upper()
     if normalized not in VALID_INSTRUMENT_TYPES:
-        return None, f"Invalid parameters (400): instrument_type must be one of {sorted(VALID_INSTRUMENT_TYPES)}"
+        return None, _log_validation_error(
+            f"Invalid parameters (400): instrument_type must be one of {sorted(VALID_INSTRUMENT_TYPES)}"
+        )
     return normalized, None
 
 
@@ -265,27 +291,33 @@ def _normalize_date(value, with_time=False):
 
 def _validate_date_range(from_date, to_date, with_time=False):
     if not from_date or not to_date:
-        return None, None, "Invalid parameters (400): from_date and to_date are required"
+        return None, None, _log_validation_error(
+            "Invalid parameters (400): from_date and to_date are required"
+        )
     from_value = _normalize_date(from_date, with_time=with_time)
     to_value = _normalize_date(to_date, with_time=with_time)
     from_parsed = _parse_datetime(from_value)
     to_parsed = _parse_datetime(to_value)
     if not from_parsed or not to_parsed:
-        return None, None, "Invalid parameters (400): from_date/to_date must be ISO date strings"
+        return None, None, _log_validation_error(
+            "Invalid parameters (400): from_date/to_date must be ISO date strings"
+        )
     if from_parsed > to_parsed:
-        return None, None, "Invalid parameters (400): from_date must be before to_date"
+        return None, None, _log_validation_error(
+            "Invalid parameters (400): from_date must be before to_date"
+        )
     return from_value, to_value, None
 
 
 def _validate_time_frame(time_frame):
     if time_frame is None or time_frame == "":
-        return None, "Invalid parameters (400): time_frame is required"
+        return None, _log_validation_error("Invalid parameters (400): time_frame is required")
     try:
         value = int(time_frame)
     except (TypeError, ValueError):
-        return None, "Invalid parameters (400): time_frame must be an integer"
+        return None, _log_validation_error("Invalid parameters (400): time_frame must be an integer")
     if value <= 0:
-        return None, "Invalid parameters (400): time_frame must be positive"
+        return None, _log_validation_error("Invalid parameters (400): time_frame must be positive")
     return value, None
 
 
@@ -301,7 +333,7 @@ def sdk_get_quote(security_id, exchange_segment):
         "exchange_segment": exchange_segment,
         "securities": {exchange_segment: [security_id]},
     }
-    return _sdk_call("get_quote", "Quote", params, fallback_methods=["quote_data"])
+    return _sdk_call("get_quote", "Quote", params)
 
 
 def sdk_option_contracts(security_id, exchange_segment):
@@ -317,7 +349,7 @@ def sdk_option_contracts(security_id, exchange_segment):
         "underlying_security_id": security_id,
         "underlying_exchange_segment": exchange_segment,
     }
-    return _sdk_call("option_contracts", "Option contracts", params, fallback_methods=[])
+    return _sdk_call("option_contracts", "Option contracts", params)
 
 
 def sdk_intraday_daily_minute_charts(security_id, exchange_segment, instrument_type, from_date, to_date, time_frame=5):
@@ -345,12 +377,7 @@ def sdk_intraday_daily_minute_charts(security_id, exchange_segment, instrument_t
         "time_frame": time_frame,
         "interval": time_frame,
     }
-    return _sdk_call(
-        "intraday_daily_minute_charts",
-        "Intraday charts",
-        params,
-        fallback_methods=["intraday_minute_data"],
-    )
+    return _sdk_call("intraday_daily_minute_charts", "Intraday charts", params)
 
 
 def sdk_historical_minute_charts(security_id, exchange_segment, instrument_type, from_date, to_date, time_frame=5):
@@ -378,12 +405,7 @@ def sdk_historical_minute_charts(security_id, exchange_segment, instrument_type,
         "time_frame": time_frame,
         "interval": time_frame,
     }
-    return _sdk_call(
-        "historical_minute_charts",
-        "Historical charts",
-        params,
-        fallback_methods=["historical_daily_data"],
-    )
+    return _sdk_call("historical_minute_charts", "Historical charts", params)
 
 
 def sdk_get_market_depth(security_id, exchange_segment):
@@ -397,4 +419,4 @@ def sdk_get_market_depth(security_id, exchange_segment):
         "security_id": security_id,
         "exchange_segment": exchange_segment,
     }
-    return _sdk_call("get_market_depth", "Market depth", params, fallback_methods=[])
+    return _sdk_call("get_market_depth", "Market depth", params)
