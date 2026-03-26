@@ -538,7 +538,7 @@ def build_market_data():
         },
         "_meta": {
             "errors": errors,
-            "timestamp": dt.datetime.utcnow().isoformat() + "Z"
+            "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()
         }
     }
     return market_data
