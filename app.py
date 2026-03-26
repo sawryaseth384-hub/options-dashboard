@@ -1,8 +1,9 @@
 import logging
+import os
 
 import streamlit as st
 
-from core import token_manager
+from dhan_auth import get_headers  # new automated TOTP-based auth
 from core.dhan_v2 import (
     extract_ltp,
     get_depth,
@@ -49,31 +50,62 @@ def _safe_call(label, func, *args, **kwargs):
         return {"error": f"{label} failed: {exc}"}
 
 
+def _get_secret(key: str) -> str:
+    try:
+        val = st.secrets.get(key)
+        if val:
+            return str(val).strip()
+    except Exception:
+        pass
+    return os.getenv(key, "").strip()
+
+
 def _show_credential_status():
-    client_id, token = token_manager.get_credential_status()
+    client_id = _get_secret("CLIENT_ID")
+    pin = _get_secret("DHAN_PIN")
+    totp_secret = _get_secret("TOTP_SECRET")
+
     st.sidebar.subheader("Credentials")
-    st.sidebar.write(f"CLIENT_ID loaded: {bool(client_id)}")
-    st.sidebar.write(f"DHAN_ACCESS_TOKEN loaded: {bool(token)}")
-    if not client_id or not token:
+    st.sidebar.write("CLIENT_ID loaded ✅" if client_id else "CLIENT_ID missing ❌")
+    st.sidebar.write("TOTP enabled ✅" if totp_secret else "TOTP missing ❌")
+    st.sidebar.write("Auto token system active ✅")
+
+    if not client_id or not pin or not totp_secret:
         st.error(
-            "Missing credentials. Set CLIENT_ID and DHAN_ACCESS_TOKEN in Streamlit secrets "
-            "(primary) or environment variables."
+            "Missing credentials. Set CLIENT_ID, DHAN_PIN, and TOTP_SECRET in "
+            "Streamlit secrets or environment variables."
         )
-        st.code('CLIENT_ID = "your_client_id"\nDHAN_ACCESS_TOKEN = "your_access_token"', language="toml")
-        st.info("Copy .streamlit/secrets.toml.example to .streamlit/secrets.toml, then reload this page.")
+        st.code(
+            'CLIENT_ID = "your_client_id"\nDHAN_PIN = "your_pin"\nTOTP_SECRET = "your_totp_secret"',
+            language="toml",
+        )
+        st.info(
+            "Copy .streamlit/secrets.toml.example to .streamlit/secrets.toml, then reload this page."
+        )
         return False
     return True
+
+
+def _auth_headers_or_stop():
+    try:
+        return get_headers()
+    except Exception as exc:
+        _logger.exception("Authentication failed: %s", exc)
+        st.error("Authentication failed. Check CLIENT_ID / PIN / TOTP setup")
+        st.stop()
 
 
 if not _show_credential_status():
     st.stop()
 
+# Initialize token once; reuse headers for all API calls
+headers = _auth_headers_or_stop()
 
 symbol = st.selectbox("Select Symbol", list(SECURITY_MAP.keys()))
 security_id, segment = SECURITY_MAP[symbol]
 
 st.subheader("📈 Live Price")
-ltp_data = _safe_call("Live price", get_ltp, security_id, segment)
+ltp_data = _safe_call("Live price", get_ltp, security_id, segment, headers=headers)
 
 if _show_error(ltp_data):
     st.metric("LTP", "No Data")
@@ -87,7 +119,7 @@ else:
     st.metric("LTP", "No Data" if ltp_value is None else f"{ltp_value:.2f}")
 
 st.subheader("📊 Option Chain")
-chain = _safe_call("Option chain", get_option_chain, security_id, exchange_segment=segment)
+chain = _safe_call("Option chain", get_option_chain, security_id, exchange_segment=segment, headers=headers)
 
 if _show_error(chain):
     st.info("Option chain unavailable.")
@@ -101,7 +133,7 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("**Intraday**")
-    intraday_data = _safe_call("Intraday data", get_intraday, security_id, segment)
+    intraday_data = _safe_call("Intraday data", get_intraday, security_id, segment, headers=headers)
     if _show_error(intraday_data):
         st.info("Intraday data unavailable.")
     else:
@@ -113,7 +145,7 @@ with col1:
 
 with col2:
     st.markdown("**Historical**")
-    historical_data = _safe_call("Historical data", get_historical, security_id, segment)
+    historical_data = _safe_call("Historical data", get_historical, security_id, segment, headers=headers)
     if _show_error(historical_data):
         st.info("Historical data unavailable.")
     else:
@@ -124,7 +156,7 @@ with col2:
             st.info("No historical data available.")
 
 st.subheader("📘 Market Depth")
-depth_data = _safe_call("Market depth", get_depth, security_id, segment)
+depth_data = _safe_call("Market depth", get_depth, security_id, segment, headers=headers)
 
 if _show_error(depth_data):
     st.info("Market depth unavailable.")
