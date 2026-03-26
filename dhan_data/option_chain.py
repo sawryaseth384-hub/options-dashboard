@@ -158,10 +158,9 @@ def get_option_chain(security_id, expiry=None, segment=None, exchange_segment=No
     spot_payload, spot_err = sdk_get_quote(security_id, underlying_segment)
     if spot_err:
         _logger.warning("Spot quote error for %s: %s", security_id, spot_err)
-    else:
-        spot_record = _extract_quote_record(spot_payload)
-        if isinstance(spot_record, dict):
-            spot = _first_present(spot_record, ["ltp", "lastPrice", "last_price", "price"])
+    spot_record = _extract_quote_record(spot_payload) if not spot_err else None
+    if isinstance(spot_record, dict):
+        spot = _first_present(spot_record, ["ltp", "lastPrice", "last_price", "price"])
 
     return {
         "status": "success",

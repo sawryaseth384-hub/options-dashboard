@@ -3,7 +3,7 @@ import json
 import requests
 
 from core.token_manager import get_access_token, get_headers
-from dhan_data.option_chain import get_expiry_list as fetch_expiry_list, get_option_chain as fetch_option_chain
+from dhan_data.option_chain import get_expiry_list, get_option_chain
 
 BASE_URL = "https://api.dhan.co/v2"
 
@@ -25,7 +25,7 @@ def check_profile():
         return None
 
 def test_expiry_list():
-    expiries, err = fetch_expiry_list(13, "NSE_INDEX")
+    expiries, err = get_expiry_list(13, "NSE_INDEX")
     if err:
         print("❌ Expiry list failed:", err)
         return None
@@ -35,7 +35,7 @@ def test_expiry_list():
 def test_option_chain(expiry):
     payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "NSE_INDEX", "expiryDate": expiry}
     print(f"\n📤 Sending payload to option chain:\n{json.dumps(payload, indent=2)}")
-    data, err = fetch_option_chain(13, expiry=expiry, segment="NSE_INDEX")
+    data, err = get_option_chain(13, expiry=expiry, segment="NSE_INDEX")
     if err:
         print("❌ Option chain failed:", err)
         return

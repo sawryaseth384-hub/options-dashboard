@@ -4,6 +4,7 @@ import streamlit as st
 
 from core.token_manager import get_token
 from dhan_data.client import (
+    SEGMENT_ALIASES,
     normalize_exchange_segment,
     sdk_get_market_depth,
     sdk_get_quote,
@@ -47,17 +48,6 @@ STOCK_FALLBACKS = {
 }
 
 # D/EQ -> equity segment, I -> index segment from the scrip master feed.
-SEGMENT_ALIASES = {
-    "D": "NSE_EQ",
-    "EQ": "NSE_EQ",
-    "NSE_EQ": "NSE_EQ",
-    "I": "NSE_INDEX",
-    "IDX_I": "NSE_INDEX",
-    "NSE_INDEX": "NSE_INDEX",
-    "NSE_FNO": "NFO",
-    "NFO": "NFO",
-}
-
 _logger = logging.getLogger(__name__)
 
 

@@ -58,12 +58,20 @@ def _parse_ohlc_series(data):
         payload = payload["candles"]
     if not isinstance(payload, dict):
         return []
-    opens = payload.get("open") or payload.get("o") or []
-    highs = payload.get("high") or payload.get("h") or []
-    lows = payload.get("low") or payload.get("l") or []
-    closes = payload.get("close") or payload.get("c") or []
-    volumes = payload.get("volume") or payload.get("v") or []
-    times = payload.get("timestamp") or payload.get("t") or payload.get("time") or []
+    opens = payload.get("open") if payload.get("open") is not None else payload.get("o")
+    highs = payload.get("high") if payload.get("high") is not None else payload.get("h")
+    lows = payload.get("low") if payload.get("low") is not None else payload.get("l")
+    closes = payload.get("close") if payload.get("close") is not None else payload.get("c")
+    volumes = payload.get("volume") if payload.get("volume") is not None else payload.get("v")
+    times = payload.get("timestamp") if payload.get("timestamp") is not None else payload.get("t")
+    if times is None:
+        times = payload.get("time")
+    opens = opens or []
+    highs = highs or []
+    lows = lows or []
+    closes = closes or []
+    volumes = volumes or []
+    times = times or []
     length = min(len(opens), len(highs), len(lows), len(closes))
     if length == 0:
         return []
@@ -173,7 +181,14 @@ def get_option_chain(security_id, exchange_segment="NFO"):
     if normalized in ("NSE_INDEX", "NSE_EQ"):
         underlying_segment = normalized
     elif normalized == "NFO":
-        index_ids = {SECURITY_MAP.get("NIFTY"), SECURITY_MAP.get("BANKNIFTY"), SECURITY_MAP.get("FINNIFTY")}
+        index_ids = {
+            value for value in (
+                SECURITY_MAP.get("NIFTY"),
+                SECURITY_MAP.get("BANKNIFTY"),
+                SECURITY_MAP.get("FINNIFTY"),
+            )
+            if value is not None
+        }
         try:
             underlying_segment = "NSE_INDEX" if int(security_id) in index_ids else "NSE_EQ"
         except (TypeError, ValueError):

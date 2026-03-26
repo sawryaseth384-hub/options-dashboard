@@ -270,7 +270,8 @@ def _call_with_signature(method, **kwargs):
     try:
         signature = inspect.signature(method)
         filtered = {key: value for key, value in kwargs.items() if key in signature.parameters}
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as exc:
+        _logger.debug("Signature inspection failed for %s: %s", getattr(method, "__name__", method), exc)
         filtered = kwargs
     return method(**filtered)
 
@@ -308,13 +309,22 @@ def _extract_error_message(payload):
 def _redact_params(params):
     if not isinstance(params, dict):
         return params
+    safe_keys = {
+        "security_id",
+        "exchange_segment",
+        "instrument_type",
+        "from_date",
+        "to_date",
+        "time_frame",
+        "interval",
+        "securities",
+        "underlying_security_id",
+        "underlying_exchange_segment",
+    }
     redacted = {}
     for key, value in params.items():
         key_lower = str(key).lower()
-        if any(token in key_lower for token in ("token", "client", "pin", "secret")):
-            redacted[key] = "***"
-        else:
-            redacted[key] = value
+        redacted[key] = value if key_lower in safe_keys else "***"
     return redacted
 
 
