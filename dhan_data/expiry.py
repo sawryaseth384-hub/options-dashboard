@@ -1,4 +1,5 @@
 from dhan_data.client import safe_post
+from dhan_data.security_map import SECURITY_MAP
 
 BASE_URL = "https://api.dhan.co/v2"
 
@@ -16,3 +17,27 @@ def get_expiry(security_id, segment="IDX_I"):
     if isinstance(data, dict):
         return data.get("data") or []
     return []
+
+
+def get_expiry_list(symbol, segment="IDX_I"):
+    symbol = str(symbol or "").upper()
+    security_id = SECURITY_MAP.get(symbol)
+    if not security_id:
+        return ["nearest"]
+    url = f"{BASE_URL}/optionchain/expirylist"
+    payload = {
+        "UnderlyingScrip": int(security_id),
+        "UnderlyingSeg": segment
+    }
+    try:
+        data, err = safe_post(url, payload, timeout=10)
+    except Exception:
+        return ["nearest"]
+    if err or not data:
+        return ["nearest"]
+    if isinstance(data, list):
+        return data or ["nearest"]
+    if isinstance(data, dict):
+        expiries = data.get("data") or []
+        return expiries or ["nearest"]
+    return ["nearest"]

@@ -2,13 +2,15 @@ import datetime as dt
 import streamlit as st
 
 from dhan_data.client import BASE_URL, DhanApiClient, safe_post
+from dhan_data.expiry import get_expiry_list
 from dhan_data.instruments import get_symbol_data, load_instruments
+from dhan_data.security_map import SECURITY_MAP
 
 
 DEFAULT_INDEXES = {
-    "NIFTY": {"security_id": 13, "segment": "IDX_I"},
-    "BANKNIFTY": {"security_id": 25, "segment": "IDX_I"},
-    "FINNIFTY": {"security_id": 27, "segment": "IDX_I"},
+    "NIFTY": {"security_id": int(SECURITY_MAP.get("NIFTY", 13)), "segment": "IDX_I"},
+    "BANKNIFTY": {"security_id": int(SECURITY_MAP.get("BANKNIFTY", 25)), "segment": "IDX_I"},
+    "FINNIFTY": {"security_id": int(SECURITY_MAP.get("FINNIFTY", 27)), "segment": "IDX_I"},
 }
 
 DEFAULT_STOCKS = [
@@ -29,7 +31,11 @@ INDEX_FALLBACKS = {
     symbol: (data["security_id"], data["segment"])
     for symbol, data in DEFAULT_INDEXES.items()
 }
-STOCK_FALLBACKS = {}
+STOCK_FALLBACKS = {
+    symbol: (int(sec_id), "NSE_EQ")
+    for symbol, sec_id in SECURITY_MAP.items()
+    if symbol not in DEFAULT_INDEXES
+}
 
 
 def _as_float(value):
@@ -59,6 +65,21 @@ def _normalize_symbol(symbol):
     return str(symbol or "").strip().upper()
 
 
+def _normalize_segment(segment, symbol=None):
+    if not segment:
+        if symbol in DEFAULT_INDEXES:
+            return "IDX_I"
+        if symbol in SECURITY_MAP:
+            return "NSE_EQ"
+        return None
+    seg = str(segment).upper()
+    if seg in {"D", "EQ", "NSE_EQ"}:
+        return "NSE_EQ"
+    if seg in {"I", "IDX_I"}:
+        return "IDX_I"
+    return seg
+
+
 def _find_symbol_in_master(symbol_aliases):
     aliases = {_normalize_symbol(sym) for sym in symbol_aliases if sym}
     if not aliases:
@@ -83,10 +104,18 @@ def _find_symbol_in_master(symbol_aliases):
 def _resolve_symbol(symbol, fallbacks, aliases=None):
     symbol = _normalize_symbol(symbol)
     sec_id, segment = get_symbol_data(symbol)
+    segment = _normalize_segment(segment, symbol)
     if sec_id and segment:
         return sec_id, segment
     if aliases:
         sec_id, segment = _find_symbol_in_master([symbol] + list(aliases))
+        segment = _normalize_segment(segment, symbol)
+        if sec_id and segment:
+            return sec_id, segment
+    mapped = SECURITY_MAP.get(symbol)
+    if mapped:
+        sec_id = _to_int(mapped)
+        segment = "IDX_I" if symbol in DEFAULT_INDEXES else "NSE_EQ"
         if sec_id and segment:
             return sec_id, segment
     fallback = fallbacks.get(symbol)
@@ -97,14 +126,43 @@ def _build_placeholder_section(symbols):
     return {symbol: {"symbol": symbol} for symbol in symbols}
 
 
+def _empty_market_data(errors=None):
+    return {
+        "indian": {},
+        "global": _build_placeholder_section(GLOBAL_PLACEHOLDERS),
+        "currency": _build_placeholder_section(CURRENCY_PLACEHOLDERS),
+        "stocks": [],
+        "options": {
+            "chain": [],
+            "pcr": 0,
+            "atm": None,
+            "oi_analysis": {},
+            "by_symbol": {},
+            "selected_symbol": None,
+            "selected_expiry": None
+        },
+        "intraday": [],
+        "historical": [],
+        "volume_spike": {"spike": False, "threshold": None, "latest": None},
+        "depth": {"symbol": None, "data": {}},
+        "_meta": {
+            "errors": errors or [],
+            "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()
+        }
+    }
+
+
 @st.cache_data(ttl=5)
 def _fetch_ltp(instrument_key):
-    instruments = [
-        {"exchangeSegment": seg, "securityId": sec_id}
-        for seg, sec_id in instrument_key
-    ]
-    payload = {"instruments": instruments}
-    data, err = safe_post(f"{BASE_URL}/marketfeed/ltp", payload, timeout=5)
+    try:
+        instruments = [
+            {"exchangeSegment": seg, "securityId": sec_id}
+            for seg, sec_id in instrument_key
+        ]
+        payload = {"instruments": instruments}
+        data, err = safe_post(f"{BASE_URL}/marketfeed/ltp", payload, timeout=5)
+    except Exception as exc:
+        return [], str(exc)
     if err or not data:
         return [], err
     return _extract_ltp_records(data), None
@@ -139,8 +197,11 @@ def _map_ltp_record(record):
 
 @st.cache_data(ttl=3600)
 def _fetch_expiry_list(security_id, segment):
-    payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": segment}
-    data, err = safe_post(f"{BASE_URL}/optionchain/expirylist", payload, timeout=10)
+    try:
+        payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": segment}
+        data, err = safe_post(f"{BASE_URL}/optionchain/expirylist", payload, timeout=10)
+    except Exception:
+        return []
     if err or not data:
         return []
     if isinstance(data, list):
@@ -152,13 +213,16 @@ def _fetch_expiry_list(security_id, segment):
 
 @st.cache_data(ttl=30)
 def _fetch_option_chain(security_id, segment, expiry):
-    payload = {
-        "UnderlyingScrip": int(security_id),
-        "UnderlyingSeg": segment,
-        "expiryDate": expiry
-    }
-    data, err = safe_post(f"{BASE_URL}/optionchain", payload, timeout=10)
-    return data, err
+    try:
+        payload = {
+            "UnderlyingScrip": int(security_id),
+            "UnderlyingSeg": segment,
+            "expiryDate": expiry
+        }
+        data, err = safe_post(f"{BASE_URL}/optionchain", payload, timeout=10)
+        return data, err
+    except Exception as exc:
+        return {}, str(exc)
 
 
 def _normalize_option_leg(leg):
@@ -289,20 +353,23 @@ def _oi_analysis(chain_rows):
 
 @st.cache_data(ttl=30)
 def _fetch_intraday(security_id, segment):
-    instrument = "INDEX" if segment == "IDX_I" else "EQUITY"
-    today = dt.date.today()
-    from_date = dt.datetime.combine(today, dt.time(9, 15)).strftime("%Y-%m-%d %H:%M:%S")
-    to_date = dt.datetime.combine(today, dt.time(15, 30)).strftime("%Y-%m-%d %H:%M:%S")
-    payload = {
-        "securityId": str(security_id),
-        "exchangeSegment": segment,
-        "instrument": instrument,
-        "interval": "5",
-        "oi": False,
-        "fromDate": from_date,
-        "toDate": to_date
-    }
-    data, err = safe_post(f"{BASE_URL}/charts/intraday", payload, timeout=10)
+    try:
+        instrument = "INDEX" if segment == "IDX_I" else "EQUITY"
+        today = dt.date.today()
+        from_date = dt.datetime.combine(today, dt.time(9, 15)).strftime("%Y-%m-%d %H:%M:%S")
+        to_date = dt.datetime.combine(today, dt.time(15, 30)).strftime("%Y-%m-%d %H:%M:%S")
+        payload = {
+            "securityId": str(security_id),
+            "exchangeSegment": segment,
+            "instrument": instrument,
+            "interval": "5",
+            "oi": False,
+            "fromDate": from_date,
+            "toDate": to_date
+        }
+        data, err = safe_post(f"{BASE_URL}/charts/intraday", payload, timeout=10)
+    except Exception as exc:
+        return [], str(exc)
     if err or not data:
         return [], err
     return _parse_ohlc_series(data), None
@@ -310,19 +377,22 @@ def _fetch_intraday(security_id, segment):
 
 @st.cache_data(ttl=3600)
 def _fetch_historical(security_id, segment):
-    instrument = "INDEX" if segment == "IDX_I" else "EQUITY"
-    end = dt.date.today()
-    start = end - dt.timedelta(days=30)
-    payload = {
-        "securityId": str(security_id),
-        "exchangeSegment": segment,
-        "instrument": instrument,
-        "expiryCode": 0,
-        "oi": False,
-        "fromDate": start.strftime("%Y-%m-%d"),
-        "toDate": end.strftime("%Y-%m-%d")
-    }
-    data, err = safe_post(f"{BASE_URL}/charts/historical", payload, timeout=10)
+    try:
+        instrument = "INDEX" if segment == "IDX_I" else "EQUITY"
+        end = dt.date.today()
+        start = end - dt.timedelta(days=30)
+        payload = {
+            "securityId": str(security_id),
+            "exchangeSegment": segment,
+            "instrument": instrument,
+            "expiryCode": 0,
+            "oi": False,
+            "fromDate": start.strftime("%Y-%m-%d"),
+            "toDate": end.strftime("%Y-%m-%d")
+        }
+        data, err = safe_post(f"{BASE_URL}/charts/historical", payload, timeout=10)
+    except Exception as exc:
+        return [], str(exc)
     if err or not data:
         return [], err
     return _parse_ohlc_series(data), None
@@ -374,7 +444,7 @@ def _detect_volume_spike(intraday_rows):
 
 
 @st.cache_data(ttl=10)
-def build_market_data():
+def _build_market_data():
     errors = []
 
     index_symbols = ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"]
@@ -407,7 +477,10 @@ def build_market_data():
 
     indian_section = {}
     if index_instruments:
-        records, err = _fetch_ltp(tuple(index_instruments))
+        try:
+            records, err = _fetch_ltp(tuple(index_instruments))
+        except Exception as exc:
+            records, err = [], str(exc)
         if err:
             errors.append(f"Index LTP error: {err}")
         for idx, record in enumerate(records):
@@ -426,7 +499,10 @@ def build_market_data():
 
     stocks = []
     if stock_instruments:
-        records, err = _fetch_ltp(tuple(stock_instruments))
+        try:
+            records, err = _fetch_ltp(tuple(stock_instruments))
+        except Exception as exc:
+            records, err = [], str(exc)
         if err:
             errors.append(f"Stock LTP error: {err}")
         for idx, record in enumerate(records):
@@ -449,8 +525,12 @@ def build_market_data():
         if not sec_id or not seg:
             errors.append(f"Option chain missing securityId for {symbol}")
             continue
-        expiries = _fetch_expiry_list(sec_id, seg)
+        try:
+            expiries = get_expiry_list(symbol)
+        except Exception:
+            expiries = ["nearest"]
         if not expiries:
+            expiries = ["nearest"]
             errors.append(f"Option expiry missing for {symbol}")
         current_expiry = expiries[0] if expiries else None
         next_expiry = expiries[1] if len(expiries) > 1 else None
@@ -518,7 +598,10 @@ def build_market_data():
     sec_id, seg = _resolve_symbol(depth_symbol, STOCK_FALLBACKS)
     if sec_id and seg:
         payload = {"instruments": [{"exchangeSegment": seg, "securityId": sec_id}]}
-        depth_data, err = safe_post(f"{BASE_URL}/marketfeed/quote", payload, timeout=10)
+        try:
+            depth_data, err = safe_post(f"{BASE_URL}/marketfeed/quote", payload, timeout=10)
+        except Exception as exc:
+            depth_data, err = {}, str(exc)
         if err:
             errors.append(f"Depth error: {err}")
             depth_data = {}
@@ -530,7 +613,7 @@ def build_market_data():
         "stocks": stocks,
         "options": {
             "chain": default_chain,
-            "pcr": default_pcr,
+            "pcr": default_pcr if default_pcr is not None else 0,
             "atm": default_atm,
             "oi_analysis": default_oi,
             "by_symbol": options_by_symbol,
@@ -550,3 +633,10 @@ def build_market_data():
         }
     }
     return market_data
+
+
+def build_market_data():
+    try:
+        return _build_market_data()
+    except Exception as exc:
+        return _empty_market_data([f"Market data error: {exc}"])

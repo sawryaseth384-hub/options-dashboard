@@ -1,0 +1,10 @@
+SECURITY_MAP = {
+    "RELIANCE": "2885",
+    "TCS": "11536",
+    "HDFCBANK": "1333",
+    "INFY": "1594",
+    "ICICIBANK": "4963",
+    "NIFTY": "13",
+    "BANKNIFTY": "25",
+    "FINNIFTY": "27"
+}
