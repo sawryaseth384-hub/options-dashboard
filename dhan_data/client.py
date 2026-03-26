@@ -12,7 +12,7 @@ AUTH_ERROR_MARKERS = ("Unauthorized", "Missing Dhan token")
 
 def _full_url(path):
     path = path.lstrip("/")
-    return f"{BASE_URL.rstrip('/')}/{path}"
+    return f"{BASE_URL}/{path}"
 
 
 _logger = logging.getLogger(__name__)

@@ -15,11 +15,11 @@ def _normalize_historical_payload(payload):
     if "open" not in data and "o" in data:
         data = data.copy()
         data["open"] = data.get("o")
-        data["high"] = data.get("high") if "high" in data else data.get("h")
-        data["low"] = data.get("low") if "low" in data else data.get("l")
-        data["close"] = data.get("close") if "close" in data else data.get("c")
-        data["volume"] = data.get("volume") if "volume" in data else data.get("v")
-        data["timestamp"] = data.get("timestamp") if "timestamp" in data else data.get("t")
+        data["high"] = data.get("high", data.get("h"))
+        data["low"] = data.get("low", data.get("l"))
+        data["close"] = data.get("close", data.get("c"))
+        data["volume"] = data.get("volume", data.get("v"))
+        data["timestamp"] = data.get("timestamp", data.get("t"))
     return data
 
 
