@@ -23,7 +23,7 @@ def _auth_error(message):
 
 
 def _has_auth_header(headers):
-    return bool(headers.get("Authorization") or headers.get("access-token"))
+    return bool(headers.get("Authorization"))
 
 
 class DhanApiClient:
@@ -67,6 +67,7 @@ class DhanApiClient:
             )
         except Exception as exc:
             return None, str(exc)
+        _logger.info("API response status: %s %s -> %s", method.upper(), resolved_url, response.status_code)
         if response.status_code == 401:
             refreshed = self.refresh_token()
             if not refreshed:
@@ -83,6 +84,7 @@ class DhanApiClient:
                 )
             except Exception as exc:
                 return None, str(exc)
+            _logger.info("API response status: %s %s -> %s", method.upper(), resolved_url, response.status_code)
             if response.status_code == 401:
                 return None, "Unauthorized - token refresh failed"
         if response.status_code != 200:
