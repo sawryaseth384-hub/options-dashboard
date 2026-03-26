@@ -55,7 +55,7 @@ def safe_get(url, headers=None, params=None, retries=3, timeout=5):
             last_error = str(exc)
         if attempt < retries:
             time.sleep(0.5 * attempt)
-    return {}, last_error
+    return None, last_error
 
 
 class DhanApiClient:

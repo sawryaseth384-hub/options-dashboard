@@ -3,7 +3,7 @@ import logging
 import streamlit as st
 
 from dhan_data.client import BASE_URL, DhanApiClient, safe_post
-from dhan_data.expiry import get_expiry_list
+from dhan_data.expiry import DEFAULT_EXPIRY_FALLBACK, get_expiry_list
 from dhan_data.instruments import get_symbol_data, load_instruments
 from dhan_data.security_map import SECURITY_MAP
 
@@ -525,17 +525,17 @@ def _build_market_data():
 
     options_by_symbol = {}
     for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"]:
-        sec_id, seg = _resolve_symbol(symbol, INDEX_FALLBACKS)
-        if not sec_id or not seg:
+        sec_id, segment = _resolve_symbol(symbol, INDEX_FALLBACKS)
+        if not sec_id or not segment:
             errors.append(f"Option chain missing securityId for {symbol}")
             continue
         try:
-            expiries = get_expiry_list(symbol, seg)
+            expiries = get_expiry_list(symbol, segment)
         except Exception as exc:
             errors.append(f"{symbol} expiry error: {exc}")
-            expiries = ["nearest"]
+            expiries = [DEFAULT_EXPIRY_FALLBACK]
         if not expiries:
-            expiries = ["nearest"]
+            expiries = [DEFAULT_EXPIRY_FALLBACK]
             errors.append(f"Option expiry missing for {symbol}")
         current_expiry = expiries[0] if expiries else None
         next_expiry = expiries[1] if len(expiries) > 1 else None
@@ -543,7 +543,7 @@ def _build_market_data():
         for expiry in [current_expiry, next_expiry]:
             if not expiry:
                 continue
-            raw_chain, err = _fetch_option_chain(sec_id, seg, expiry)
+            raw_chain, err = _fetch_option_chain(sec_id, segment, expiry)
             if err:
                 errors.append(f"{symbol} option chain error: {err}")
                 continue
@@ -582,10 +582,12 @@ def _build_market_data():
         chain_data = symbol_data.get("chains", {}).get(default_expiry, {})
         default_chain = chain_data.get("chain_filtered") or chain_data.get("chain") or []
         default_pcr = chain_data.get("pcr")
-        if default_pcr is None:
+        if default_pcr is None and not default_chain:
             default_pcr = 0
         default_atm = chain_data.get("atm")
         default_oi = chain_data.get("oi_analysis") or {}
+    if default_pcr is None and not default_chain:
+        default_pcr = 0
 
     intraday_rows = []
     historical_rows = []
@@ -620,7 +622,7 @@ def _build_market_data():
         "stocks": stocks,
         "options": {
             "chain": default_chain,
-            "pcr": default_pcr if default_pcr is not None else 0,
+            "pcr": default_pcr,
             "atm": default_atm,
             "oi_analysis": default_oi,
             "by_symbol": options_by_symbol,
