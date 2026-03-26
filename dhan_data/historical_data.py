@@ -5,6 +5,7 @@ BASE_URL = "https://api.dhan.co/v2"
 
 @st.cache_data(ttl=30)
 def _normalize_historical_payload(payload):
+    """Normalize v2 historical responses into standard OHLC arrays."""
     if not isinstance(payload, dict):
         return {}
     data = payload.get("data") if "data" in payload else payload
