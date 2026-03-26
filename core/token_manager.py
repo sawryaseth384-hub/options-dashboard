@@ -12,7 +12,7 @@ _logger = logging.getLogger(__name__)
 DEFAULT_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 MAX_TOKEN_ATTEMPTS = 3
 TOKEN_VALIDITY_SECONDS = 24 * 60 * 60  # full token lifespan
-TOKEN_REFRESH_BUFFER_SECONDS = 60 * 60  # refresh one hour early
+TOKEN_REFRESH_BUFFER_SECONDS = 60 * 60  # refresh one hour early to avoid mid-session expiry
 TOKEN_TTL_SECONDS = TOKEN_VALIDITY_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS
 EPOCH_MS_THRESHOLD = 10_000_000_000  # treat larger numbers as millisecond epoch
 EPOCH_S_THRESHOLD = 1_000_000_000  # treat numbers above as seconds epoch
@@ -20,6 +20,7 @@ TOKEN_SESSION_KEY = "dhan_access_token"
 TOKEN_EXPIRY_KEY = "dhan_access_token_expiry"
 
 _TOKEN_LOGGED = False
+_TOKEN_EXPIRY_WARNED = False
 _TOKEN_CACHE = {"token": None, "expires_at": None}
 
 
@@ -66,6 +67,12 @@ def _extract_access_token(payload):
 
 
 def _parse_expiry(value):
+    """Convert expiry values to epoch seconds.
+
+    Numeric values above EPOCH_MS_THRESHOLD are treated as epoch milliseconds,
+    above EPOCH_S_THRESHOLD as epoch seconds, and smaller values are treated as
+    relative seconds (expiresIn style).
+    """
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -176,9 +183,9 @@ def _login():
     if not totp:
         return None, None, "TOTP generation failed"
     auth_url = _get_secret_value("DHAN_AUTH_URL") or DEFAULT_AUTH_URL
-    url = f"{auth_url}?dhanClientId={client_id}&pin={pin}&totp={totp}"
+    payload = {"dhanClientId": client_id, "pin": pin, "totp": totp}
     try:
-        response = requests.post(url, timeout=10)
+        response = requests.post(auth_url, json=payload, timeout=10)
     except Exception as exc:
         return None, None, str(exc)
     if response.status_code != 200:
@@ -205,7 +212,11 @@ def login_and_get_token():
 
 
 def get_access_token(force_refresh=False):
+    global _TOKEN_EXPIRY_WARNED
     cached_token, expires_at = _get_cached_token()
+    if cached_token and not expires_at and not _TOKEN_EXPIRY_WARNED:
+        _TOKEN_EXPIRY_WARNED = True
+        _logger.warning("Cached token missing expiry metadata; forcing refresh.")
     if cached_token and not force_refresh and not _is_expired(expires_at):
         return cached_token
     for attempt in range(1, MAX_TOKEN_ATTEMPTS + 1):
@@ -247,7 +258,8 @@ def get_credentials():
     credentials = {"CLIENT_ID": client_id, "PIN": pin, "TOTP_SECRET": totp_secret}
     missing = [name for name, value in credentials.items() if not value]
     if missing:
-        return {"_error": f"Missing credentials: {', '.join(missing)}"}
+        _logger.warning("Missing required credentials: %s", ", ".join(missing))
+        return {"_error": "Missing required credentials"}
     return {
         "client_id": client_id,
         "pin": pin,
