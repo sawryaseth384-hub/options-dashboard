@@ -1,5 +1,8 @@
-from dhan_data.client import DhanApiClient
-from dhan_data.instruments import get_symbol_data
+import datetime as dt
+import streamlit as st
+
+from dhan_data.client import BASE_URL, DhanApiClient, safe_post
+from dhan_data.instruments import get_symbol_data, load_instruments
 
 
 DEFAULT_INDEXES = {
@@ -20,6 +23,13 @@ DEFAULT_STOCKS = [
 ]
 
 VIX_ALIASES = ["INDIAVIX", "VIX"]
+GLOBAL_PLACEHOLDERS = []
+CURRENCY_PLACEHOLDERS = []
+INDEX_FALLBACKS = {
+    symbol: (data["security_id"], data["segment"])
+    for symbol, data in DEFAULT_INDEXES.items()
+}
+STOCK_FALLBACKS = {}
 
 
 def _as_float(value):
