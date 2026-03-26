@@ -52,12 +52,12 @@ def _to_float(value):
         return None
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def load_market_data():
     try:
         return build_market_data()
     except Exception as exc:
-        return {"_error": str(exc)}
+        return {"_meta": {"errors": [str(exc)]}}
 
 
 def render_header_row(title, symbols, section):
@@ -194,20 +194,29 @@ def resolve_spot_price(options_data, market_data):
 
 if not build_market_data:
     st.error(f"Data engine unavailable: {IMPORT_ERROR}")
-    st.stop()
+    market_data = {
+        "indian": {},
+        "stocks": [],
+        "options": {"chain": [], "pcr": 0},
+        "_meta": {"errors": [IMPORT_ERROR]}
+    }
+else:
+    if st.button("🔄 Refresh Data"):
+        load_market_data.clear()
+        st.experimental_rerun()
 
-if st.button("🔄 Refresh Data"):
-    load_market_data.clear()
-    st.experimental_rerun()
+    market_data = load_market_data()
 
-market_data = load_market_data()
 if not market_data:
     st.warning("No Data")
-    st.stop()
-if isinstance(market_data, dict) and market_data.get("_error"):
-    st.error("Dhan API Unauthorized. Check token in secrets.")
-    st.caption(f"Details: {market_data['_error']}")
-    st.stop()
+    market_data = {"indian": {}, "stocks": [], "options": {"chain": [], "pcr": 0}, "_meta": {"errors": []}}
+
+if isinstance(market_data, dict):
+    errors = market_data.get("_meta", {}).get("errors") or []
+    if errors:
+        with st.expander("API Errors"):
+            for error in errors:
+                st.write(error)
 
 indian_section = _get_section(market_data, ["indian", "indices", "indian_market", "market", "header", "headers"])
 
