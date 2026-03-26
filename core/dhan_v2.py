@@ -165,9 +165,11 @@ def _flatten_option_chain(data):
             pe = row.get("pe") or row.get("PE") or {}
             strike_value = _to_float(strike)
             if ce:
-                rows.append({"strike": strike_value, "type": "CE", "ltp": ce.get("last_price") or ce.get("ltp")})
+                ce_ltp = ce.get("last_price") or ce.get("ltp")
+                rows.append({"strike": strike_value, "type": "CE", "ltp": ce_ltp})
             if pe:
-                rows.append({"strike": strike_value, "type": "PE", "ltp": pe.get("last_price") or pe.get("ltp")})
+                pe_ltp = pe.get("last_price") or pe.get("ltp")
+                rows.append({"strike": strike_value, "type": "PE", "ltp": pe_ltp})
     elif isinstance(chain, list):
         for row in chain:
             strike = _to_float(row.get("strike") or row.get("strike_price") or row.get("strikePrice"))

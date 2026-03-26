@@ -241,7 +241,7 @@ def _get_cached_sdk_client():
 
 def get_sdk_client():
     if DhanHQ is None:
-        return None, "DhanHQ SDK not installed"
+        return None, "DhanHQ SDK not installed. Install with: pip install dhanhq"
     token = token_manager.get_access_token()
     client_id = token_manager.get_client_id()
     if not token or not client_id:
@@ -271,7 +271,8 @@ def _call_with_signature(method, **kwargs):
         signature = inspect.signature(method)
         filtered = {key: value for key, value in kwargs.items() if key in signature.parameters}
     except (TypeError, ValueError) as exc:
-        _logger.debug("Signature inspection failed for %s: %s", getattr(method, "__name__", method), exc)
+        name = getattr(method, "__name__", "<unknown>")
+        _logger.debug("Signature inspection failed for %s: %s", name, exc)
         filtered = kwargs
     return method(**filtered)
 

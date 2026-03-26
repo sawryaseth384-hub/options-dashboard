@@ -118,7 +118,7 @@ def get_expiry_list(security_id, segment="NSE_INDEX"):
 
 
 def get_option_chain(security_id, expiry=None, segment=None, exchange_segment=None):
-    underlying_segment = normalize_exchange_segment(segment or "NSE_INDEX") or "NSE_INDEX"
+    underlying_segment = normalize_exchange_segment(segment) or "NSE_INDEX"
     option_segment = _resolve_option_segment(exchange_segment or segment)
     contracts, err = get_option_contracts(security_id, option_segment)
     if err:

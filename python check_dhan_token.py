@@ -33,8 +33,7 @@ def test_expiry_list():
     return expiries
 
 def test_option_chain(expiry):
-    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "NSE_INDEX", "expiryDate": expiry}
-    print(f"\n📤 Sending payload to option chain:\n{json.dumps(payload, indent=2)}")
+    print(f"\n📤 Sending payload to option chain:\n{json.dumps({'UnderlyingScrip': 13, 'UnderlyingSeg': 'NSE_INDEX', 'expiryDate': expiry}, indent=2)}")
     data, err = get_option_chain(13, expiry=expiry, segment="NSE_INDEX")
     if err:
         print("❌ Option chain failed:", err)
