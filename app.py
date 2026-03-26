@@ -29,14 +29,21 @@ def _extract_data_list(payload):
     return None
 
 
+def _show_error(payload):
+    if isinstance(payload, dict) and payload.get("error"):
+        st.error(payload["error"])
+        return True
+    return False
+
+
 symbol = st.selectbox("Select Symbol", list(SECURITY_MAP.keys()))
 security_id, segment = SECURITY_MAP[symbol]
 
 st.subheader("📈 Live Price")
 ltp_data = get_ltp(security_id, segment)
 
-if isinstance(ltp_data, dict) and "error" in ltp_data:
-    st.error(ltp_data["error"])
+if _show_error(ltp_data):
+    st.metric("LTP", "No Data")
 else:
     ltp_value = extract_ltp(ltp_data)
     st.metric("LTP", "No Data" if ltp_value is None else f"{ltp_value:.2f}")
@@ -44,8 +51,10 @@ else:
 st.subheader("📊 Option Chain")
 chain = get_option_chain(security_id, exchange_segment=segment)
 
-if isinstance(chain, dict) and "error" in chain:
-    st.error(chain["error"])
+if _show_error(chain):
+    st.info("Option chain unavailable.")
+elif not chain:
+    st.info("No option chain data available.")
 else:
     st.dataframe(chain, use_container_width=True)
 
@@ -55,8 +64,8 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown("**Intraday**")
     intraday_data = get_intraday(security_id, segment)
-    if isinstance(intraday_data, dict) and "error" in intraday_data:
-        st.error(intraday_data["error"])
+    if _show_error(intraday_data):
+        st.info("Intraday data unavailable.")
     else:
         intraday_records = _extract_data_list(intraday_data)
         if intraday_records:
@@ -67,8 +76,8 @@ with col1:
 with col2:
     st.markdown("**Historical**")
     historical_data = get_historical(security_id, segment)
-    if isinstance(historical_data, dict) and "error" in historical_data:
-        st.error(historical_data["error"])
+    if _show_error(historical_data):
+        st.info("Historical data unavailable.")
     else:
         historical_records = _extract_data_list(historical_data)
         if historical_records:
@@ -79,7 +88,9 @@ with col2:
 st.subheader("📘 Market Depth")
 depth_data = get_depth(security_id, segment)
 
-if isinstance(depth_data, dict) and "error" in depth_data:
-    st.error(depth_data["error"])
+if _show_error(depth_data):
+    st.info("Market depth unavailable.")
+elif not depth_data:
+    st.info("No market depth data available.")
 else:
     st.json(depth_data)

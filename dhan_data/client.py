@@ -1,8 +1,6 @@
+import datetime as dt
 import inspect
 import logging
-import time
-
-import requests
 
 from core import token_manager
 
@@ -16,10 +14,6 @@ try:
 except ImportError:  # pragma: no cover - SDK missing
     DhanHQ = None
 
-BASE_URL = "https://api.dhan.co/v2"
-DEFAULT_RETRIES = 3
-AUTH_ERROR_MARKERS = ("Unauthorized", "Missing Dhan token")
-
 SEGMENT_ALIASES = {
     "D": "NSE_EQ",
     "EQ": "NSE_EQ",
@@ -32,168 +26,12 @@ SEGMENT_ALIASES = {
     "FNO": "NFO",
 }
 
+VALID_SEGMENTS = {"NSE_EQ", "NSE_INDEX", "NFO"}
+VALID_INSTRUMENT_TYPES = {"INDEX", "EQUITY", "OPTIDX", "OPTSTK", "FUTIDX", "FUTSTK"}
+
 _SDK_CACHE = {"client": None, "token": None, "client_id": None}
 
-
-def _full_url(path):
-    path = path.lstrip("/")
-    return f"{BASE_URL}/{path}"
-
-
 _logger = logging.getLogger(__name__)
-
-
-def _auth_error(message):
-    return {"_error": message}, message
-
-
-def _log_response_status(method, url, status_code):
-    _logger.info("API response status: %s %s -> %s", method.upper(), url, status_code)
-
-
-def _has_auth_header(headers):
-    return bool(headers.get("Authorization"))
-
-
-class DhanApiClient:
-    def __init__(self, base_url=BASE_URL, retries=DEFAULT_RETRIES, timeout=10):
-        self.base_url = base_url
-        self.retries = retries
-        self.timeout = timeout
-        self.token = token_manager.get_access_token()
-
-    def get_headers(self, extra=None):
-        token = self.token or token_manager.get_access_token()
-        if token:
-            self.token = token
-        headers = token_manager.get_headers()
-        if extra:
-            headers.update(extra)
-        return headers
-
-    def refresh_token(self):
-        self.token = token_manager.get_access_token(force_refresh=True)
-        return self.token
-
-    def request(self, method, url, payload=None, params=None, headers=None, timeout=None):
-        resolved_url = url if url.startswith("http") else _full_url(url)
-        resolved_headers = self.get_headers(headers)
-        if not _has_auth_header(resolved_headers):
-            refreshed = self.refresh_token()
-            if refreshed:
-                resolved_headers = self.get_headers(headers)
-        if not _has_auth_header(resolved_headers):
-            return None, "Missing Dhan token"
-        json_payload = payload if method.upper() in {"POST", "PUT", "PATCH"} else None
-        try:
-            response = requests.request(
-                method,
-                resolved_url,
-                headers=resolved_headers,
-                json=json_payload,
-                params=params,
-                timeout=timeout or self.timeout
-            )
-        except Exception as exc:
-            return None, str(exc)
-        _log_response_status(method, resolved_url, response.status_code)
-        if response.status_code == 401:
-            refreshed = self.refresh_token()
-            if not refreshed:
-                return None, "Unauthorized - token refresh failed"
-            resolved_headers = self.get_headers(headers)
-            try:
-                response = requests.request(
-                    method,
-                    resolved_url,
-                    headers=resolved_headers,
-                    json=json_payload,
-                    params=params,
-                    timeout=timeout or self.timeout
-                )
-            except Exception as exc:
-                return None, str(exc)
-            _log_response_status(method, resolved_url, response.status_code)
-            if response.status_code == 401:
-                return None, "Unauthorized - token refresh failed"
-        if response.status_code != 200:
-            return None, f"HTTP {response.status_code}"
-        try:
-            return response.json(), None
-        except Exception as exc:
-            return None, f"Invalid JSON response: {exc}"
-
-    def post(self, endpoint, payload):
-        return self.request(
-            "POST",
-            _full_url(endpoint),
-            payload=payload,
-            timeout=self.timeout
-        )
-
-    def get(self, endpoint, params=None):
-        return self.request(
-            "GET",
-            _full_url(endpoint),
-            params=params,
-            timeout=self.timeout
-        )
-
-
-def _get_default_client():
-    return DhanApiClient()
-
-
-def safe_request(method, url, client, payload=None, params=None, headers=None, retries=None, timeout=None):
-    attempts = retries if retries is not None else client.retries
-    last_error = None
-    for attempt in range(1, attempts + 1):
-        try:
-            data, error = client.request(
-                method,
-                url,
-                payload=payload,
-                params=params,
-                headers=headers,
-                timeout=timeout
-            )
-        except Exception as exc:
-            data, error = None, str(exc)
-        if error is None and data is not None:
-            return data, None
-        last_error = error or last_error
-        if error and any(marker in error for marker in AUTH_ERROR_MARKERS):
-            break
-        if attempt < attempts:
-            time.sleep(0.5 * attempt)
-    _logger.warning("Request failed after %s attempts: %s", attempts, last_error)
-    return {}, last_error
-
-
-def safe_post(url, payload, headers=None, retries=DEFAULT_RETRIES, timeout=10):
-    client = _get_default_client()
-    return safe_request(
-        "POST",
-        url,
-        client,
-        payload=payload,
-        headers=headers,
-        retries=retries,
-        timeout=timeout
-    )
-
-
-def safe_get(url, headers=None, params=None, retries=DEFAULT_RETRIES, timeout=5):
-    client = _get_default_client()
-    return safe_request(
-        "GET",
-        url,
-        client,
-        params=params,
-        headers=headers,
-        retries=retries,
-        timeout=timeout
-    )
 
 
 def normalize_exchange_segment(segment):
@@ -245,7 +83,7 @@ def get_sdk_client():
     token = token_manager.get_access_token()
     client_id = token_manager.get_client_id()
     if not token or not client_id:
-        return None, "Unauthorized (401) - invalid token"
+        return None, "Missing credentials. Set CLIENT_ID and DHAN_ACCESS_TOKEN in Streamlit secrets."
     cached_client, cached_token, cached_client_id = _get_cached_sdk_client()
     if cached_client and cached_token == token and cached_client_id == client_id:
         return cached_client, None
@@ -332,17 +170,18 @@ def _redact_params(params):
 def _normalize_sdk_error(payload, params=None, context="DhanHQ"):
     if payload is None:
         return f"{context} error: empty response"
-    if isinstance(payload, dict):
-        if payload.get("status") in ("success", "ok", "OK"):
-            return None
-        if "status" not in payload and not _extract_error_message(payload):
-            return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("status") in ("success", "ok", "OK"):
+        return None
+    if "status" not in payload and not _extract_error_message(payload):
+        return None
     status_code = _extract_status_code(payload)
     message = _extract_error_message(payload)
     if status_code == 401 or (message and "unauthorized" in message.lower()):
-        return "Unauthorized (401) - invalid token"
+        return "Token expired (401). Update DHAN_ACCESS_TOKEN in Streamlit secrets."
     if status_code == 404:
-        return "Endpoint not found (404) - should not happen after SDK fix"
+        return "Endpoint not found (404). Update the DhanHQ SDK."
     if status_code == 400:
         safe_params = _redact_params(params)
         _logger.warning("Invalid parameters (400) for %s: %s", context, safe_params)
@@ -369,9 +208,94 @@ def _sdk_call(method_name, context, params, fallback_methods=None):
     return payload, None
 
 
+def _validate_security_id(security_id):
+    if security_id is None or security_id == "":
+        return None, "Invalid parameters (400): security_id is required"
+    try:
+        return int(security_id), None
+    except (TypeError, ValueError):
+        return None, "Invalid parameters (400): security_id must be an integer"
+
+
+def _validate_exchange_segment(exchange_segment):
+    normalized = normalize_exchange_segment(exchange_segment)
+    if not normalized:
+        return None, "Invalid parameters (400): exchange_segment is required"
+    if normalized not in VALID_SEGMENTS:
+        return None, f"Invalid parameters (400): exchange_segment must be one of {sorted(VALID_SEGMENTS)}"
+    return normalized, None
+
+
+def _validate_instrument_type(instrument_type):
+    if not instrument_type:
+        return None, "Invalid parameters (400): instrument_type is required"
+    normalized = str(instrument_type).strip().upper()
+    if normalized not in VALID_INSTRUMENT_TYPES:
+        return None, f"Invalid parameters (400): instrument_type must be one of {sorted(VALID_INSTRUMENT_TYPES)}"
+    return normalized, None
+
+
+def _parse_datetime(value):
+    if isinstance(value, dt.datetime):
+        return value
+    if isinstance(value, dt.date):
+        return dt.datetime.combine(value, dt.time.min)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
+def _normalize_date(value, with_time=False):
+    if isinstance(value, dt.datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(value, dt.date):
+        if with_time:
+            return dt.datetime.combine(value, dt.time.min).strftime("%Y-%m-%d %H:%M:%S")
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+def _validate_date_range(from_date, to_date, with_time=False):
+    if not from_date or not to_date:
+        return None, None, "Invalid parameters (400): from_date and to_date are required"
+    from_value = _normalize_date(from_date, with_time=with_time)
+    to_value = _normalize_date(to_date, with_time=with_time)
+    from_parsed = _parse_datetime(from_value)
+    to_parsed = _parse_datetime(to_value)
+    if not from_parsed or not to_parsed:
+        return None, None, "Invalid parameters (400): from_date/to_date must be ISO date strings"
+    if from_parsed > to_parsed:
+        return None, None, "Invalid parameters (400): from_date must be before to_date"
+    return from_value, to_value, None
+
+
+def _validate_time_frame(time_frame):
+    if time_frame is None or time_frame == "":
+        return None, "Invalid parameters (400): time_frame is required"
+    try:
+        value = int(time_frame)
+    except (TypeError, ValueError):
+        return None, "Invalid parameters (400): time_frame must be an integer"
+    if value <= 0:
+        return None, "Invalid parameters (400): time_frame must be positive"
+    return value, None
+
+
 def sdk_get_quote(security_id, exchange_segment):
-    exchange_segment = normalize_exchange_segment(exchange_segment)
-    security_id = int(security_id)
+    security_id, err = _validate_security_id(security_id)
+    if err:
+        return None, err
+    exchange_segment, err = _validate_exchange_segment(exchange_segment)
+    if err:
+        return None, err
     params = {
         "security_id": security_id,
         "exchange_segment": exchange_segment,
@@ -381,20 +305,39 @@ def sdk_get_quote(security_id, exchange_segment):
 
 
 def sdk_option_contracts(security_id, exchange_segment):
-    exchange_segment = normalize_exchange_segment(exchange_segment)
+    security_id, err = _validate_security_id(security_id)
+    if err:
+        return None, err
+    exchange_segment, err = _validate_exchange_segment(exchange_segment)
+    if err:
+        return None, err
     params = {
-        "security_id": int(security_id),
+        "security_id": security_id,
         "exchange_segment": exchange_segment,
-        "underlying_security_id": int(security_id),
+        "underlying_security_id": security_id,
         "underlying_exchange_segment": exchange_segment,
     }
     return _sdk_call("option_contracts", "Option contracts", params, fallback_methods=[])
 
 
 def sdk_intraday_daily_minute_charts(security_id, exchange_segment, instrument_type, from_date, to_date, time_frame=5):
-    exchange_segment = normalize_exchange_segment(exchange_segment)
+    security_id, err = _validate_security_id(security_id)
+    if err:
+        return None, err
+    exchange_segment, err = _validate_exchange_segment(exchange_segment)
+    if err:
+        return None, err
+    instrument_type, err = _validate_instrument_type(instrument_type)
+    if err:
+        return None, err
+    from_date, to_date, err = _validate_date_range(from_date, to_date, with_time=True)
+    if err:
+        return None, err
+    time_frame, err = _validate_time_frame(time_frame)
+    if err:
+        return None, err
     params = {
-        "security_id": int(security_id),
+        "security_id": security_id,
         "exchange_segment": exchange_segment,
         "instrument_type": instrument_type,
         "from_date": from_date,
@@ -411,9 +354,23 @@ def sdk_intraday_daily_minute_charts(security_id, exchange_segment, instrument_t
 
 
 def sdk_historical_minute_charts(security_id, exchange_segment, instrument_type, from_date, to_date, time_frame=5):
-    exchange_segment = normalize_exchange_segment(exchange_segment)
+    security_id, err = _validate_security_id(security_id)
+    if err:
+        return None, err
+    exchange_segment, err = _validate_exchange_segment(exchange_segment)
+    if err:
+        return None, err
+    instrument_type, err = _validate_instrument_type(instrument_type)
+    if err:
+        return None, err
+    from_date, to_date, err = _validate_date_range(from_date, to_date, with_time=False)
+    if err:
+        return None, err
+    time_frame, err = _validate_time_frame(time_frame)
+    if err:
+        return None, err
     params = {
-        "security_id": int(security_id),
+        "security_id": security_id,
         "exchange_segment": exchange_segment,
         "instrument_type": instrument_type,
         "from_date": from_date,
@@ -430,9 +387,14 @@ def sdk_historical_minute_charts(security_id, exchange_segment, instrument_type,
 
 
 def sdk_get_market_depth(security_id, exchange_segment):
-    exchange_segment = normalize_exchange_segment(exchange_segment)
+    security_id, err = _validate_security_id(security_id)
+    if err:
+        return None, err
+    exchange_segment, err = _validate_exchange_segment(exchange_segment)
+    if err:
+        return None, err
     params = {
-        "security_id": int(security_id),
+        "security_id": security_id,
         "exchange_segment": exchange_segment,
     }
     return _sdk_call("get_market_depth", "Market depth", params, fallback_methods=[])

@@ -1,28 +1,17 @@
 import json
 
-import requests
-
-from core.token_manager import get_access_token, get_headers
+from core.token_manager import get_access_token, get_client_id
+from dhan_data.client import sdk_get_quote
 from dhan_data.option_chain import get_expiry_list, get_option_chain
 
-BASE_URL = "https://api.dhan.co/v2"
 
-def check_profile():
-    url = f"{BASE_URL}/profile"
-    headers = get_headers()
-    resp = requests.get(url, headers=headers)
-    if resp.status_code == 401:
-        print("❌ Unauthorized - check token")
+def check_quote():
+    data, err = sdk_get_quote(13, "NSE_INDEX")
+    if err:
+        print("❌ Quote API failed:", err)
         return None
-    if resp.status_code == 200:
-        data = resp.json()
-        print("✅ Token valid.")
-        print(f"   Token expiry: {data.get('tokenValidity')}")
-        print(f"   Data Plan status: {data.get('dataPlan')}")
-        return data
-    else:
-        print("❌ Profile API failed:", resp.json())
-        return None
+    print("✅ Quote fetched. Token is valid.")
+    return data
 
 def test_expiry_list():
     expiries, err = get_expiry_list(13, "NSE_INDEX")
@@ -48,14 +37,11 @@ def test_option_chain(expiry):
 if __name__ == "__main__":
     print("🔍 Testing Dhan API token...")
     token = get_access_token()
-    if not token:
-        print("❌ Missing Dhan token. Check CLIENT_ID, PIN, and TOTP_SECRET.")
+    client_id = get_client_id()
+    if not token or not client_id:
+        print("❌ Missing credentials. Check CLIENT_ID and DHAN_ACCESS_TOKEN.")
         exit()
-    profile = check_profile()
-    if not profile:
-        exit()
-    if profile.get("dataPlan") != "Active":
-        print("❌ Data Plan is NOT active.")
+    if not check_quote():
         exit()
     expiries = test_expiry_list()
     if not expiries:

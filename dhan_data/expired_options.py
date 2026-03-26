@@ -1,60 +1,29 @@
-import pandas as pd
-import streamlit as st
-from datetime import datetime, timedelta
-import time
-from dhan_data.client import safe_post
+import logging
 
-BASE_URL = "https://api.dhan.co/v2"
-_last_expired_call = 0
+try:
+    import streamlit as st
+except Exception:  # pragma: no cover - streamlit not available in some contexts
+    st = None
+
+_logger = logging.getLogger(__name__)
+
+
+def _show_info(message):
+    if st is None:
+        return
+    try:
+        st.info(message)
+    except Exception:
+        pass
+
 
 def get_expired_options(security_id, segment, option_type="CALL"):
-    global _last_expired_call
-    now = time.time()
-    wait = max(0, 1 - (now - _last_expired_call))
-    if wait > 0:
-        time.sleep(wait)
-    _last_expired_call = time.time()
-
-    try:
-        url = f"{BASE_URL}/charts/rollingoption"
-        to_date = datetime.now()
-        from_date = to_date - timedelta(days=5)
-        instrument = "OPTIDX" if segment == "NSE_INDEX" else "OPTSTK"
-        payload = {
-            "exchangeSegment": "NFO",
-            "interval": "1",
-            "securityId": int(security_id),
-            "instrument": instrument,
-            "expiryFlag": "WEEK",
-            "expiryCode": 0,
-            "strike": "ATM",
-            "drvOptionType": option_type,
-            "requiredData": ["open","high","low","close","volume","oi","iv","spot"],
-            "fromDate": from_date.strftime("%Y-%m-%d"),
-            "toDate": to_date.strftime("%Y-%m-%d")
-        }
-        raw, err = safe_post(url, payload, timeout=10)
-        if err or not raw or "data" not in raw:
-            return None
-        key = "ce" if option_type == "CALL" else "pe"
-        data = raw["data"].get(key)
-        if not data:
-            return None
-        df = pd.DataFrame({
-            "time": pd.to_datetime(data.get("timestamp", []), unit="s"),
-            "open": data.get("open", []),
-            "high": data.get("high", []),
-            "low": data.get("low", []),
-            "close": data.get("close", []),
-            "volume": data.get("volume", []),
-            "oi": data.get("oi", []),
-            "iv": data.get("iv", []),
-            "spot": data.get("spot", []),
-            "strike": data.get("strike", [])
-        })
-        if df.empty:
-            return None
-        return df.dropna()
-    except Exception as e:
-        st.error(f"Expired Option Error: {e}")
-        return None
+    """Expired options data is not available via the DhanHQ SDK."""
+    _logger.warning(
+        "Expired options not supported via DhanHQ SDK (security_id=%s, segment=%s, option_type=%s).",
+        security_id,
+        segment,
+        option_type,
+    )
+    _show_info("Expired options data is not supported by the DhanHQ SDK.")
+    return None

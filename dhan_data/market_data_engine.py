@@ -466,7 +466,7 @@ def _detect_volume_spike(intraday_rows):
 def _build_market_data():
     errors = []
     if not get_token():
-        errors.append("Missing Dhan credentials (CLIENT_ID, PIN, or TOTP_SECRET).")
+        errors.append("Missing Dhan credentials (CLIENT_ID and DHAN_ACCESS_TOKEN).")
         return _empty_market_data(errors)
 
     index_symbols = ["NIFTY", "BANKNIFTY", "FINNIFTY", "VIX"]
