@@ -1,279 +1,161 @@
-import streamlit as st
+import os
+import threading
 import requests
-import pandas as pd
-import time
-from datetime import datetime, timedelta
-from streamlit_autorefresh import st_autorefresh
+import pyotp
+from datetime import datetime, timedelta, timezone
 
-# =========================
-# CUSTOM MODULES
-# =========================
-from core.token_manager import get_token
-from dhan_data.live_market_feed import start_feed, get_live_price
+try:
+    import streamlit as st
+except Exception:
+    st = None
 
 # =========================
 # CONFIG
 # =========================
-BASE_URL = "https://api.dhan.co/v2"
-
-st.set_page_config(layout="wide")
-st.title("🚀 Dhan Smart Dashboard")
-
-# =========================
-# AUTO REFRESH (Stable)
-# =========================
-st_autorefresh(interval=2000, key="refresh")
+AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
+# Refresh a few minutes early to avoid race conditions at expiry
+REFRESH_BUFFER = timedelta(minutes=3)
+# Dhan tokens are valid for 24h; use as fallback if API doesn’t return expiry
+DEFAULT_TTL = timedelta(hours=24)
 
 # =========================
-# CLIENT ID SAFE LOAD
+# STATE (IN-MEMORY)
 # =========================
-CLIENT_ID = st.secrets.get("CLIENT_ID")
-
-if not CLIENT_ID:
-    st.error("❌ CLIENT_ID missing in secrets")
-    st.stop()
-
-# =========================
-# TOKEN INIT
-# =========================
-token = get_token()
-
-if not token:
-    st.error("❌ Token Error")
-    st.stop()
-
-# =========================
-# WEBSOCKET START (SAFE)
-# =========================
-if not st.session_state.get("ws_started", False):
-    start_feed(token, CLIENT_ID)
-    st.session_state["ws_started"] = True
-
-# =========================
-# HEADERS
-# =========================
-def get_headers():
-    return {
-        "access-token": get_token(),
-        "client-id": CLIENT_ID,
-        "Content-Type": "application/json"
-    }
-
-# =========================
-# SAFE POST (WITH RETRY)
-# =========================
-_last_call = 0
-
-def safe_post(url, payload):
-    global _last_call
-
-    wait = max(0, 1.2 - (time.time() - _last_call))
-    if wait > 0:
-        time.sleep(wait)
-
-    for _ in range(3):
-        try:
-            res = requests.post(url, headers=get_headers(), json=payload, timeout=10)
-            _last_call = time.time()
-
-            if res.status_code == 200:
-                data = res.json()
-
-                if data.get("status") == "failure":
-                    return None, data.get("remarks", "API Error")
-
-                return data, None
-
-        except Exception as e:
-            return None, str(e)
-
-        time.sleep(1)
-
-    return None, "Retry Failed"
-
-# =========================
-# SYMBOLS
-# =========================
-symbols = {
-    "NIFTY": (13, "IDX_I", "INDEX"),
-    "RELIANCE": (2885, "NSE_EQ", "EQUITY"),
+_state = {
+    "token": None,
+    "expiry": None,
 }
-
-st.subheader("📊 SYMBOLS")
-st.write(symbols)
+_lock = threading.Lock()
 
 # =========================
-# LIVE LTP
+# HELPERS
 # =========================
-st.subheader("📈 LIVE LTP")
+def _get_secret(key: str) -> str:
+    """Streamlit secrets → env var fallback."""
+    if st:
+        try:
+            val = st.secrets.get(key)
+            if val:
+                return str(val).strip()
+        except Exception:
+            pass
+    return os.getenv(key, "").strip()
 
-ltp = get_live_price()
+def _load_credentials():
+    client_id = _get_secret("CLIENT_ID")
+    pin = _get_secret("DHAN_PIN")
+    totp_secret = _get_secret("TOTP_SECRET")
 
-if ltp > 0:
-    st.success(f"🔥 {round(ltp, 2)}")
-else:
-    st.warning("⏳ Waiting for live data...")
+    if not client_id or not pin or not totp_secret:
+        raise RuntimeError("Missing CLIENT_ID / DHAN_PIN / TOTP_SECRET")
 
-# =========================
-# MARKET DEPTH (CACHED)
-# =========================
-@st.cache_data(ttl=5)
-def get_depth(sec, seg):
-    payload = {seg: [int(sec)]}
+    return client_id, pin, totp_secret
 
-    data, err = safe_post(f"{BASE_URL}/marketfeed/ltp", payload)
+def _generate_totp(secret: str) -> str:
+    return pyotp.TOTP(secret).now()
 
-    if err:
-        return None, err
+def _parse_expiry(expiry_raw):
+    """
+    Accepts ISO string or epoch seconds/millis.
+    Returns timezone-aware datetime.
+    """
+    if expiry_raw is None:
+        return datetime.now(timezone.utc) + DEFAULT_TTL
 
+    # ISO-8601 string
+    if isinstance(expiry_raw, str):
+        try:
+            dt = datetime.fromisoformat(expiry_raw)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except Exception:
+            pass
+
+    # Numeric epoch (seconds or millis)
     try:
-        d = data["data"][seg][str(sec)]
-        return {
-            "LTP": d.get("last_price"),
-            "High": d.get("high"),
-            "Low": d.get("low"),
-            "Open": d.get("open"),
-        }, None
-    except:
-        return None, "Parse Error"
+        expiry_raw = int(expiry_raw)
+        # Heuristic: if too large, treat as millis
+        if expiry_raw > 4_000_000_000:  # ~year 2100 in seconds
+            expiry_raw = expiry_raw / 1000
+        return datetime.fromtimestamp(expiry_raw, tz=timezone.utc)
+    except Exception:
+        return datetime.now(timezone.utc) + DEFAULT_TTL
 
-st.subheader("📊 MARKET DEPTH")
-
-sec, seg, inst = symbols["RELIANCE"]
-depth, d_err = get_depth(sec, seg)
-
-if depth:
-    c1, c2, c3 = st.columns(3)
-    c1.metric("LTP", depth["LTP"])
-    c2.metric("High", depth["High"])
-    c3.metric("Low", depth["Low"])
-else:
-    st.warning(f"❌ {d_err}")
+def _is_token_expired() -> bool:
+    expiry = _state["expiry"]
+    if not expiry:
+        return True
+    return datetime.now(timezone.utc) >= (expiry - REFRESH_BUFFER)
 
 # =========================
-# HISTORICAL DATA
+# TOKEN GENERATION
 # =========================
-@st.cache_data(ttl=60)
-def get_historical(sec, seg, inst):
+def _generate_token() -> str:
+    client_id, pin, totp_secret = _load_credentials()
+    totp = _generate_totp(totp_secret)
+
     payload = {
-        "securityId": str(sec),
-        "exchangeSegment": seg,
-        "instrument": inst,
-        "expiryCode": 0,
-        "oi": False,
-        "fromDate": (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d"),
-        "toDate": datetime.now().strftime("%Y-%m-%d"),
+        "dhanClientId": client_id,
+        "pin": pin,
+        "totp": totp,
     }
 
-    data, err = safe_post(f"{BASE_URL}/charts/historical", payload)
+    res = requests.post(AUTH_URL, params=payload, timeout=10)
+    if res.status_code != 200:
+        raise RuntimeError(f"Auth failed: {res.status_code} - {res.text}")
 
-    if err or not data or "open" not in data:
-        return None
+    data = res.json() if res.content else {}
+    token = data.get("accessToken")
+    expiry_raw = data.get("expiryTime")
 
-    return pd.DataFrame(data)
+    if not token:
+        raise RuntimeError("Invalid token response: accessToken missing")
 
-st.subheader("📅 HISTORICAL")
+    expiry_dt = _parse_expiry(expiry_raw)
 
-hist = get_historical(sec, seg, inst)
-
-if hist is not None:
-    st.dataframe(hist.tail())
-else:
-    st.warning("No Data")
+    _state["token"] = token
+    _state["expiry"] = expiry_dt
+    return token
 
 # =========================
-# INTRADAY
+# PUBLIC FUNCTIONS
 # =========================
-@st.cache_data(ttl=10)
-def get_intraday(sec, seg, inst):
-    payload = {
-        "securityId": str(sec),
-        "exchangeSegment": seg,
-        "instrument": inst,
-        "interval": "1",
-        "oi": False,
-        "fromDate": datetime.now().strftime("%Y-%m-%d"),
-        "toDate": datetime.now().strftime("%Y-%m-%d"),
+def get_token() -> str:
+    """
+    Returns a valid token, generating/refreshing if needed.
+    Thread-safe for concurrent callers.
+    """
+    with _lock:
+        if _state["token"] and not _is_token_expired():
+            return _state["token"]
+        return _generate_token()
+
+def refresh_token() -> str:
+    """
+    Forces a token refresh regardless of current validity.
+    """
+    with _lock:
+        return _generate_token()
+
+def is_token_valid() -> bool:
+    with _lock:
+        return _state["token"] is not None and not _is_token_expired()
+
+def get_headers() -> dict:
+    client_id, _, _ = _load_credentials()
+    token = get_token()
+    return {
+        "access-token": token,
+        "client-id": client_id,
+        "Content-Type": "application/json",
     }
 
-    data, err = safe_post(f"{BASE_URL}/charts/intraday", payload)
-
-    if err or not data:
-        return None
-
-    return pd.DataFrame(data)
-
-st.subheader("🕯 INTRADAY")
-
-candle = get_intraday(sec, seg, inst)
-
-if candle is not None:
-    st.line_chart(candle["close"])
-else:
-    st.warning("No Data")
-
 # =========================
-# OPTION CHAIN
+# OPTIONAL: 401 HANDLER
 # =========================
-@st.cache_data(ttl=300)
-def get_expiry(sec):
-    payload = {
-        "UnderlyingScrip": int(sec),
-        "UnderlyingSeg": "IDX_I"
-    }
-
-    data, err = safe_post(f"{BASE_URL}/optionchain/expirylist", payload)
-
-    if err or not data:
-        return []
-
-    return data.get("data", [])
-
-@st.cache_data(ttl=120)
-def get_chain(sec, expiry):
-    payload = {
-        "UnderlyingScrip": int(sec),
-        "UnderlyingSeg": "IDX_I",
-        "Expiry": expiry
-    }
-
-    data, err = safe_post(f"{BASE_URL}/optionchain", payload)
-
-    if err or not data:
-        return None
-
-    return data["data"]["oc"]
-
-st.subheader("📊 OPTION CHAIN")
-
-nifty_sec, _, _ = symbols["NIFTY"]
-
-expiries = get_expiry(nifty_sec)
-
-if expiries:
-    selected_exp = st.selectbox("Select Expiry", expiries)
-
-    chain = get_chain(nifty_sec, selected_exp)
-
-    if chain:
-        df = pd.DataFrame.from_dict(chain, orient="index")
-        st.success(f"Strikes: {len(df)}")
-        st.dataframe(df.head(20))
-    else:
-        st.warning("Chain Error")
-else:
-    st.warning("No Expiry Data")
-
-# =========================
-# DEBUG PANEL
-# =========================
-st.subheader("🛠 DEBUG")
-
-st.write({
-    "Token": "OK",
-    "LTP": ltp,
-    "Depth": depth is not None,
-    "Historical": hist is not None,
-    "Intraday": candle is not None,
-    "Expiry": len(expiries) > 0
-})
+def handle_401_and_refresh():
+    """
+    Convenience helper: call when an API request returns 401.
+    """
+    return refresh_token()
