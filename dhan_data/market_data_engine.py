@@ -49,14 +49,10 @@ SEGMENT_ALIASES = {
 }
 
 _logger = logging.getLogger(__name__)
-_CLIENT = None
 
 
 def _get_client():
-    global _CLIENT
-    if _CLIENT is None:
-        _CLIENT = DhanApiClient()
-    return _CLIENT
+    return DhanApiClient()
 
 
 def _as_float(value):

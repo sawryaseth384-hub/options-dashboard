@@ -9,6 +9,7 @@ import streamlit as st
 _logger = logging.getLogger(__name__)
 _TOKEN_LOGGED = False
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
+MAX_TOKEN_ATTEMPTS = 3
 
 
 def _get_env_or_secret_value(key):
@@ -91,7 +92,7 @@ def get_token(force_refresh=False):
     if not client_id or not pin or not totp_secret:
         _logger.warning("Missing CLIENT_ID, PIN, or TOTP_SECRET in secrets.")
         return None
-    for attempt in range(1, 4):
+    for attempt in range(1, MAX_TOKEN_ATTEMPTS + 1):
         totp = _generate_totp(totp_secret)
         if not totp:
             return None
@@ -101,7 +102,7 @@ def get_token(force_refresh=False):
             _log_token_once(token)
             return token
         _logger.warning("Token generation attempt %s failed: %s", attempt, error)
-        if attempt < 3:
+        if attempt < MAX_TOKEN_ATTEMPTS:
             time.sleep(0.5 * attempt)
     return None
 

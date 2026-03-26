@@ -6,6 +6,7 @@ import requests
 from core import token_manager
 
 BASE_URL = "https://api.dhan.co"
+DEFAULT_RETRIES = 3
 
 
 def _full_url(path):
@@ -21,7 +22,7 @@ def _auth_error(message):
 
 
 class DhanApiClient:
-    def __init__(self, base_url=BASE_URL, retries=3, timeout=10):
+    def __init__(self, base_url=BASE_URL, retries=DEFAULT_RETRIES, timeout=10):
         self.base_url = base_url
         self.retries = retries
         self.timeout = timeout
@@ -98,18 +99,12 @@ class DhanApiClient:
         )
 
 
-_DEFAULT_CLIENT = None
-
-
 def _get_default_client():
-    global _DEFAULT_CLIENT
-    if _DEFAULT_CLIENT is None:
-        _DEFAULT_CLIENT = DhanApiClient()
-    return _DEFAULT_CLIENT
+    return DhanApiClient()
 
 
 def safe_request(method, url, client, payload=None, params=None, headers=None, retries=None, timeout=None):
-    attempts = retries or getattr(client, "retries", 3) or 3
+    attempts = retries or getattr(client, "retries", DEFAULT_RETRIES) or DEFAULT_RETRIES
     last_error = None
     for attempt in range(1, attempts + 1):
         try:
@@ -134,7 +129,7 @@ def safe_request(method, url, client, payload=None, params=None, headers=None, r
     return {}, last_error
 
 
-def safe_post(url, payload, headers=None, retries=3, timeout=10):
+def safe_post(url, payload, headers=None, retries=DEFAULT_RETRIES, timeout=10):
     client = _get_default_client()
     return safe_request(
         "POST",
@@ -147,7 +142,7 @@ def safe_post(url, payload, headers=None, retries=3, timeout=10):
     )
 
 
-def safe_get(url, headers=None, params=None, retries=3, timeout=5):
+def safe_get(url, headers=None, params=None, retries=DEFAULT_RETRIES, timeout=5):
     client = _get_default_client()
     return safe_request(
         "GET",
