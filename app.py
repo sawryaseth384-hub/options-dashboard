@@ -42,7 +42,7 @@ else:
     st.metric("LTP", "No Data" if ltp_value is None else f"{ltp_value:.2f}")
 
 st.subheader("📊 Option Chain")
-chain = get_option_chain(security_id)
+chain = get_option_chain(security_id, exchange_segment=segment)
 
 if isinstance(chain, dict) and "error" in chain:
     st.error(chain["error"])

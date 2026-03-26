@@ -3,16 +3,24 @@ import logging
 import streamlit as st
 
 from core.token_manager import get_token
-from dhan_data.client import BASE_URL, DhanApiClient, safe_request
+from dhan_data.client import (
+    SEGMENT_ALIASES,
+    normalize_exchange_segment,
+    sdk_get_market_depth,
+    sdk_get_quote,
+    sdk_historical_minute_charts,
+    sdk_intraday_daily_minute_charts,
+)
 from dhan_data.expiry import EXPIRY_PLACEHOLDER_NEAREST
 from dhan_data.instruments import get_symbol_data, load_instruments
+from dhan_data.option_chain import get_expiry_list as fetch_expiry_list, get_option_chain as fetch_option_chain
 from dhan_data.security_map import SECURITY_MAP
 
 
 DEFAULT_INDEXES = {
-    "NIFTY": {"security_id": SECURITY_MAP["NIFTY"], "segment": "IDX_I"},
-    "BANKNIFTY": {"security_id": SECURITY_MAP["BANKNIFTY"], "segment": "IDX_I"},
-    "FINNIFTY": {"security_id": SECURITY_MAP["FINNIFTY"], "segment": "IDX_I"},
+    "NIFTY": {"security_id": SECURITY_MAP["NIFTY"], "segment": "NSE_INDEX"},
+    "BANKNIFTY": {"security_id": SECURITY_MAP["BANKNIFTY"], "segment": "NSE_INDEX"},
+    "FINNIFTY": {"security_id": SECURITY_MAP["FINNIFTY"], "segment": "NSE_INDEX"},
 }
 
 DEFAULT_STOCKS = [
@@ -40,23 +48,7 @@ STOCK_FALLBACKS = {
 }
 
 # D/EQ -> equity segment, I -> index segment from the scrip master feed.
-SEGMENT_ALIASES = {
-    "D": "NSE_EQ",
-    "EQ": "NSE_EQ",
-    "NSE_EQ": "NSE_EQ",
-    "I": "IDX_I",
-    "IDX_I": "IDX_I"
-}
-
 _logger = logging.getLogger(__name__)
-
-
-def _get_client():
-    client = st.session_state.get("dhan_api_client")
-    if client is None:
-        client = DhanApiClient()
-        st.session_state["dhan_api_client"] = client
-    return client
 
 
 def _as_float(value):
@@ -90,22 +82,21 @@ def _normalize_segment(segment, symbol=None):
     """Normalize segment codes and fallback based on symbol type."""
     if not segment:
         if symbol in DEFAULT_INDEXES:
-            return "IDX_I"
+            return "NSE_INDEX"
         if symbol in SECURITY_MAP:
             return "NSE_EQ"
         return None
     seg = str(segment).upper()
     if seg in SEGMENT_ALIASES:
         return SEGMENT_ALIASES[seg]
-    return seg
+    return normalize_exchange_segment(seg)
 
 
 def _normalize_option_segment(segment, symbol=None):
-    if segment is not None and str(segment).strip():
-        return segment
-    if symbol in DEFAULT_INDEXES:
-        return "IDX_I"
-    return "NSE_FNO"
+    normalized = normalize_exchange_segment(segment)
+    if normalized in (None, "NSE_INDEX", "NSE_EQ"):
+        return "NFO"
+    return normalized
 
 
 def _find_symbol_in_master(symbol_aliases):
@@ -143,7 +134,7 @@ def _resolve_symbol(symbol, fallbacks, aliases=None):
     mapped = SECURITY_MAP.get(symbol)
     if mapped:
         sec_id = _to_int(mapped)
-        segment = "IDX_I" if symbol in DEFAULT_INDEXES else "NSE_EQ"
+        segment = "NSE_INDEX" if symbol in DEFAULT_INDEXES else "NSE_EQ"
         if sec_id and segment:
             return sec_id, segment
     fallback = fallbacks.get(symbol)
@@ -185,10 +176,9 @@ def _empty_market_data(errors=None):
 def _fetch_ltp(instrument_key):
     try:
         records = []
-        client = _get_client()
         for seg, sec_id in instrument_key:
-            payload = {"securityId": str(sec_id), "exchangeSegment": seg}
-            data, err = safe_request("POST", f"{BASE_URL}/market/quote", client, payload=payload, timeout=5)
+            seg = _normalize_segment(seg)
+            data, err = sdk_get_quote(sec_id, seg)
             if err:
                 return [], err
             extracted = _extract_ltp_records(data)
@@ -237,32 +227,20 @@ def _map_ltp_record(record):
 @st.cache_data(ttl=3600)
 def _fetch_expiry_list(security_id, segment):
     try:
-        payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": segment}
-        client = _get_client()
-        data, err = safe_request("POST", f"{BASE_URL}/optionchain/expirylist", client, payload=payload, timeout=10)
+        expiries, err = fetch_expiry_list(security_id, segment)
     except Exception as exc:
         _logger.warning("Expiry list fetch failed: %s", exc)
         return []
-    if err or not data:
+    if err or not expiries:
         return []
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        return data.get("data") or []
-    return []
+    return expiries
 
 
 @st.cache_data(ttl=30)
 def _fetch_option_chain(security_id, segment, expiry, symbol=None):
     try:
-        segment = _normalize_option_segment(segment, symbol)
-        payload = {
-            "UnderlyingScrip": int(security_id),
-            "UnderlyingSeg": segment,
-            "expiryDate": expiry
-        }
-        client = _get_client()
-        data, err = safe_request("POST", f"{BASE_URL}/optionchain", client, payload=payload, timeout=10)
+        segment = _normalize_segment(segment, symbol)
+        data, err = fetch_option_chain(security_id, expiry=expiry, segment=segment)
         return data, err
     except Exception as exc:
         return {}, str(exc)
@@ -397,21 +375,19 @@ def _oi_analysis(chain_rows):
 @st.cache_data(ttl=30)
 def _fetch_intraday(security_id, segment):
     try:
-        instrument = "INDEX" if segment == "IDX_I" else "EQUITY"
+        segment = _normalize_segment(segment)
+        instrument = "INDEX" if segment == "NSE_INDEX" else "EQUITY"
         today = dt.date.today()
         from_date = dt.datetime.combine(today, dt.time(9, 15)).strftime("%Y-%m-%d %H:%M:%S")
         to_date = dt.datetime.combine(today, dt.time(15, 30)).strftime("%Y-%m-%d %H:%M:%S")
-        payload = {
-            "securityId": str(security_id),
-            "exchangeSegment": segment,
-            "instrument": instrument,
-            "interval": "5",
-            "oi": False,
-            "fromDate": from_date,
-            "toDate": to_date
-        }
-        client = _get_client()
-        data, err = safe_request("POST", f"{BASE_URL}/charts/intraday", client, payload=payload, timeout=10)
+        data, err = sdk_intraday_daily_minute_charts(
+            security_id,
+            segment,
+            instrument,
+            from_date,
+            to_date,
+            time_frame=5,
+        )
     except Exception as exc:
         return [], str(exc)
     if err or not data:
@@ -422,20 +398,18 @@ def _fetch_intraday(security_id, segment):
 @st.cache_data(ttl=3600)
 def _fetch_historical(security_id, segment):
     try:
-        instrument = "INDEX" if segment == "IDX_I" else "EQUITY"
+        segment = _normalize_segment(segment)
+        instrument = "INDEX" if segment == "NSE_INDEX" else "EQUITY"
         end = dt.date.today()
         start = end - dt.timedelta(days=30)
-        payload = {
-            "securityId": str(security_id),
-            "exchangeSegment": segment,
-            "instrument": instrument,
-            "expiryCode": 0,
-            "oi": False,
-            "fromDate": start.strftime("%Y-%m-%d"),
-            "toDate": end.strftime("%Y-%m-%d")
-        }
-        client = _get_client()
-        data, err = safe_request("POST", f"{BASE_URL}/charts/historical", client, payload=payload, timeout=10)
+        data, err = sdk_historical_minute_charts(
+            security_id,
+            segment,
+            instrument,
+            start.strftime("%Y-%m-%d"),
+            end.strftime("%Y-%m-%d"),
+            time_frame=5,
+        )
     except Exception as exc:
         return [], str(exc)
     if err or not data:
@@ -573,11 +547,11 @@ def _build_market_data():
         if not sec_id:
             errors.append(f"Option chain missing securityId for {symbol}")
             continue
-        segment = _normalize_segment(segment, symbol)
-        if not segment:
+        underlying_segment = _normalize_segment(segment, symbol)
+        if not underlying_segment:
             errors.append(f"Option chain missing segment for {symbol}")
             continue
-        option_segment = _normalize_option_segment(segment, symbol)
+        option_segment = _normalize_option_segment(underlying_segment, symbol)
         try:
             expiries = _fetch_expiry_list(sec_id, option_segment)
         except Exception as exc:
@@ -592,7 +566,7 @@ def _build_market_data():
         for expiry in [current_expiry, next_expiry]:
             if not expiry:
                 continue
-            raw_chain, err = _fetch_option_chain(sec_id, option_segment, expiry, symbol=symbol)
+            raw_chain, err = _fetch_option_chain(sec_id, underlying_segment, expiry, symbol=symbol)
             if err:
                 errors.append(f"{symbol} option chain error: {err}")
                 continue
@@ -655,9 +629,8 @@ def _build_market_data():
     sec_id, seg = _resolve_symbol(depth_symbol, STOCK_FALLBACKS)
     if sec_id and seg:
         try:
-            depth_payload = {"securityId": str(sec_id), "exchangeSegment": seg}
-            client = _get_client()
-            depth_data, err = safe_request("POST", f"{BASE_URL}/market/depth", client, payload=depth_payload, timeout=10)
+            seg = _normalize_segment(seg)
+            depth_data, err = sdk_get_market_depth(sec_id, seg)
         except Exception as exc:
             depth_data, err = {}, str(exc)
         if err:

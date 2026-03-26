@@ -1,19 +1,8 @@
-from core.token_manager import get_headers
-from dhan_data.client import safe_post
-
-BASE_URL = "https://api.dhan.co/v2"
+from dhan_data.option_chain import get_option_chain as fetch_option_chain
 
 
 def get_option_chain():
-    url = f"{BASE_URL}/optionchain"
-
-    payload = {
-        "UnderlyingScrip": 13,
-        "UnderlyingSeg": "IDX_I",
-        "expiryDate": "2026-03-24"
-    }
-
-    data, err = safe_post(url, payload, headers=get_headers())
+    data, err = fetch_option_chain(13, expiry="2026-03-24", segment="NSE_INDEX")
     if err:
         return {"_error": err}
     return data

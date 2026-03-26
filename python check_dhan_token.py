@@ -1,7 +1,9 @@
-import requests
 import json
 
+import requests
+
 from core.token_manager import get_access_token, get_headers
+from dhan_data.option_chain import get_expiry_list, get_option_chain
 
 BASE_URL = "https://api.dhan.co/v2"
 
@@ -23,42 +25,25 @@ def check_profile():
         return None
 
 def test_expiry_list():
-    url = f"{BASE_URL}/optionchain/expirylist"
-    headers = get_headers()
-    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I"}
-    resp = requests.post(url, headers=headers, json=payload)
-    if resp.status_code == 401:
-        print("❌ Unauthorized - check token")
+    expiries, err = get_expiry_list(13, "NSE_INDEX")
+    if err:
+        print("❌ Expiry list failed:", err)
         return None
-    if resp.status_code == 200:
-        data = resp.json()
-        if data.get("status") == "success":
-            expiries = data.get("data", [])
-            print(f"✅ Expiry list works. Found {len(expiries)} dates.")
-            return expiries
-    print("❌ Expiry list failed:", resp.text)
-    return None
+    print(f"✅ Expiry list works. Found {len(expiries)} dates.")
+    return expiries
 
 def test_option_chain(expiry):
-    url = f"{BASE_URL}/optionchain"
-    headers = get_headers()
-    payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I", "expiryDate": expiry}
-    print(f"\n📤 Sending payload to option chain:\n{json.dumps(payload, indent=2)}")
-    resp = requests.post(url, headers=headers, json=payload)
-    print(f"📥 Response status: {resp.status_code}")
-    if resp.status_code == 401:
-        print("❌ Unauthorized - check token")
+    print(f"\n📤 Sending payload to option chain:\n{json.dumps({'UnderlyingScrip': 13, 'UnderlyingSeg': 'NSE_INDEX', 'expiryDate': expiry}, indent=2)}")
+    data, err = get_option_chain(13, expiry=expiry, segment="NSE_INDEX")
+    if err:
+        print("❌ Option chain failed:", err)
         return
-    try:
-        data = resp.json()
-        print("Response data:", json.dumps(data, indent=2)[:500])
-        if "data" in data and "oc" in data["data"]:
-            strikes = len(data["data"]["oc"])
-            print(f"✅ Option chain works! Found {strikes} strikes.")
-        else:
-            print("❌ Option chain failed. Check error above.")
-    except:
-        print("❌ Could not parse JSON response:", resp.text)
+    print("Response data:", json.dumps(data, indent=2)[:500])
+    if "data" in data and "oc" in data["data"]:
+        strikes = len(data["data"]["oc"])
+        print(f"✅ Option chain works! Found {strikes} strikes.")
+    else:
+        print("❌ Option chain failed. Check error above.")
 
 if __name__ == "__main__":
     print("🔍 Testing Dhan API token...")

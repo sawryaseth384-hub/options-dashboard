@@ -19,9 +19,9 @@ def get_expired_options(security_id, segment, option_type="CALL"):
         url = f"{BASE_URL}/charts/rollingoption"
         to_date = datetime.now()
         from_date = to_date - timedelta(days=5)
-        instrument = "OPTIDX" if segment == "IDX_I" else "OPTSTK"
+        instrument = "OPTIDX" if segment == "NSE_INDEX" else "OPTSTK"
         payload = {
-            "exchangeSegment": "NSE_FNO",
+            "exchangeSegment": "NFO",
             "interval": "1",
             "securityId": int(security_id),
             "instrument": instrument,
