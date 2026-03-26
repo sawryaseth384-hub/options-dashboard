@@ -12,15 +12,16 @@ def _normalize_historical_payload(payload):
         data = data.get("candles")
     if not isinstance(data, dict):
         return {}
-    if "open" not in data and "o" in data:
-        data = data.copy()
-        data["open"] = data.get("o")
-        data["high"] = data.get("high", data.get("h"))
-        data["low"] = data.get("low", data.get("l"))
-        data["close"] = data.get("close", data.get("c"))
-        data["volume"] = data.get("volume", data.get("v"))
-        data["timestamp"] = data.get("timestamp", data.get("t"))
-    return data
+    if "open" not in data and "o" not in data:
+        return {}
+    return {
+        "open": data.get("open", data.get("o")),
+        "high": data.get("high", data.get("h")),
+        "low": data.get("low", data.get("l")),
+        "close": data.get("close", data.get("c")),
+        "volume": data.get("volume", data.get("v")),
+        "timestamp": data.get("timestamp", data.get("t"))
+    }
 
 
 def get_historical(security_id, segment, from_date="2025-03-01", to_date="2025-03-25"):
@@ -47,6 +48,6 @@ def get_historical(security_id, segment, from_date="2025-03-01", to_date="2025-0
     if err or not data:
         return {}
     data = _normalize_historical_payload(data)
-    if not data or not any(key in data for key in ("open", "o")):
+    if not data or "open" not in data:
         return {}
     return data
