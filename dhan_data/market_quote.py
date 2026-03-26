@@ -16,13 +16,13 @@ def get_ltp(security_id, segment):
     segment = normalize_exchange_segment(segment)
     data, err = sdk_get_quote(security_id, segment)
     if err or not data:
-        return {"error": err or "No data returned from LTP endpoint"}
+        return None, err or "No data returned from LTP endpoint"
 
     record = extract_marketfeed_record(data, segment, security_id)
     if not isinstance(record, dict):
-        return {"error": "No LTP record found in response"}
+        return None, "No LTP record found in response"
 
     ltp = record.get("ltp") or record.get("lastPrice") or record.get("last_price") or record.get("price")
     if ltp is None:
-        return {"error": "LTP value missing in response"}
-    return ltp
+        return None, "LTP value missing in response"
+    return ltp, None

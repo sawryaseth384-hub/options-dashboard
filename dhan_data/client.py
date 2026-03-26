@@ -116,6 +116,10 @@ def _rest_call(context, endpoint, payload):
         return None, err
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=20)
+    except requests.Timeout:
+        error = f"{context} error: request timeout after 20 seconds"
+        _emit_debug_info(context, url, payload, None, {"error": error})
+        return None, error
     except requests.RequestException as exc:
         error = f"{context} error: {exc}"
         _emit_debug_info(context, url, payload, None, {"error": str(exc)})
@@ -327,11 +331,12 @@ def sdk_intraday_daily_minute_charts(
     if err:
         return None, err
     segment_key = _marketfeed_segment(exchange_segment)
+    expiry_code = 0  # Cash instruments use expiryCode=0 in Dhan charts APIs.
     params = {
         "securityId": str(security_id),
         "exchangeSegment": segment_key,
         "instrument": instrument_type,
-        "expiryCode": 0,
+        "expiryCode": expiry_code,
         "oi": False,
         "fromDate": from_date,
         "toDate": to_date,
@@ -364,11 +369,12 @@ def sdk_historical_minute_charts(
     if err:
         return None, err
     segment_key = _marketfeed_segment(exchange_segment)
+    expiry_code = 0  # Cash instruments use expiryCode=0 in Dhan charts APIs.
     params = {
         "securityId": str(security_id),
         "exchangeSegment": segment_key,
         "instrument": instrument_type,
-        "expiryCode": 0,
+        "expiryCode": expiry_code,
         "oi": False,
         "fromDate": from_date,
         "toDate": to_date,
