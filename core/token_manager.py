@@ -221,7 +221,7 @@ def login_and_get_token():
 def get_access_token(force_refresh=False):
     global _TOKEN_EXPIRY_WARNED
     cached_token, expires_at = _get_cached_token()
-    had_cached_token = bool(cached_token)
+    cached_token_present = bool(cached_token)
     if cached_token and not expires_at and not _TOKEN_EXPIRY_WARNED:
         _TOKEN_EXPIRY_WARNED = True
         _logger.warning("Cached token missing expiry metadata; refresh will be attempted.")
@@ -230,7 +230,7 @@ def get_access_token(force_refresh=False):
     for attempt in range(1, MAX_TOKEN_ATTEMPTS + 1):
         token = login_and_get_token()
         if token:
-            if had_cached_token or force_refresh:
+            if cached_token_present or force_refresh:
                 _logger.info("Token refreshed.")
             else:
                 _logger.info("Token generated.")
