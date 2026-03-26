@@ -48,9 +48,9 @@ def get_index_df():
     if df.empty:
         # Hardcoded fallback
         data = [
-            {"SEM_TRADING_SYMBOL": "NIFTY",    "SEM_SMST_SECURITY_ID": 13, "SEGMENT": "IDX_I"},
-            {"SEM_TRADING_SYMBOL": "BANKNIFTY","SEM_SMST_SECURITY_ID": 25, "SEGMENT": "IDX_I"},
-            {"SEM_TRADING_SYMBOL": "FINNIFTY", "SEM_SMST_SECURITY_ID": 27, "SEGMENT": "IDX_I"},
+            {"SEM_TRADING_SYMBOL": "NIFTY",    "SEM_SMST_SECURITY_ID": 13, "SEGMENT": "NSE_INDEX"},
+            {"SEM_TRADING_SYMBOL": "BANKNIFTY","SEM_SMST_SECURITY_ID": 25, "SEGMENT": "NSE_INDEX"},
+            {"SEM_TRADING_SYMBOL": "FINNIFTY", "SEM_SMST_SECURITY_ID": 27, "SEGMENT": "NSE_INDEX"},
         ]
         return pd.DataFrame(data)
 
@@ -59,13 +59,13 @@ def get_index_df():
     index_df = index_df[index_df["SEM_TRADING_SYMBOL"].isin(major_indices)]
     if index_df.empty:
         data = [
-            {"SEM_TRADING_SYMBOL": "NIFTY",    "SEM_SMST_SECURITY_ID": 13, "SEGMENT": "IDX_I"},
-            {"SEM_TRADING_SYMBOL": "BANKNIFTY","SEM_SMST_SECURITY_ID": 25, "SEGMENT": "IDX_I"},
-            {"SEM_TRADING_SYMBOL": "FINNIFTY", "SEM_SMST_SECURITY_ID": 27, "SEGMENT": "IDX_I"},
+            {"SEM_TRADING_SYMBOL": "NIFTY",    "SEM_SMST_SECURITY_ID": 13, "SEGMENT": "NSE_INDEX"},
+            {"SEM_TRADING_SYMBOL": "BANKNIFTY","SEM_SMST_SECURITY_ID": 25, "SEGMENT": "NSE_INDEX"},
+            {"SEM_TRADING_SYMBOL": "FINNIFTY", "SEM_SMST_SECURITY_ID": 27, "SEGMENT": "NSE_INDEX"},
         ]
         return pd.DataFrame(data)
 
-    index_df["SEGMENT"] = "IDX_I"
+    index_df["SEGMENT"] = "NSE_INDEX"
     return index_df[["SEM_TRADING_SYMBOL", "SEM_SMST_SECURITY_ID", "SEGMENT"]]
 
 @st.cache_data

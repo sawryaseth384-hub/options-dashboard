@@ -3,7 +3,7 @@ from dhan_data.instruments import get_symbol_data
 from dhan_data.expiry import get_expiry
 from dhan_data.option_chain import get_option_chain
 from dhan_data.market_quote import get_ltp
-from core.token_manager import get_token, get_headers
+from core.token_manager import get_token
 
 st.set_page_config(layout="wide")
 st.title("🔬 Full System Diagnostic")
@@ -22,14 +22,14 @@ for sym in symbols:
     if sec_id is None:
         # fallback
         HARD = {
-            "NIFTY": (13, "IDX_I"),
-            "BANKNIFTY": (25, "IDX_I"),
-            "FINNIFTY": (27, "IDX_I"),
-            "RELIANCE": (2885, "NSE_FNO"),
-            "TCS": (11536, "NSE_FNO"),
-            "HDFCBANK": (1333, "NSE_FNO"),
-            "INFY": (4083, "NSE_FNO"),
-            "ICICIBANK": (495, "NSE_FNO"),
+            "NIFTY": (13, "NSE_INDEX"),
+            "BANKNIFTY": (25, "NSE_INDEX"),
+            "FINNIFTY": (27, "NSE_INDEX"),
+            "RELIANCE": (2885, "NSE_EQ"),
+            "TCS": (11536, "NSE_EQ"),
+            "HDFCBANK": (1333, "NSE_EQ"),
+            "INFY": (4083, "NSE_EQ"),
+            "ICICIBANK": (495, "NSE_EQ"),
         }
         sec_id, seg = HARD.get(sym, (None, None))
     symbol_data[sym] = (sec_id, seg)
@@ -54,7 +54,10 @@ for sym, (sec_id, seg) in symbol_data.items():
         expiry_list = get_expiry(sec_id, seg)
         if expiry_list:
             expiry = expiry_list[0]
-            data = get_option_chain(sec_id, expiry, seg)
+            data, err = get_option_chain(sec_id, expiry, seg)
+            if err:
+                st.error(f"{sym}: option chain fetch failed - {err}")
+                continue
             if data and "data" in data:
                 spot = data["data"].get("last_price")
                 oc = data["data"].get("oc", {})

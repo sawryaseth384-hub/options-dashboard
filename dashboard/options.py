@@ -1,21 +1,11 @@
-from dhan_data.client import safe_post
+from dhan_data.option_chain import get_option_chain as fetch_option_chain
 
-BASE_URL = "https://api.dhan.co/v2"
 
 def get_option_chain(security_id, expiry):
-
-    url = f"{BASE_URL}/optionchain"
-    payload = {
-        "UnderlyingScrip": security_id,
-        "UnderlyingSeg": "IDX_I",
-        "expiryDate": expiry
-    }
-
     try:
-        data, err = safe_post(url, payload)
+        data, err = fetch_option_chain(security_id, expiry=expiry, segment="NSE_INDEX")
         if err:
             return {"_error": err}
         return data
-
     except Exception as e:
         return {"_error": str(e)}

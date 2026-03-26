@@ -4,29 +4,23 @@ import numpy as np
 from datetime import datetime
 
 from core.token_manager import get_token
-from dhan_data.client import safe_post
+from dhan_data.option_chain import get_expiry_list as fetch_expiry_list, get_option_chain as fetch_option_chain
 
 st.set_page_config(page_title="🔥 AI Option Trading System", layout="wide")
-
-BASE_URL = "https://api.dhan.co/v2"
 
 if not get_token():
     st.error("Dhan API Unauthorized. Check token in secrets.")
     st.stop()
 
 # ---------- Helper: Fetch Expiry List ----------
-def get_expiry_list(underlying_scrip=13, segment="IDX_I"):
-    url = f"{BASE_URL}/optionchain/expirylist"
-    payload = {"UnderlyingScrip": underlying_scrip, "UnderlyingSeg": segment}
-    data, err = safe_post(url, payload)
+def get_expiry_list(underlying_scrip=13, segment="NSE_INDEX"):
+    expiries, err = fetch_expiry_list(underlying_scrip, segment)
     if err:
         return {"_error": err}
-    if data.get("status") == "success":
-        return data.get("data", [])
-    return []
+    return expiries
 
 # ---------- Helper: Fetch Option Chain ----------
-def get_option_chain(underlying_scrip=13, segment="IDX_I", expiry=None):
+def get_option_chain(underlying_scrip=13, segment="NSE_INDEX", expiry=None):
     if expiry is None:
         expiries = get_expiry_list(underlying_scrip, segment)
         if isinstance(expiries, dict) and expiries.get("_error"):
@@ -34,14 +28,10 @@ def get_option_chain(underlying_scrip=13, segment="IDX_I", expiry=None):
         if not expiries:
             return None
         expiry = expiries[0]
-    url = f"{BASE_URL}/optionchain"
-    payload = {"UnderlyingScrip": underlying_scrip, "UnderlyingSeg": segment, "expiryDate": expiry}
-    data, err = safe_post(url, payload)
+    data, err = fetch_option_chain(underlying_scrip, expiry=expiry, segment=segment)
     if err:
         return {"_error": err}
-    if data.get("status") == "success":
-        return data
-    return None
+    return data
 
 # ---------- Dashboard UI ----------
 st.title("🔥 AI Option Trading Dashboard")

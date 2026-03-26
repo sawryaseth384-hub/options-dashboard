@@ -1,178 +1,172 @@
-import os
+import datetime as dt
+import logging
 
-import requests
+from dhan_data.client import (
+    normalize_exchange_segment,
+    sdk_get_market_depth,
+    sdk_get_quote,
+    sdk_historical_minute_charts,
+    sdk_intraday_daily_minute_charts,
+)
+from dhan_data.option_chain import get_option_chain as fetch_option_chain
 
-BASE_URL = "https://api.dhan.co/v2"
-
-
-def _get_access_token():
-    token = os.getenv("DHAN_ACCESS_TOKEN")
-    if token:
-        return token.strip()
-    try:
-        import streamlit as st
-
-        secret_token = st.secrets.get("DHAN_ACCESS_TOKEN")
-        if secret_token:
-            return str(secret_token).strip()
-    except (ImportError, ModuleNotFoundError):
-        return None
-    return None
+_logger = logging.getLogger(__name__)
 
 
-def get_headers():
-    token = _get_access_token()
-    headers = {"Content-Type": "application/json"}
-    if token:
-        headers["access-token"] = token
-    return headers
-
-
-def safe_request(endpoint, method="GET", params=None, payload=None):
-    url = f"{BASE_URL}{endpoint}"
-    headers = get_headers()
-    if not headers.get("access-token"):
-        return {"error": "Missing DHAN_ACCESS_TOKEN"}
-
-    try:
-        response = requests.request(
-            method,
-            url,
-            headers=headers,
-            params=params,
-            json=payload,
-            timeout=10,
-        )
-
-        if response.status_code == 401:
-            return {"error": "Unauthorized - Check token"}
-        if response.status_code == 404:
-            return {"error": f"Endpoint not found: {endpoint}"}
-        if response.status_code == 400:
-            return {"error": "Bad request - Check parameters"}
-        if response.status_code != 200:
-            return {"error": f"HTTP {response.status_code}"}
-
-        return response.json()
-
-    except Exception as exc:
-        return {"error": f"{method} {endpoint} failed: {exc}"}
-
-
-def extract_ltp(payload):
-    if not isinstance(payload, dict):
-        return None
-    if "last_traded_price" in payload:
-        return payload.get("last_traded_price")
-    nested = payload.get("data") or payload.get("result")
-    if isinstance(nested, dict):
-        if "last_traded_price" in nested:
-            return nested.get("last_traded_price")
-        if "ltp" in nested:
-            return nested.get("ltp")
-    return None
-
-
-def get_ltp(security_id, segment):
-    return safe_request(
-        "/market/quote",
-        params={
-            "security_id": security_id,
-            "exchange_segment": segment,
-        },
-    )
-
-
-def get_intraday(security_id, segment, extra_params=None):
-    params = {
-        "security_id": security_id,
-        "exchange_segment": segment,
-    }
-    if extra_params:
-        params.update(extra_params)
-    return safe_request("/charts/intraday", params=params)
-
-
-def get_historical(security_id, segment, extra_params=None):
-    params = {
-        "security_id": security_id,
-        "exchange_segment": segment,
-    }
-    if extra_params:
-        params.update(extra_params)
-    return safe_request("/charts/historical", params=params)
-
-
-def get_depth(security_id, segment):
-    return safe_request(
-        "/market/depth",
-        params={
-            "security_id": security_id,
-            "exchange_segment": segment,
-        },
-    )
-
-
-def _normalize_contracts(payload):
-    if isinstance(payload, list):
-        return payload
+def _extract_quote_records(payload):
+    if not payload:
+        return []
+    data = payload
     if isinstance(payload, dict):
-        for key in ("data", "contracts", "result", "items"):
-            value = payload.get(key)
-            if isinstance(value, list):
-                return value
+        data = payload.get("data") if "data" in payload else payload
+        if isinstance(data, dict) and "data" in data:
+            data = data.get("data")
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return [data]
     return []
 
 
-def get_option_chain(security_id, exchange_segment="NFO"):
-    contracts = safe_request(
-        "/option/contracts",
-        params={
-            "security_id": security_id,
-            "exchange_segment": exchange_segment,
-        },
+def extract_ltp(payload):
+    records = _extract_quote_records(payload)
+    if not records:
+        return None
+    record = records[0]
+    if not isinstance(record, dict):
+        return None
+    for key in ("ltp", "lastPrice", "last_price", "last_traded_price", "price"):
+        if record.get(key) is not None:
+            return record.get(key)
+    ohlc = record.get("ohlc") if isinstance(record.get("ohlc"), dict) else {}
+    return ohlc.get("close")
+
+
+def _parse_ohlc_series(data):
+    if not isinstance(data, dict):
+        return []
+    payload = data.get("data") if "data" in data else data
+    if isinstance(payload, dict) and "candles" in payload and isinstance(payload["candles"], dict):
+        payload = payload["candles"]
+    if not isinstance(payload, dict):
+        return []
+    opens = payload.get("open") or payload.get("o") or []
+    highs = payload.get("high") or payload.get("h") or []
+    lows = payload.get("low") or payload.get("l") or []
+    closes = payload.get("close") or payload.get("c") or []
+    volumes = payload.get("volume") or payload.get("v") or []
+    times = payload.get("timestamp") or payload.get("t") or payload.get("time") or []
+    length = min(len(opens), len(highs), len(lows), len(closes))
+    if length == 0:
+        return []
+    rows = []
+    for idx in range(length):
+        rows.append({
+            "time": times[idx] if idx < len(times) else None,
+            "open": opens[idx],
+            "high": highs[idx],
+            "low": lows[idx],
+            "close": closes[idx],
+            "volume": volumes[idx] if idx < len(volumes) else None
+        })
+    return rows
+
+
+def get_ltp(security_id, segment):
+    segment = normalize_exchange_segment(segment)
+    data, err = sdk_get_quote(security_id, segment)
+    if err:
+        return {"error": err}
+    return data
+
+
+def get_intraday(security_id, segment, extra_params=None):
+    segment = normalize_exchange_segment(segment)
+    extra_params = extra_params or {}
+    instrument = extra_params.get("instrument") or ("INDEX" if segment == "NSE_INDEX" else "EQUITY")
+    today = dt.date.today()
+    from_date = extra_params.get("fromDate") or dt.datetime.combine(today, dt.time(9, 15)).strftime("%Y-%m-%d %H:%M:%S")
+    to_date = extra_params.get("toDate") or dt.datetime.combine(today, dt.time(15, 30)).strftime("%Y-%m-%d %H:%M:%S")
+    time_frame = extra_params.get("time_frame") or extra_params.get("interval") or 5
+    data, err = sdk_intraday_daily_minute_charts(
+        security_id,
+        segment,
+        instrument,
+        from_date,
+        to_date,
+        time_frame=time_frame,
     )
+    if err:
+        return {"error": err}
+    return {"data": _parse_ohlc_series(data)}
 
-    if isinstance(contracts, dict) and "error" in contracts:
-        return contracts
 
-    contract_list = _normalize_contracts(contracts)
-    if not contract_list:
-        return {"error": "No contracts found"}
+def get_historical(security_id, segment, extra_params=None):
+    segment = normalize_exchange_segment(segment)
+    extra_params = extra_params or {}
+    instrument = extra_params.get("instrument") or ("INDEX" if segment == "NSE_INDEX" else "EQUITY")
+    end = extra_params.get("toDate")
+    start = extra_params.get("fromDate")
+    if not end or not start:
+        today = dt.date.today()
+        end = end or today.strftime("%Y-%m-%d")
+        start = start or (today - dt.timedelta(days=30)).strftime("%Y-%m-%d")
+    time_frame = extra_params.get("time_frame") or extra_params.get("interval") or 5
+    data, err = sdk_historical_minute_charts(
+        security_id,
+        segment,
+        instrument,
+        start,
+        end,
+        time_frame=time_frame,
+    )
+    if err:
+        return {"error": err}
+    return {"data": _parse_ohlc_series(data)}
 
-    expiry_values = [
-        c.get("expiry_date")
-        for c in contract_list
-        if c.get("expiry_date") is not None
-    ]
-    expiries = sorted({expiry for expiry in expiry_values if expiry})
 
-    if not expiries:
-        return {"error": "No expiry found"}
+def get_depth(security_id, segment):
+    segment = normalize_exchange_segment(segment)
+    data, err = sdk_get_market_depth(security_id, segment)
+    if err:
+        return {"error": err}
+    return data
 
-    nearest_expiry = expiries[0]
-    filtered = [c for c in contract_list if c.get("expiry_date") == nearest_expiry]
 
-    chain = []
-    ltp_cache = {}
+def _flatten_option_chain(data):
+    if not isinstance(data, dict):
+        return []
+    payload = data.get("data") if "data" in data else data
+    if not isinstance(payload, dict):
+        return []
+    chain = payload.get("oc") or payload.get("records") or payload.get("chain")
+    if chain is None:
+        return []
+    rows = []
+    if isinstance(chain, dict):
+        for strike, row in chain.items():
+            ce = row.get("ce") or row.get("CE") or {}
+            pe = row.get("pe") or row.get("PE") or {}
+            if ce:
+                rows.append({"strike": strike, "type": "CE", "ltp": ce.get("last_price") or ce.get("ltp")})
+            if pe:
+                rows.append({"strike": strike, "type": "PE", "ltp": pe.get("last_price") or pe.get("ltp")})
+    elif isinstance(chain, list):
+        for row in chain:
+            strike = row.get("strike") or row.get("strike_price") or row.get("strikePrice")
+            opt_type = row.get("option_type") or row.get("optionType") or row.get("type")
+            rows.append({"strike": strike, "type": opt_type, "ltp": row.get("ltp")})
+    return rows
 
-    for contract in filtered:
-        contract_id = contract.get("security_id")
-        if contract_id in ltp_cache:
-            ltp = ltp_cache[contract_id]
-        else:
-            quote = get_ltp(contract_id, exchange_segment)
-            ltp = extract_ltp(quote) if isinstance(quote, dict) else None
-            if ltp is None:
-                ltp = 0
-            ltp_cache[contract_id] = ltp
 
-        chain.append(
-            {
-                "strike": contract.get("strike_price"),
-                "type": contract.get("option_type"),
-                "ltp": ltp,
-            }
-        )
-
-    return chain
+def get_option_chain(security_id, exchange_segment="NFO"):
+    underlying_segment = exchange_segment
+    if normalize_exchange_segment(exchange_segment) == "NFO":
+        underlying_segment = "NSE_INDEX"
+    chain_data, err = fetch_option_chain(security_id, segment=underlying_segment)
+    if err:
+        return {"error": err}
+    rows = _flatten_option_chain(chain_data)
+    if not rows:
+        _logger.warning("Option chain empty for %s", security_id)
+    return rows
