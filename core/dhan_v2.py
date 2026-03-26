@@ -21,6 +21,19 @@ def _to_float(value):
         return value
 
 
+def _flatten_marketfeed_records(data):
+    records = []
+    if not isinstance(data, dict):
+        return records
+    for segment_data in data.values():
+        if not isinstance(segment_data, dict):
+            continue
+        for record in segment_data.values():
+            if isinstance(record, dict):
+                records.append(record)
+    return records
+
+
 def _extract_quote_records(payload):
     if not payload:
         return []
@@ -32,6 +45,9 @@ def _extract_quote_records(payload):
     if isinstance(data, list):
         return data
     if isinstance(data, dict):
+        flattened = _flatten_marketfeed_records(data)
+        if flattened:
+            return flattened
         return [data]
     return []
 

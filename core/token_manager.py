@@ -213,5 +213,5 @@ def get_headers():
     headers = {"Content-Type": "application/json"}
     token = get_access_token()
     if token:
-        headers["Authorization"] = f"Bearer {token}"
+        headers["access-token"] = token
     return headers

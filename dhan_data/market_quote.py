@@ -1,6 +1,6 @@
 import time
 
-from dhan_data.client import normalize_exchange_segment, sdk_get_quote
+from dhan_data.client import extract_marketfeed_record, normalize_exchange_segment, sdk_get_quote
 
 _last_call = 0
 
@@ -16,13 +16,13 @@ def get_ltp(security_id, segment):
     segment = normalize_exchange_segment(segment)
     data, err = sdk_get_quote(security_id, segment)
     if err or not data:
-        return 0
+        return {"error": err or "No data returned from LTP endpoint"}
 
-    payload = data.get("data") if isinstance(data, dict) else data
-    if isinstance(payload, dict) and "data" in payload:
-        payload = payload.get("data")
-    if isinstance(payload, list) and payload:
-        payload = payload[0]
-    if isinstance(payload, dict):
-        return payload.get("ltp") or payload.get("lastPrice") or payload.get("last_price") or 0
-    return 0
+    record = extract_marketfeed_record(data, segment, security_id)
+    if not isinstance(record, dict):
+        return {"error": "No LTP record found in response"}
+
+    ltp = record.get("ltp") or record.get("lastPrice") or record.get("last_price") or record.get("price")
+    if ltp is None:
+        return {"error": "LTP value missing in response"}
+    return ltp
