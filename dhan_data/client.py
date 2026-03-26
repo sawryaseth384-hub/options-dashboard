@@ -242,7 +242,7 @@ def _validate_time_frame(time_frame):
 
 def _validate_expiry_code(expiry_code):
     """Use expiryCode=0 for cash instruments; pass the Dhan instrument master expiry code for derivatives."""
-    if expiry_code is None or expiry_code == "":
+    if expiry_code in (None, ""):
         return 0, None
     try:
         value = int(expiry_code)

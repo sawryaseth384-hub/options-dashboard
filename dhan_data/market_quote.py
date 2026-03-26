@@ -16,7 +16,7 @@ def get_ltp(security_id, segment):
     segment = normalize_exchange_segment(segment)
     data, err = sdk_get_quote(security_id, segment)
     if err or not data:
-        return None, err or "No data returned from LTP endpoint"
+        return None, err or "Empty response from LTP endpoint"
 
     record = extract_marketfeed_record(data, segment, security_id)
     if not isinstance(record, dict):
