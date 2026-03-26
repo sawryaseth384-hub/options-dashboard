@@ -1,11 +1,10 @@
-import requests
 import streamlit as st
-from core.token_manager import get_headers
+from dhan_data.client import safe_post
 
 BASE_URL = "https://api.dhan.co/v2"
 
 @st.cache_data(ttl=30)
-def get_historical(security_id, segment):
+def get_historical(security_id, segment, from_date="2025-03-01", to_date="2025-03-25"):
 
     # 🔥 correct instrument mapping
     if segment == "IDX_I":
@@ -21,28 +20,13 @@ def get_historical(security_id, segment):
         "instrument": instrument,
         "expiryCode": 0,
         "oi": False,
-        "fromDate": "2025-03-01",
-        "toDate": "2025-03-25"
+        "fromDate": from_date,
+        "toDate": to_date
     }
 
-    try:
-        res = requests.post(
-            f"{BASE_URL}/charts/historical",
-            headers=get_headers(),
-            json=payload,
-            timeout=10
-        )
-
-        if res.status_code != 200:
-            return {}
-
-        data = res.json()
-
-        # 🔥 VALIDATION
-        if not data or "open" not in data:
-            return {}
-
-        return data
-
-    except:
+    data, err = safe_post(f"{BASE_URL}/charts/historical", payload, timeout=10)
+    if err or not data:
         return {}
+    if not isinstance(data, dict) or "open" not in data:
+        return {}
+    return data

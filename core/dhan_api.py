@@ -1,17 +1,7 @@
 import requests
-import streamlit as st
-from core.token_manager import get_token
-
-CLIENT_ID = st.secrets["1106299230"]
+from core.token_manager import get_headers
 
 BASE_URL = "https://api.dhan.co/v2"
-
-def get_headers():
-    return {
-        "access-token": get_token(),
-        "client-id": CLIENT_ID,
-        "Content-Type": "application/json"
-    }
 
 
 def get_option_chain():

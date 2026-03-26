@@ -1,5 +1,4 @@
-import requests
-from core.token_manager import get_headers
+from dhan_data.client import safe_post
 
 BASE_URL = "https://api.dhan.co/v2"
 
@@ -9,15 +8,11 @@ def get_expiry(security_id, segment="IDX_I"):
         "UnderlyingScrip": int(security_id),
         "UnderlyingSeg": segment
     }
-    try:
-        res = requests.post(url, headers=get_headers(), json=payload)
-        data = res.json()
-        if isinstance(data, list):
-            return data
-        elif isinstance(data, dict) and "data" in data:
-            return data["data"]
-        else:
-            return []
-    except Exception as e:
-        print("Expiry error:", e)
+    data, err = safe_post(url, payload)
+    if err or not data:
         return []
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return data.get("data") or []
+    return []

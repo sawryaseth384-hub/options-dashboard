@@ -1,16 +1,9 @@
+import os
 import requests
 import pyotp
-import time
 import streamlit as st
 
 AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
-
-
-def _get_secret(key):
-    try:
-        return st.secrets.get(key)
-    except Exception:
-        return None
 
 
 def get_token():
@@ -50,13 +43,18 @@ def get_token():
     return None
 
 
+    st.error("Token Failed")
+    return None
+
+
 def get_headers():
     token = get_token()
-    client_id = _get_secret("CLIENT_ID")
-    if not token or not client_id:
-        return {}
-    return {
-        "access-token": token,
-        "client-id": client_id,
-        "Content-Type": "application/json",
+    client_id = get_client_id()
+    headers = {
+        "Content-Type": "application/json"
     }
+    if token:
+        headers["access-token"] = token
+    if client_id:
+        headers["client-id"] = client_id
+    return headers
