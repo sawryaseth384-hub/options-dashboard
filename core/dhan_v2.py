@@ -9,6 +9,7 @@ from dhan_data.client import (
     sdk_intraday_daily_minute_charts,
 )
 from dhan_data.option_chain import get_option_chain as fetch_option_chain
+from dhan_data.security_map import SECURITY_MAP
 
 _logger = logging.getLogger(__name__)
 
@@ -160,8 +161,16 @@ def _flatten_option_chain(data):
 
 
 def get_option_chain(security_id, exchange_segment="NFO"):
-    underlying_segment = exchange_segment
-    if normalize_exchange_segment(exchange_segment) == "NFO":
+    normalized = normalize_exchange_segment(exchange_segment)
+    if normalized in ("NSE_INDEX", "NSE_EQ"):
+        underlying_segment = normalized
+    elif normalized == "NFO":
+        index_ids = {SECURITY_MAP.get("NIFTY"), SECURITY_MAP.get("BANKNIFTY"), SECURITY_MAP.get("FINNIFTY")}
+        try:
+            underlying_segment = "NSE_INDEX" if int(security_id) in index_ids else "NSE_EQ"
+        except (TypeError, ValueError):
+            underlying_segment = "NSE_INDEX"
+    else:
         underlying_segment = "NSE_INDEX"
     chain_data, err = fetch_option_chain(security_id, segment=underlying_segment)
     if err:

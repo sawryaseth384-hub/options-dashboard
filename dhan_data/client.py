@@ -305,6 +305,19 @@ def _extract_error_message(payload):
     return None
 
 
+def _redact_params(params):
+    if not isinstance(params, dict):
+        return params
+    redacted = {}
+    for key, value in params.items():
+        key_lower = str(key).lower()
+        if any(token in key_lower for token in ("token", "client", "pin", "secret")):
+            redacted[key] = "***"
+        else:
+            redacted[key] = value
+    return redacted
+
+
 def _normalize_sdk_error(payload, params=None, context="DhanHQ"):
     if payload is None:
         return f"{context} error: empty response"
@@ -320,8 +333,9 @@ def _normalize_sdk_error(payload, params=None, context="DhanHQ"):
     if status_code == 404:
         return "Endpoint not found (404) - should not happen after SDK fix"
     if status_code == 400:
-        _logger.warning("Invalid parameters (400) for %s: %s", context, params)
-        return f"Invalid parameters (400): {params}"
+        safe_params = _redact_params(params)
+        _logger.warning("Invalid parameters (400) for %s: %s", context, safe_params)
+        return f"Invalid parameters (400): {safe_params}"
     if message:
         return f"{context} error: {message}"
     return f"{context} error: unexpected response"

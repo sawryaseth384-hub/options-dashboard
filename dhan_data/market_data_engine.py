@@ -103,7 +103,10 @@ def _normalize_segment(segment, symbol=None):
 
 
 def _normalize_option_segment(segment, symbol=None):
-    return "NFO"
+    normalized = normalize_exchange_segment(segment)
+    if normalized in (None, "NSE_INDEX", "NSE_EQ"):
+        return "NFO"
+    return normalized
 
 
 def _find_symbol_in_master(symbol_aliases):

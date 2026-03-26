@@ -5,6 +5,8 @@ import requests
 from core.token_manager import get_access_token, get_headers
 from dhan_data.option_chain import get_expiry_list as fetch_expiry_list, get_option_chain as fetch_option_chain
 
+BASE_URL = "https://api.dhan.co/v2"
+
 def check_profile():
     url = f"{BASE_URL}/profile"
     headers = get_headers()

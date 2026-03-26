@@ -122,16 +122,21 @@ def get_option_chain(security_id, expiry=None, segment=None, exchange_segment=No
         return None, f"No contracts found for expiry {selected_expiry}"
 
     oc = {}
+    quote_cache = {}
     for contract in filtered:
         strike = _extract_strike(contract)
         opt_type = _extract_option_type(contract)
         sec_id = _extract_security_id(contract)
         if strike is None or opt_type is None or sec_id is None:
             continue
-        quote, quote_err = sdk_get_quote(sec_id, "NFO")
-        if quote_err:
-            _logger.warning("Quote error for %s: %s", sec_id, quote_err)
-        record = _extract_quote_record(quote)
+        if sec_id in quote_cache:
+            record = quote_cache[sec_id]
+        else:
+            quote, quote_err = sdk_get_quote(sec_id, "NFO")
+            if quote_err:
+                _logger.warning("Quote error for %s: %s", sec_id, quote_err)
+            record = _extract_quote_record(quote)
+            quote_cache[sec_id] = record
         leg = _build_leg(record)
         strike_key = str(strike)
         oc.setdefault(strike_key, {"ce": {}, "pe": {}})
