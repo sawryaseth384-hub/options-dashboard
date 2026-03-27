@@ -10,7 +10,7 @@ import dash_bootstrap_components as dbc
 # ---------- ENV ----------
 CLIENT_ID = os.getenv("CLIENT_ID")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
-PORT = int(os.environ.get("PORT", 3000))  # Replit port (fallback 3000)
+PORT = int(os.environ.get("PORT", 3000))  # Replit-provided port (fallback 3000)
 
 HEADERS = {
     "access-token": DHAN_ACCESS_TOKEN,
@@ -118,7 +118,7 @@ def next_interval(prev_ms, failed):
 
 # ---------- APP ----------
 app = Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
-server = app.server  # compatibility for deployments
+server = app.server  # required for compatibility
 
 app.layout = dbc.Container(
     [
