@@ -42,11 +42,13 @@ OPTION_CHAIN_SEGMENT_MAP = {
 _logger = logging.getLogger(__name__)
 _last_call = 0.0  # rate limit tracker
 
+
 def normalize_exchange_segment(segment):
     if not segment:
         return None
     seg = str(segment).strip().upper()
     return SEGMENT_ALIASES.get(seg, seg)
+
 
 def normalize_option_chain_segment(segment):
     normalized = normalize_exchange_segment(segment)
@@ -54,129 +56,70 @@ def normalize_option_chain_segment(segment):
         return None
     return OPTION_CHAIN_SEGMENT_MAP.get(normalized, normalized)
 
-def _marketfeed_segment(segment):
-    normalized = normalize_exchange_segment(segment)
-    if not normalized:
-        return None
-    return MARKETFEED_SEGMENT_MAP.get(normalized, normalized)
 
-def _emit_debug_info(context, endpoint, payload, status_code, response_json):
-    if st is None:
-        return
-    try:
-        with st.expander(f"API Debug: {context}", expanded=False):
-            st.write("Endpoint:", endpoint)
-            st.write("Request payload:")
-            st.json(payload)
-            st.write("Response status code:", status_code)
-            st.write("Response JSON:")
-            st.json(response_json)
-    except Exception:
-        return
+def _mask_headers(h):
+    masked = {}
+    for k, v in (h or {}).items():
+        if "token" in k.lower() and isinstance(v, str):
+            masked[k] = v[:4] + "..." + v[-4:]
+        else:
+            masked[k] = v
+    return masked
 
-def _extract_error_message(payload):
-    if not isinstance(payload, dict):
-        return None
-    for container in (payload, payload.get("remarks"), payload.get("data")):
-        if not isinstance(container, dict):
-            continue
-        for key in ("errorMessage", "error_message", "message", "error", "remarks"):
-            value = container.get(key)
-            if value:
-                return str(value)
-    return None
-
-def _log_validation_error(message):
-    _logger.warning(message)
-    return message
-
-def _rate_limit():
-    global _last_call
-    elapsed = time.time() - _last_call
-    if elapsed < 1.0:
-        time.sleep(1.0 - elapsed)
-    _last_call = time.time()
 
 def _rest_call(context, endpoint, payload):
     url = f"{BASE_URL}/{endpoint.lstrip('/')}"
-    attempts = 0
-    tried_401 = False
-    while attempts <= 2:
-        _rate_limit()
-        headers = get_headers()
-        try:
-            response = requests.post(url, headers=headers, json=payload, timeout=20)
-        except (requests.Timeout, requests.ConnectionError, requests.RequestException) as exc:
-            attempts += 1
-            if attempts > 2:
-                error = f"{context} error: {exc}"
-                _emit_debug_info(context, url, payload, None, {"error": str(exc)})
-                return None, error
-            time.sleep(1)
-            continue
+    headers = get_headers()
 
-        status_code = response.status_code
-        if status_code == 401 and not tried_401:
-            tried_401 = True
-            refresh_token(force=True)
-            time.sleep(1)
-            continue
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=20)
+    except Exception as e:
+        debug = {"context": context, "url": url, "headers": _mask_headers(headers), "payload": payload, "error": str(e)}
+        print(debug)
+        if st is not None:
+            with st.expander(f"🔥 API Debug → {context}", expanded=False):
+                st.json(debug)
+        return None, f"{context} network error: {e}"
 
-        if status_code >= 500 and attempts < 2:
-            attempts += 1
-            time.sleep(1)
-            continue
+    try:
+        response_json = response.json()
+    except Exception:
+        response_json = {"raw": response.text}
 
-        try:
-            response_json = response.json()
-        except ValueError:
-            response_json = {"raw": response.text}
-        _emit_debug_info(context, url, payload, status_code, response_json)
+    debug = {
+        "context": context,
+        "url": url,
+        "headers": _mask_headers(headers),
+        "payload": payload,
+        "status": response.status_code,
+        "response": response_json,
+    }
+    print(debug)
+    if st is not None:
+        with st.expander(f"🔥 API Debug → {context}", expanded=False):
+            st.json(debug)
 
-        if status_code == 401:
-            return None, "Token invalid or expired (401). Update credentials."
-        if status_code == 404:
-            return None, "Endpoint not found (404). Check the Dhan API endpoint."
-        if status_code == 400:
-            detail = _extract_error_message(response_json) or response_json
-            return None, f"Invalid parameters (400): {detail}"
-        if status_code and status_code >= 400:
-            detail = _extract_error_message(response_json) or response_json
-            return None, f"{context} failed (HTTP {status_code}): {detail}"
+    if response.status_code == 401:
+        return None, "Token invalid or expired (401). Update credentials."
 
-        if isinstance(response_json, dict):
-            status_text = str(response_json.get("status", "")).lower()
-            if status_text and status_text not in {"success", "ok"}:
-                detail = _extract_error_message(response_json) or response_json
-                return None, f"{context} error: {detail}"
-        return response_json, None
+    if response.status_code >= 400:
+        return None, f"{context} failed: {response_json}"
 
-    return None, f"{context} failed after retries"
+    return response_json, None
+
 
 # ---------- Option chain wrappers ----------
 def sdk_option_chain_expiry_list(security_id, segment):
     seg = normalize_option_chain_segment(segment)
-    if not seg:
-        return None, _log_validation_error("Invalid segment for option chain expiry list")
-    try:
-        sec_id = int(security_id)
-    except Exception:
-        return None, _log_validation_error("UnderlyingScrip must be int")
-    payload = {"UnderlyingScrip": sec_id, "UnderlyingSeg": seg}
+    payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": seg}
     return _rest_call("OptionChainExpiryList", "optionChain/expiryList", payload)
+
 
 def sdk_option_chain(security_id, segment, expiry):
     seg = normalize_option_chain_segment(segment)
-    if not seg:
-        return None, _log_validation_error("Invalid segment for option chain")
-    try:
-        sec_id = int(security_id)
-    except Exception:
-        return None, _log_validation_error("UnderlyingScrip must be int")
-    if expiry is None:
-        return None, _log_validation_error("Expiry is required")
-    payload = {"UnderlyingScrip": sec_id, "UnderlyingSeg": seg, "Expiry": str(expiry)}
+    payload = {"UnderlyingScrip": int(security_id), "UnderlyingSeg": seg, "Expiry": str(expiry)}
     return _rest_call("OptionChain", "optionChain", payload)
+
 
 __all__ = [
     "normalize_exchange_segment",
