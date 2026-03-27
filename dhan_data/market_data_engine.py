@@ -601,8 +601,11 @@ def _build_market_data():
             atm = _calculate_atm(chain_rows, _to_float(spot))
             filtered = _filter_strikes(chain_rows, atm, window=10)
             oi_analysis = _format_table_values(_oi_analysis(filtered))
+            filtered_strikes = {row.get("strike") for row in filtered}
             formatted_chain = _format_table_values(chain_rows)
-            formatted_filtered = _format_table_values(filtered)
+            formatted_filtered = [
+                row for row in formatted_chain if row.get("strike") in filtered_strikes
+            ]
             chains[expiry] = {
                 "chain": formatted_chain,
                 "chain_filtered": formatted_filtered,
