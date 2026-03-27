@@ -5,12 +5,13 @@ from datetime import datetime
 import requests
 import pandas as pd
 import plotly.graph_objs as go
-from dash import Dash, html, dcc, dash_table, Input, Output, State
+from dash import Dash, html, dcc, dash_table, Input, Output, State, no_update
 import dash_bootstrap_components as dbc
 
 # ---------- Environment ----------
 CLIENT_ID = os.getenv("CLIENT_ID")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
+PORT = int(os.environ.get("PORT", 5000))
 
 headers = {
     "access-token": DHAN_ACCESS_TOKEN,
@@ -151,10 +152,10 @@ def fetch_option_chain(underlying_id: int, segment: str, expiry_code):
     }
     data, err = post_api(OPTION_CHAIN_URL, payload)
     if err:
-        return [], err
+        return None, err
     rows = parse_option_chain(data)
     if not rows:
-        return [], "Option chain data missing in response"
+        return None, "Option chain data missing in response"
     return rows, None
 
 def build_price_figure(history):
@@ -186,6 +187,7 @@ server = app.server  # required for Replit preview
 app.layout = dbc.Container(
     [
         dcc.Store(id="price-store", data=[]),
+        dcc.Store(id="option-store", data=[]),
         html.H2("Dhan Trading Dashboard", className="my-3"),
         dbc.Alert("Waiting for data...", id="status-banner", color="secondary", className="mb-3"),
         dbc.Row(
@@ -254,6 +256,7 @@ app.layout = dbc.Container(
 @app.callback(
     [
         Output("price-store", "data"),
+        Output("option-store", "data"),
         Output("ltp-card-value", "children"),
         Output("status-banner", "children"),
         Output("status-banner", "color"),
@@ -262,24 +265,25 @@ app.layout = dbc.Container(
         Output("debug-panel", "children"),
     ],
     [Input("update-interval", "n_intervals"), Input("symbol-dropdown", "value")],
-    [State("price-store", "data")],
+    [State("price-store", "data"), State("option-store", "data")],
 )
-def refresh_data(n, symbol, history):
+def refresh_data(n, symbol, history, option_cache):
     history = history or []
+    option_cache = option_cache or []
     status_msgs = []
     status_color = "secondary"
-    ltp_val = "--"
-    option_rows = []
+    ltp_val = history[-1]["ltp"] if history else None
     expiry_code = None
+    option_rows = option_cache
 
     if not CLIENT_ID or not DHAN_ACCESS_TOKEN:
         msg = "Missing CLIENT_ID or DHAN_ACCESS_TOKEN environment variables."
-        return history, ltp_val, msg, "danger", build_price_figure(history), option_rows, build_debug_panel(msg)
+        return history, option_cache, ltp_val or "--", msg, "danger", build_price_figure(history), option_rows, build_debug_panel(msg)
 
     underlying = UNDERLYINGS.get(symbol)
     if not underlying:
         msg = f"Unsupported symbol: {symbol}"
-        return history, ltp_val, msg, "danger", build_price_figure(history), option_rows, build_debug_panel(msg)
+        return history, option_cache, ltp_val or "--", msg, "danger", build_price_figure(history), option_rows, build_debug_panel(msg)
 
     ltp, err = fetch_ltp(underlying["id"])
     if err:
@@ -290,16 +294,17 @@ def refresh_data(n, symbol, history):
         history = history[-MAX_POINTS:]
         status_msgs.append("LTP fetched")
         status_color = "success"
-        ltp_val = f"{ltp:.2f}"
+        ltp_val = ltp
 
     expiry_code, expiry_err = fetch_expiry_code(symbol, underlying["id"], underlying["segment"])
     if expiry_err:
         status_msgs.append(f"Expiry: {expiry_err}")
     else:
-        option_rows, oc_err = fetch_option_chain(underlying["id"], underlying["segment"], expiry_code)
+        oc_rows, oc_err = fetch_option_chain(underlying["id"], underlying["segment"], expiry_code)
         if oc_err:
             status_msgs.append(f"Option Chain: {oc_err}")
         else:
+            option_rows = oc_rows
             status_msgs.append("Option Chain fetched")
             if status_color != "danger":
                 status_color = "success"
@@ -308,15 +313,25 @@ def refresh_data(n, symbol, history):
         status_msgs.append("Waiting for data...")
 
     status_text = " | ".join(status_msgs)
+    ltp_display = f"{ltp_val:.2f}" if isinstance(ltp_val, (int, float)) else (ltp_val or "--")
 
     debug_panel = build_debug_panel(
         status_text,
-        last_ltp=ltp_val,
+        last_ltp=ltp_display,
         expiry_code=expiry_code if not expiry_err else None,
-        option_rows=len(option_rows),
+        option_rows=len(option_rows or []),
     )
 
-    return history, ltp_val, status_text, status_color, build_price_figure(history), option_rows, debug_panel
+    return (
+        history,
+        option_rows,
+        ltp_display,
+        status_text,
+        status_color,
+        build_price_figure(history),
+        option_rows if option_rows is not None else no_update,
+        debug_panel,
+    )
 
 def build_debug_panel(status, last_ltp=None, expiry_code=None, option_rows=0):
     return html.Div(
@@ -332,5 +347,5 @@ def build_debug_panel(status, last_ltp=None, expiry_code=None, option_rows=0):
 
 # ---------- Entrypoint ----------
 if __name__ == "__main__":
-    print("Server starting on port 8080...")
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    print(f"Server starting on port {PORT}...")
+    app.run(host="0.0.0.0", port=PORT, debug=True)
