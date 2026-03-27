@@ -188,11 +188,16 @@ def update_option_chain(_n, current_interval):
 
 # ---------- RUN ----------
 if __name__ == "__main__":
-    PORT = int(os.environ.get("PORT", 3000))  # CRITICAL: Replit port only
+    if __name__ == "__main__":
+    import os
+
+    PORT = int(os.environ.get("PORT", 3000))  # 🔥 यही missing था
+
     print(f"Running on port {PORT}")
+
     app.run(
         host="0.0.0.0",
         port=PORT,
         debug=False,
-        use_reloader=False,  # single process to avoid artifact crash
+        use_reloader=False
     )
