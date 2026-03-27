@@ -1,5 +1,6 @@
 import datetime as dt
 import logging
+import time
 
 import requests
 
@@ -26,6 +27,7 @@ SEGMENT_ALIASES = {
 
 VALID_SEGMENTS = {"NSE_EQ", "NSE_INDEX", "NFO"}
 VALID_INSTRUMENT_TYPES = {"INDEX", "EQUITY", "OPTIDX", "OPTSTK", "FUTIDX", "FUTSTK"}
+DERIVATIVE_INSTRUMENT_TYPES = {"OPTIDX", "OPTSTK", "FUTIDX", "FUTSTK"}
 
 MARKETFEED_SEGMENT_MAP = {
     "NSE_EQ": "NSE_EQ",
@@ -36,7 +38,7 @@ MARKETFEED_SEGMENT_MAP = {
 OPTION_CHAIN_SEGMENT_MAP = {
     "NSE_INDEX": "IDX_I",
     "NSE_EQ": "NSE_EQ",
-    "NFO": "IDX_I",
+    "NFO": "NSE_FNO",  # derivative segment for stock/index futures & options
 }
 
 _logger = logging.getLogger(__name__)
@@ -113,22 +115,63 @@ def _rest_call(context, endpoint, payload):
     if err:
         _emit_debug_info(context, url, payload, None, {"error": err})
         return None, err
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=20)
-    except requests.Timeout:
-        error = f"{context} error: request timeout after 20 seconds"
-        _emit_debug_info(context, url, payload, None, {"error": error})
-        return None, error
-    except requests.RequestException as exc:
-        error = f"{context} error: {exc}"
-        _emit_debug_info(context, url, payload, None, {"error": str(exc)})
-        return None, error
+
+    response = None
+
+    # Up to 3 attempts (initial + 2 retries) for transient errors (Timeout / 5xx).
+    for attempt in range(3):
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=20)
+        except requests.Timeout:
+            if attempt < 2:
+                time.sleep(2 ** attempt)  # 1s, 2s
+                continue
+            error = f"{context} error: request timeout after 20 seconds"
+            _emit_debug_info(context, url, payload, None, {"error": error})
+            return None, error
+        except requests.RequestException as exc:
+            error = f"{context} error: {exc}"
+            _emit_debug_info(context, url, payload, None, {"error": str(exc)})
+            return None, error
+
+        if response.status_code >= 500 and attempt < 2:
+            time.sleep(2 ** attempt)  # 1s, 2s
+            continue
+        break  # non-retriable response or final attempt
+
     status_code = response.status_code
     try:
         response_json = response.json()
     except ValueError:
         response_json = {"raw": response.text}
     _emit_debug_info(context, url, payload, status_code, response_json)
+
+    # One-shot token refresh on 401.
+    if status_code == 401:
+        try:
+            _logger.info("401 received; refreshing token and retrying once")
+            if hasattr(token_manager, "refresh"):
+                token_manager.refresh()
+            else:
+                token_manager.refresh_token(force=True)
+            headers, err = _get_headers()
+            if not err:
+                retry_resp = requests.post(url, headers=headers, json=payload, timeout=20)
+                if retry_resp.status_code != 401:
+                    status_code = retry_resp.status_code
+                    try:
+                        response_json = retry_resp.json()
+                    except ValueError:
+                        response_json = {"raw": retry_resp.text}
+                    _emit_debug_info(context + " (post-refresh)", url, payload, status_code, response_json)
+                    response = retry_resp
+                    # Fall through to normal status handling below.
+                else:
+                    # Retry still 401 – return existing 401 message.
+                    return None, "Token invalid or expired (401). Update DHAN_ACCESS_TOKEN."
+        except Exception as exc:
+            _logger.warning("Token refresh failed: %s", exc)
+            return None, "Token invalid or expired (401). Update DHAN_ACCESS_TOKEN."
 
     if status_code == 401:
         return None, "Token invalid or expired (401). Update DHAN_ACCESS_TOKEN."
@@ -241,7 +284,8 @@ def _validate_time_frame(time_frame):
 
 
 def _validate_expiry_code(expiry_code):
-    """Use expiryCode=0 for cash instruments; derivatives use codes from Dhan's scrip master CSV (https://images.dhan.co/api-data/api-scrip-master.csv)."""
+    """Use expiryCode=0 for cash instruments; derivatives require a non-zero code
+    from Dhan's scrip master CSV (https://images.dhan.co/api-data/api-scrip-master.csv)."""
     if expiry_code in (None, ""):
         return 0, None
     try:
@@ -360,6 +404,10 @@ def sdk_intraday_daily_minute_charts(
     expiry_code, err = _validate_expiry_code(expiry_code)
     if err:
         return None, err
+    if exchange_segment == "NFO" and instrument_type in DERIVATIVE_INSTRUMENT_TYPES and not expiry_code:
+        return None, _log_validation_error(
+            "Invalid parameters (400): expiry_code is required for derivative instruments"
+        )
     segment_key = _marketfeed_segment(exchange_segment)
     params = {
         "securityId": str(security_id),
@@ -401,6 +449,10 @@ def sdk_historical_minute_charts(
     expiry_code, err = _validate_expiry_code(expiry_code)
     if err:
         return None, err
+    if exchange_segment == "NFO" and instrument_type in DERIVATIVE_INSTRUMENT_TYPES and not expiry_code:
+        return None, _log_validation_error(
+            "Invalid parameters (400): expiry_code is required for derivative instruments"
+        )
     segment_key = _marketfeed_segment(exchange_segment)
     params = {
         "securityId": str(security_id),
