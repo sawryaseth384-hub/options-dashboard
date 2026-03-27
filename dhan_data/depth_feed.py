@@ -20,7 +20,15 @@ def on_message(ws, message):
     except Exception:
         return
     if "depth" in data:
-        depth_data = data["depth"]
+        depth = data["depth"]
+        if isinstance(depth, dict):
+            bids = depth.get("bids", [])
+            asks = depth.get("asks", [])
+            if isinstance(bids, list):
+                depth["bids"] = bids[:5]
+            if isinstance(asks, list):
+                depth["asks"] = asks[:5]
+        depth_data = depth
 
 
 def on_error(ws, error):
