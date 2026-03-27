@@ -3,16 +3,15 @@ import json
 import threading
 import struct
 
-from core.token_manager import get_access_token, get_client_id
+from dhan_auth import get_token, CLIENT_ID
 
 WS_URL = "wss://api-feed.dhan.co"
 
 latest_price = 0
 
-
 def start_feed(token=None, client_id=None):
-    token = token or get_access_token()
-    client_id = client_id or get_client_id()
+    token = token or get_token()
+    client_id = client_id or CLIENT_ID
     if not token or not client_id:
         print("❌ Missing token or client id for live feed.")
         return
@@ -55,7 +54,6 @@ def start_feed(token=None, client_id=None):
     thread = threading.Thread(target=ws.run_forever)
     thread.daemon = True
     thread.start()
-
 
 def get_live_price():
     return latest_price
