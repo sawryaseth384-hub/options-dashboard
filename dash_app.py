@@ -179,16 +179,24 @@ app.layout = dbc.Container(
         html.H2("🔥 AI Trading Dashboard"),
         dbc.Alert("Waiting...", id="status"),
         html.H3(id="ltp"),
-        dcc.Graph(id="chart"),
-        dash_table.DataTable(
-            id="table",
-            columns=[
-                {"name": "Strike", "id": "Strike"},
-                {"name": "CE LTP", "id": "CE LTP"},
-                {"name": "PE LTP", "id": "PE LTP"},
-            ],
-            page_size=20,
-            style_cell={"backgroundColor": "#222", "color": "white"},
+        dcc.Loading(
+            id="chart-loading",
+            type="default",
+            children=dcc.Graph(id="chart"),
+        ),
+        dcc.Loading(
+            id="table-loading",
+            type="default",
+            children=dash_table.DataTable(
+                id="table",
+                columns=[
+                    {"name": "Strike", "id": "Strike"},
+                    {"name": "CE LTP", "id": "CE LTP"},
+                    {"name": "PE LTP", "id": "PE LTP"},
+                ],
+                page_size=20,
+                style_cell={"backgroundColor": "#222", "color": "white"},
+            ),
         ),
         dcc.Store(id="history-store", data=[]),
         dcc.Interval(id="ltp-interval", interval=LTP_INTERVAL_MS, n_intervals=0),
