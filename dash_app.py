@@ -4,7 +4,7 @@ from datetime import datetime
 import requests
 import pandas as pd
 import plotly.graph_objs as go
-from dash import Dash, html, dcc, dash_table, Input, Output, State, no_update
+from dash import Dash, html, dcc, dash_table, Input, Output, State
 import dash_bootstrap_components as dbc
 
 # ---------- Environment ----------
@@ -14,16 +14,14 @@ DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 headers = {
     "access-token": DHAN_ACCESS_TOKEN,
     "client-id": CLIENT_ID,
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
 }
 
 # ---------- Constants ----------
 LTP_URL = "https://api.dhan.co/v2/marketfeed/ltp"
 EXPIRY_URL = "https://api.dhan.co/v2/optionChain/expiryList"
 OPTION_CHAIN_URL = "https://api.dhan.co/v2/optionChain"
-UNDERLYINGS = {
-    "NIFTY": {"id": 13, "segment": "IDX_I"}  # Extend here if you add more symbols
-}
+UNDERLYINGS = {"NIFTY": {"id": 13, "segment": "IDX_I"}}
 MAX_POINTS = 100
 REQUEST_TIMEOUT = 5
 
@@ -74,28 +72,16 @@ def fetch_ltp(underlying_id: int):
     data, err = post_api(LTP_URL, payload)
     if err:
         return None, err
-    # Try to extract LTP robustly
     ltp = None
     try:
         items = data.get("data") or data.get("ltp") or data
         if isinstance(items, list) and items:
-            candidate = items[0]
-            ltp = (
-                candidate.get("ltp")
-                or candidate.get("LTP")
-                or candidate.get("lastPrice")
-                or candidate.get("LastPrice")
-            )
+            cand = items[0]
+            ltp = cand.get("ltp") or cand.get("LTP") or cand.get("lastPrice") or cand.get("LastPrice")
         elif isinstance(items, dict):
-            ltp = (
-                items.get("ltp")
-                or items.get("LTP")
-                or items.get("lastPrice")
-                or items.get("LastPrice")
-            )
+            ltp = items.get("ltp") or items.get("LTP") or items.get("lastPrice") or items.get("LastPrice")
     except Exception:
         pass
-
     if ltp is None:
         return None, "LTP data missing in response"
     return float(ltp), None
@@ -105,12 +91,7 @@ def fetch_expiry_code(underlying_id: int, segment: str):
     data, err = post_api(EXPIRY_URL, payload)
     if err:
         return None, err
-    expiry_list = (
-        data.get("data")
-        or data.get("expiryList")
-        or data.get("expiries")
-        or data
-    )
+    expiry_list = data.get("data") or data.get("expiryList") or data.get("expiries") or data
     code = None
     if isinstance(expiry_list, list) and expiry_list:
         first = expiry_list[0]
@@ -161,7 +142,7 @@ def build_price_figure(history):
         return go.Figure(
             layout=go.Layout(
                 template="plotly_dark",
-                title="Price History (waiting for data)",
+                title="Price History (Waiting for data...)",
                 xaxis_title="Time",
                 yaxis_title="LTP",
             )
@@ -180,13 +161,13 @@ def build_price_figure(history):
 
 # ---------- Dash App ----------
 app = Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
-server = app.server
+server = app.server  # required for Replit preview
 
 app.layout = dbc.Container(
     [
         dcc.Store(id="price-store", data=[]),
         html.H2("Dhan Trading Dashboard", className="my-3"),
-        dbc.Alert(id="status-banner", color="secondary", className="mb-3"),
+        dbc.Alert("Waiting for data...", id="status-banner", color="secondary", className="mb-3"),
         dbc.Row(
             [
                 dbc.Col(
@@ -223,12 +204,7 @@ app.layout = dbc.Container(
             ],
             className="mb-3",
         ),
-        dbc.Row(
-            [
-                dbc.Col(dcc.Graph(id="ltp-graph"), md=12),
-            ],
-            className="mb-3",
-        ),
+        dbc.Row([dbc.Col(dcc.Graph(id="ltp-graph"), md=12)], className="mb-3"),
         dbc.Row(
             [
                 dbc.Col(
@@ -272,18 +248,19 @@ def refresh_data(n, symbol, history):
     history = history or []
     status_msgs = []
     status_color = "secondary"
+    ltp_val = "--"
+    option_rows = []
+    expiry_code = None
 
-    # Env check
     if not CLIENT_ID or not DHAN_ACCESS_TOKEN:
         msg = "Missing CLIENT_ID or DHAN_ACCESS_TOKEN environment variables."
-        return history, "--", msg, "danger", build_price_figure(history), [], build_debug_panel(msg)
+        return history, ltp_val, msg, "danger", build_price_figure(history), option_rows, build_debug_panel(msg)
 
     underlying = UNDERLYINGS.get(symbol)
     if not underlying:
         msg = f"Unsupported symbol: {symbol}"
-        return history, "--", msg, "danger", build_price_figure(history), [], build_debug_panel(msg)
+        return history, ltp_val, msg, "danger", build_price_figure(history), option_rows, build_debug_panel(msg)
 
-    # Fetch LTP
     ltp, err = fetch_ltp(underlying["id"])
     if err:
         status_msgs.append(f"LTP: {err}")
@@ -293,14 +270,12 @@ def refresh_data(n, symbol, history):
         history = history[-MAX_POINTS:]
         status_msgs.append("LTP fetched")
         status_color = "success"
+        ltp_val = f"{ltp:.2f}"
 
-    # Fetch expiry
     expiry_code, expiry_err = fetch_expiry_code(underlying["id"], underlying["segment"])
     if expiry_err:
         status_msgs.append(f"Expiry: {expiry_err}")
-        option_rows = []
     else:
-        # Fetch option chain
         option_rows, oc_err = fetch_option_chain(underlying["id"], underlying["segment"], expiry_code)
         if oc_err:
             status_msgs.append(f"Option Chain: {oc_err}")
@@ -309,17 +284,19 @@ def refresh_data(n, symbol, history):
             if status_color != "danger":
                 status_color = "success"
 
-    status_text = " | ".join(status_msgs) if status_msgs else "Idle"
-    ltp_text = f"{ltp:.2f}" if ltp is not None else "--"
+    if not status_msgs:
+        status_msgs.append("Waiting for data...")
+
+    status_text = " | ".join(status_msgs)
 
     debug_panel = build_debug_panel(
         status_text,
-        last_ltp=ltp_text,
+        last_ltp=ltp_val,
         expiry_code=expiry_code if not expiry_err else None,
         option_rows=len(option_rows),
     )
 
-    return history, ltp_text, status_text, status_color, build_price_figure(history), option_rows, debug_panel
+    return history, ltp_val, status_text, status_color, build_price_figure(history), option_rows, debug_panel
 
 def build_debug_panel(status, last_ltp=None, expiry_code=None, option_rows=0):
     return html.Div(
@@ -327,12 +304,13 @@ def build_debug_panel(status, last_ltp=None, expiry_code=None, option_rows=0):
             html.Div(f"Status: {status}"),
             html.Div(f"CLIENT_ID: {mask_token(CLIENT_ID)}"),
             html.Div(f"ACCESS_TOKEN: {mask_token(DHAN_ACCESS_TOKEN)}"),
-            html.Div(f"Last LTP: {last_ltp or '--'}"),
-            html.Div(f"Expiry Code: {expiry_code or '--'}"),
+            html.Div(f"Last LTP: {last_ltp or 'Waiting for data...'}"),
+            html.Div(f"Expiry Code: {expiry_code or 'Waiting for data...'}"),
             html.Div(f"Option Rows: {option_rows}"),
         ]
     )
 
 # ---------- Entrypoint ----------
 if __name__ == "__main__":
+    print("Server starting on port 8080...")
     app.run(host="0.0.0.0", port=8080, debug=True)
