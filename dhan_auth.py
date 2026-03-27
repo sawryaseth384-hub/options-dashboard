@@ -18,9 +18,12 @@ if not CLIENT_ID:
 
 _state: Dict[str, Any] = {"token": None, "expiry": None}
 _lock = threading.Lock()
+_token_validated = False  # self-test flag
+
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
 
 def _load_credentials() -> Tuple[str, str, str]:
     client_id = CLIENT_ID
@@ -31,12 +34,14 @@ def _load_credentials() -> Tuple[str, str, str]:
         raise ValueError(f"Missing credentials: {', '.join(missing)}")
     return client_id, pin, totp_secret
 
+
 def _generate_totp(totp_secret: str) -> str:
     totp = pyotp.TOTP(totp_secret, interval=TOTP_INTERVAL, digits=6)
     otp = totp.now()
     if len(otp) != 6:
         raise ValueError("Generated TOTP is not 6 digits")
     return otp
+
 
 def _parse_expiry(expiry_raw: Any) -> datetime:
     if expiry_raw is None:
@@ -49,6 +54,7 @@ def _parse_expiry(expiry_raw: Any) -> datetime:
         if dt_obj.tzinfo is None:
             dt_obj = dt_obj.replace(tzinfo=timezone.utc)
         return dt_obj.astimezone(timezone.utc)
+
 
 def _request_new_token() -> Tuple[str, datetime]:
     client_id, pin, totp_secret = _load_credentials()
@@ -67,10 +73,12 @@ def _request_new_token() -> Tuple[str, datetime]:
     expiry_dt = _parse_expiry(expiry_raw)
     return token, expiry_dt
 
+
 def _is_expired(expiry: Optional[datetime]) -> bool:
     if not expiry:
         return True
     return _now_utc() >= (expiry - REFRESH_BUFFER)
+
 
 def refresh_token(force: bool = False) -> str:
     attempts = 0
@@ -92,13 +100,29 @@ def refresh_token(force: bool = False) -> str:
                 force = True
     raise RuntimeError("Token generation failed after retries")
 
+
 def get_token(force_refresh: bool = False) -> str:
+    env_token = os.getenv("DHAN_ACCESS_TOKEN", "").strip()
+    if env_token:
+        return env_token
     token = refresh_token(force=force_refresh)
     if not token:
         raise RuntimeError("Token acquisition returned empty token")
     return token
 
+
+def _self_test_token(headers: Dict[str, str]):
+    """One-shot self-test: call LTP; raise if 401."""
+    url = "https://api.dhan.co/v2/marketfeed/ltp"
+    payload = {"NSE_INDEX": [13]}
+    resp = requests.post(url, headers=headers, json=payload, timeout=10)
+    if resp.status_code == 401:
+        raise PermissionError("Generated token not accepted by Dhan API (401)")
+    return resp.status_code
+
+
 def get_headers() -> Dict[str, str]:
+    global _token_validated
     token = get_token()
     if not token:
         token = refresh_token(force=True)
@@ -106,12 +130,15 @@ def get_headers() -> Dict[str, str]:
     headers = {
         "access-token": token,
         "client-id": CLIENT_ID,
-        "dhanClientId": CLIENT_ID,
         "Content-Type": "application/json",
     }
 
-    # Debug prints (safe masked)
     print("AUTH DEBUG → CLIENT_ID:", CLIENT_ID)
     print("AUTH DEBUG → TOKEN:", token[:10], "...")
+
+    # Self-test only once per process when using TOTP token
+    if not os.getenv("DHAN_ACCESS_TOKEN") and not _token_validated:
+        _self_test_token(headers)
+        _token_validated = True
 
     return headers
