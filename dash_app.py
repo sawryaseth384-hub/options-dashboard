@@ -175,4 +175,12 @@ def update_oc(n):
     return rows or []
 
 # ---------- RUN ----------
-if __
+if __name__ == "__main__":
+    PORT = int(os.environ.get("PORT", 3000))
+
+    app.run(
+        host="0.0.0.0",
+        port=PORT,
+        debug=False,
+        use_reloader=False
+    )
