@@ -188,12 +188,8 @@ def update_option_chain(_n, current_interval):
 
 # ---------- RUN ----------
 if __name__ == "__main__":
-    if __name__ == "__main__":
     import os
-
-    PORT = int(os.environ.get("PORT", 3000))  # 🔥 यही missing था
-
-    print(f"Running on port {PORT}")
+    PORT = int(os.environ.get("PORT", 3000))
 
     app.run(
         host="0.0.0.0",
