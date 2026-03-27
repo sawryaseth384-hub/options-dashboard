@@ -59,7 +59,7 @@ def _as_float(value):
 
 
 def _format_numeric(value):
-    if isinstance(value, (int, float)):
+    if isinstance(value, float):
         return round(value, 2)
     return value
 
