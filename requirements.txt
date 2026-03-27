@@ -1,9 +1,4 @@
-streamlit
-pandas
-numpy
+dash
+dash-bootstrap-components
 plotly
-streamlit-autorefresh
-python-dotenv
-websocket-client
-pyotp
 requests
