@@ -23,10 +23,10 @@ LTP_URL = "https://api.dhan.co/v2/marketfeed/ltp"
 EXPIRY_URL = "https://api.dhan.co/v2/optionChain/expiryList"
 OPTION_CHAIN_URL = "https://api.dhan.co/v2/optionChain"
 UNDERLYINGS = {"NIFTY": {"id": 13, "segment": "IDX_I"}}
-MAX_POINTS = 200  # keep more points for smoother real-time view
-REQUEST_TIMEOUT = 3  # shorter timeout for faster failover
-EXPIRY_TTL_SECONDS = 60  # cache expiry code for 1 minute
-REFRESH_MS = 1000  # 1 second refresh for real-time feel
+MAX_POINTS = 200
+REQUEST_TIMEOUT = 3
+EXPIRY_TTL_SECONDS = 60
+REFRESH_MS = 1000
 
 # ---------- Session (connection pooling) ----------
 session = requests.Session()
