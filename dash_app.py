@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from datetime import datetime
 import requests
 import pandas as pd
@@ -22,8 +23,16 @@ LTP_URL = "https://api.dhan.co/v2/marketfeed/ltp"
 EXPIRY_URL = "https://api.dhan.co/v2/optionChain/expiryList"
 OPTION_CHAIN_URL = "https://api.dhan.co/v2/optionChain"
 UNDERLYINGS = {"NIFTY": {"id": 13, "segment": "IDX_I"}}
-MAX_POINTS = 100
-REQUEST_TIMEOUT = 5
+MAX_POINTS = 200  # keep more points for smoother real-time view
+REQUEST_TIMEOUT = 3  # shorter timeout for faster failover
+EXPIRY_TTL_SECONDS = 60  # cache expiry code for 1 minute
+REFRESH_MS = 1000  # 1 second refresh for real-time feel
+
+# ---------- Session (connection pooling) ----------
+session = requests.Session()
+
+# ---------- Cache ----------
+expiry_cache = {}  # {"NIFTY": {"code": ..., "ts": ...}}
 
 # ---------- Helpers ----------
 def mask_token(token: str) -> str:
@@ -33,7 +42,7 @@ def mask_token(token: str) -> str:
         return token[0] + "***"
     return token[:4] + "***" + token[-2:]
 
-def log_debug(url, payload, response=None, error=None):
+def log_debug(url, payload, response=None, error=None, elapsed=None):
     status = response.status_code if response else "NO_RESPONSE"
     body_preview = ""
     if response:
@@ -47,15 +56,20 @@ def log_debug(url, payload, response=None, error=None):
     print(f"URL: {url}")
     print(f"Payload: {json.dumps(payload)}")
     print(f"Status Code: {status}")
+    if elapsed is not None:
+        print(f"Elapsed: {elapsed:.3f}s")
     print(f"Response (first 300 chars): {body_preview}")
     print("------------------\n")
 
 def post_api(url, payload):
+    start = time.perf_counter()
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-        log_debug(url, payload, response=resp)
+        resp = session.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+        elapsed = time.perf_counter() - start
+        log_debug(url, payload, response=resp, elapsed=elapsed)
     except Exception as e:
-        log_debug(url, payload, response=None, error=str(e))
+        elapsed = time.perf_counter() - start
+        log_debug(url, payload, response=None, error=str(e), elapsed=elapsed)
         return None, f"Request error: {e}"
 
     if resp.status_code == 401:
@@ -86,7 +100,12 @@ def fetch_ltp(underlying_id: int):
         return None, "LTP data missing in response"
     return float(ltp), None
 
-def fetch_expiry_code(underlying_id: int, segment: str):
+def fetch_expiry_code(symbol: str, underlying_id: int, segment: str):
+    now = time.time()
+    cached = expiry_cache.get(symbol)
+    if cached and now - cached["ts"] < EXPIRY_TTL_SECONDS:
+        return cached["code"], None
+
     payload = {"UnderlyingScrip": underlying_id, "UnderlyingSeg": segment}
     data, err = post_api(EXPIRY_URL, payload)
     if err:
@@ -101,6 +120,7 @@ def fetch_expiry_code(underlying_id: int, segment: str):
             code = first
     if code is None:
         return None, "Expiry code missing in response"
+    expiry_cache[symbol] = {"code": code, "ts": now}
     return code, None
 
 def parse_option_chain(json_data):
@@ -152,7 +172,7 @@ def build_price_figure(history):
         data=[go.Scatter(x=df["time"], y=df["ltp"], mode="lines+markers", name="LTP")],
         layout=go.Layout(
             template="plotly_dark",
-            title="Live LTP (last 100 points)",
+            title="Live LTP (last 200 points)",
             xaxis_title="Time",
             yaxis_title="LTP",
         ),
@@ -225,7 +245,7 @@ app.layout = dbc.Container(
                 )
             ]
         ),
-        dcc.Interval(id="update-interval", interval=5000, n_intervals=0),
+        dcc.Interval(id="update-interval", interval=REFRESH_MS, n_intervals=0),
     ],
     fluid=True,
 )
@@ -272,7 +292,7 @@ def refresh_data(n, symbol, history):
         status_color = "success"
         ltp_val = f"{ltp:.2f}"
 
-    expiry_code, expiry_err = fetch_expiry_code(underlying["id"], underlying["segment"])
+    expiry_code, expiry_err = fetch_expiry_code(symbol, underlying["id"], underlying["segment"])
     if expiry_err:
         status_msgs.append(f"Expiry: {expiry_err}")
     else:
