@@ -1,156 +1,198 @@
-import os, time, math, requests
-from dash import Dash, html, dcc, no_update, Input, Output, State
+import os, time
+from datetime import datetime
+import requests
+import pandas as pd
+import plotly.graph_objs as go
+from dash import Dash, html, dcc, dash_table, Input, Output, State, no_update
+import dash_bootstrap_components as dbc
 
-# --- Import your existing Dhan API helpers (adjust module/function names as needed) ---
-# These MUST be the real functions you already use; do not swap with dummy endpoints.
-from dhan_api import fetch_ltp, fetch_option_chain, fetch_expiry  # <-- change to your actual module
+# ---------- ENV ----------
+CLIENT_ID = os.getenv("CLIENT_ID")
+DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
+PORT = int(os.environ.get("PORT", 3000))
 
-# ----------------- Config -----------------
-LTP_INTERVAL_MS = 1000           # 1s LTP
-OC_INTERVAL_MS  = 8000           # 6–10s; set 8s
-OC_CACHE_TTL    = 15             # seconds
-BACKOFF_CAP_MS  = 30000          # max 30s backoff
-API_TIMEOUT     = 4              # seconds
-DARK_BG         = "#0b0f19"
-PANEL_BG        = "#131a2a"
+headers = {
+    "access-token": DHAN_ACCESS_TOKEN,
+    "client-id": CLIENT_ID,
+    "Content-Type": "application/json",
+}
 
-# ----------------- Caches & state -----------------
-oc_cache = {"data": None, "expires": 0}
-expiry_cache = {"data": None, "expires": 0}
+# ---------- API ----------
+LTP_URL = "https://api.dhan.co/v2/marketfeed/ltp"
+OPTION_CHAIN_URL = "https://api.dhan.co/v2/optionChain"
+EXPIRY_URL = "https://api.dhan.co/v2/optionChain/expiryList"
 
-def capped_backoff(prev_ms, failed):
+UNDERLYINGS = {"NIFTY": {"id": 13, "segment": "IDX_I"}}
+
+# ---------- SETTINGS ----------
+LTP_INTERVAL_MS = 1000           # 1s
+OC_INTERVAL_MS = 8000            # 6–10s sweet spot
+REQUEST_TIMEOUT = 3
+OC_CACHE_TTL = 15                # seconds
+BACKOFF_MAX_MS = 30000           # cap backoff at 30s
+
+# ---------- CACHE ----------
+option_cache = {"data": [], "expires": 0}
+
+# ---------- HELPERS ----------
+def fetch_ltp():
+    payload = {"NSE_INDEX": [UNDERLYINGS["NIFTY"]["id"]]}
+    r = requests.post(LTP_URL, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+    r.raise_for_status()
+    data = r.json()
+    return float(data["data"][0]["lastPrice"])
+
+def fetch_option_chain():
+    now = time.time()
+    if now < option_cache["expires"] and option_cache["data"]:
+        return option_cache["data"], option_cache.get("expiry_label", "-")
+
+    # expiry
+    exp_resp = requests.post(
+        EXPIRY_URL,
+        headers=headers,
+        json={"UnderlyingScrip": UNDERLYINGS["NIFTY"]["id"], "UnderlyingSeg": UNDERLYINGS["NIFTY"]["segment"]},
+        timeout=REQUEST_TIMEOUT,
+    )
+    exp_resp.raise_for_status()
+    expiry = exp_resp.json()["data"][0]
+    expiry_code = expiry["expiryCode"]
+    expiry_label = expiry.get("displayName") or expiry.get("expiryDate") or str(expiry_code)
+
+    # option chain
+    oc_resp = requests.post(
+        OPTION_CHAIN_URL,
+        headers=headers,
+        json={
+            "UnderlyingScrip": UNDERLYINGS["NIFTY"]["id"],
+            "UnderlyingSeg": UNDERLYINGS["NIFTY"]["segment"],
+            "ExpiryCode": expiry_code,
+        },
+        timeout=REQUEST_TIMEOUT,
+    )
+    oc_resp.raise_for_status()
+    oc = oc_resp.json()
+
+    rows = [
+        {
+            "Strike": item["strikePrice"],
+            "CE LTP": item.get("CE", {}).get("lastPrice"),
+            "PE LTP": item.get("PE", {}).get("lastPrice"),
+        }
+        for item in oc["data"]
+    ]
+
+    option_cache["data"] = rows
+    option_cache["expires"] = now + OC_CACHE_TTL
+    option_cache["expiry_label"] = expiry_label
+    return rows, expiry_label
+
+def build_chart(history):
+    if not history:
+        return go.Figure(layout=go.Layout(template="plotly_dark", title="LTP"))
+    df = pd.DataFrame(history)
+    return go.Figure(
+        data=[go.Scatter(x=df["time"], y=df["price"], mode="lines+markers")],
+        layout=go.Layout(template="plotly_dark", title="LTP")
+    )
+
+def next_interval(prev_ms, failed):
     if not failed:
         return LTP_INTERVAL_MS
-    new_ms = min(prev_ms * 2, BACKOFF_CAP_MS)
-    return new_ms
+    return min(prev_ms * 2, BACKOFF_MAX_MS)
 
-# ----------------- Wrappers around your existing calls -----------------
-def get_ltp():
-    # Your existing function should return a dict with at least {"price": float, "timestamp": ...}
-    return fetch_ltp(timeout=API_TIMEOUT)
-
-def get_option_chain():
-    # Your existing function should return (data, expiry_str) or similar structure you already use
-    return fetch_option_chain(timeout=API_TIMEOUT)
-
-def get_expiry_list():
-    return fetch_expiry(timeout=API_TIMEOUT)
-
-# ----------------- Dash App -----------------
-external_stylesheets = [
-    "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css",
-    "https://cdnjs.cloudflare.com/ajax/libs/bootswatch/5.3.3/darkly/bootstrap.min.css",
-]
-app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
+# ---------- APP ----------
+app = Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
 server = app.server
-app.title = "Trading Dashboard"
 
-app.layout = html.Div(
-    style={"backgroundColor": DARK_BG, "color": "#e4e8f0", "minHeight": "100vh", "padding": "12px"},
-    children=[
-        html.Div(
-            style={"background": PANEL_BG, "padding": "10px", "borderRadius": "8px", "marginBottom": "12px"},
-            children=[
-                html.H4("Status", className="mb-2"),
-                html.Div(id="status-banner", className="badge bg-success", style={"fontSize": "1rem"}),
-                html.Div(id="last-ltp", className="mt-2"),
-                html.Div(id="last-expiry", className="mt-1"),
-                html.Div(id="last-error", className="text-danger mt-2", style={"whiteSpace": "pre-wrap"}),
+app.layout = dbc.Container(
+    [
+        html.H2("🔥 AI Trading Dashboard"),
+        dbc.Alert("Waiting...", id="status", color="secondary"),
+        dbc.Row([dbc.Col(html.H3(id="ltp"))]),
+        html.Div(id="meta", style={"color": "#ccc", "marginBottom": "8px"}),
+        dcc.Graph(id="chart"),
+        dash_table.DataTable(
+            id="table",
+            columns=[
+                {"name": "Strike", "id": "Strike"},
+                {"name": "CE LTP", "id": "CE LTP"},
+                {"name": "PE LTP", "id": "PE LTP"},
             ],
+            page_size=20,
+            style_cell={"backgroundColor": "#222", "color": "white"},
         ),
-        dcc.Graph(id="ltp-graph", style={"height": "340px", "background": PANEL_BG}),
-        dcc.Store(id="oc-store"),
-        dcc.Interval(id="ltp-timer", interval=LTP_INTERVAL_MS, n_intervals=0),
-        dcc.Interval(id="oc-timer", interval=OC_INTERVAL_MS, n_intervals=0),
+        dcc.Store(id="hist-store", data=[]),
+        dcc.Interval(id="ltp-interval", interval=LTP_INTERVAL_MS, n_intervals=0),
+        dcc.Interval(id="oc-interval", interval=OC_INTERVAL_MS, n_intervals=0),
     ],
+    fluid=True,
 )
 
-# ----------------- Callbacks -----------------
+# ---------- CALLBACKS ----------
 @app.callback(
-    Output("ltp-graph", "figure"),
-    Output("status-banner", "children"),
-    Output("status-banner", "className"),
-    Output("last-ltp", "children"),
-    Output("last-error", "children"),
-    Output("ltp-timer", "interval"),
-    Input("ltp-timer", "n_intervals"),
-    State("ltp-timer", "interval"),
+    Output("ltp", "children"),
+    Output("status", "children"),
+    Output("status", "color"),
+    Output("hist-store", "data"),
+    Output("chart", "figure"),
+    Output("ltp-interval", "interval"),
+    Input("ltp-interval", "n_intervals"),
+    State("hist-store", "data"),
+    State("ltp-interval", "interval"),
     prevent_initial_call=False,
 )
-def update_ltp(_n, current_interval):
+def update_ltp(_n, history, current_interval):
+    history = history or []
     try:
-        ltp = get_ltp()  # keep your existing logic
-        price = ltp.get("price", math.nan)
-        ts = ltp.get("timestamp", time.time())
-        fig = {
-            "data": [
-                {
-                    "x": [ts],
-                    "y": [price],
-                    "mode": "lines+markers",
-                    "marker": {"color": "#5bc0de"},
-                    "name": "LTP",
-                }
-            ],
-            "layout": {
-                "margin": {"l": 40, "r": 10, "t": 20, "b": 40},
-                "paper_bgcolor": PANEL_BG,
-                "plot_bgcolor": PANEL_BG,
-                "font": {"color": "#e4e8f0"},
-                "height": 330,
-            },
-        }
+        price = fetch_ltp()
+        history = (history + [{"time": datetime.now().strftime("%H:%M:%S"), "price": price}])[-120:]
+        fig = build_chart(history)
         return (
-            fig,
+            f"{price:.2f}",
             "LIVE",
-            "badge bg-success",
-            f"Last LTP: {price}",
-            "",
+            "success",
+            history,
+            fig,
             LTP_INTERVAL_MS,
         )
     except Exception as e:
-        # backoff on failure
-        new_interval = capped_backoff(current_interval, failed=True)
+        # backoff and keep previous history/figure
+        new_int = next_interval(current_interval, failed=True)
         return (
-            no_update,
-            "BACKOFF",
-            "badge bg-warning text-dark",
-            no_update,
-            f"LTP error: {type(e).__name__}: {e}",
-            new_interval,
+            "ERROR",
+            f"BACKOFF: {type(e).__name__}: {e}",
+            "warning",
+            history,
+            build_chart(history),
+            new_int,
         )
 
 @app.callback(
-    Output("oc-store", "data"),
-    Output("last-expiry", "children"),
-    Output("last-error", "children", allow_duplicate=True),
-    Output("oc-timer", "interval"),
-    Input("oc-timer", "n_intervals"),
-    State("oc-timer", "interval"),
+    Output("table", "data"),
+    Output("meta", "children"),
+    Output("status", "children", allow_duplicate=True),
+    Output("status", "color", allow_duplicate=True),
+    Output("oc-interval", "interval"),
+    Input("oc-interval", "n_intervals"),
+    State("oc-interval", "interval"),
     prevent_initial_call=False,
 )
-def refresh_option_chain(_n, current_interval):
-    now = time.time()
-    # Cache check
-    if oc_cache["data"] and now < oc_cache["expires"]:
-        return oc_cache["data"], no_update, no_update, current_interval
-
+def update_option_chain(_n, current_interval):
     try:
-        oc_data, expiry = get_option_chain()  # keep your data shape
-        oc_cache["data"] = oc_data
-        oc_cache["expires"] = now + OC_CACHE_TTL
-        expiry_text = f"Expiry: {expiry}" if expiry else "Expiry: -"
-        return oc_data, expiry_text, "", OC_INTERVAL_MS
+        rows, expiry_label = fetch_option_chain()
+        meta = f"Expiry: {expiry_label} | Rows: {len(rows)}"
+        return rows, meta, no_update, no_update, OC_INTERVAL_MS
     except Exception as e:
-        new_interval = capped_backoff(current_interval, failed=True)
-        return no_update, no_update, f"OC error: {type(e).__name__}: {e}", new_interval)
+        new_int = next_interval(current_interval, failed=True)
+        return no_update, no_update, f"OC BACKOFF: {type(e).__name__}: {e}", "warning", new_int
 
-# ----------------- Entry point -----------------
+# ---------- RUN ----------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 3000))
-    app.run_server(
+    print(f"Running on port {PORT}")
+    app.run(
         host="0.0.0.0",
-        port=port,
+        port=PORT,
         debug=False,
-        use_reloader=False,   # single process; prevents preview crashes
+        use_reloader=False,  # single process; prevents artifact crash
     )
