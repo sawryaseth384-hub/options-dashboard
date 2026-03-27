@@ -58,6 +58,20 @@ def _as_float(value):
         return None
 
 
+def _format_numeric(value):
+    if isinstance(value, float):
+        return round(value, 2)
+    return value
+
+
+def _format_table_values(data):
+    if isinstance(data, dict):
+        return {key: _format_table_values(value) for key, value in data.items()}
+    if isinstance(data, list):
+        return [_format_table_values(value) for value in data]
+    return _format_numeric(data)
+
+
 def _to_int(value):
     try:
         return int(float(value))
@@ -586,13 +600,19 @@ def _build_market_data():
             pcr = _calculate_pcr(chain_rows)
             atm = _calculate_atm(chain_rows, _to_float(spot))
             filtered = _filter_strikes(chain_rows, atm, window=10)
+            oi_analysis = _format_table_values(_oi_analysis(filtered))
+            filtered_strikes = {row.get("strike") for row in filtered}
+            formatted_chain = _format_table_values(chain_rows)
+            formatted_filtered = [
+                row for row in formatted_chain if row.get("strike") in filtered_strikes
+            ]
             chains[expiry] = {
-                "chain": chain_rows,
-                "chain_filtered": filtered,
+                "chain": formatted_chain,
+                "chain_filtered": formatted_filtered,
                 "spot": _to_float(spot),
                 "pcr": pcr,
                 "atm": atm,
-                "oi_analysis": _oi_analysis(filtered),
+                "oi_analysis": oi_analysis,
                 "payload": payload
             }
         options_by_symbol[symbol] = {
@@ -645,6 +665,7 @@ def _build_market_data():
         if err:
             errors.append(f"Depth error: {err}")
             depth_data = {}
+    depth_data = _format_table_values(depth_data)
 
     market_data = {
         "indian": indian_section,
