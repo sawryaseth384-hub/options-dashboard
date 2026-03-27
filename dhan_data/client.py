@@ -42,13 +42,11 @@ OPTION_CHAIN_SEGMENT_MAP = {
 _logger = logging.getLogger(__name__)
 _last_call = 0.0  # rate limit tracker
 
-
 def normalize_exchange_segment(segment):
     if not segment:
         return None
     seg = str(segment).strip().upper()
     return SEGMENT_ALIASES.get(seg, seg)
-
 
 def normalize_option_chain_segment(segment):
     normalized = normalize_exchange_segment(segment)
@@ -56,13 +54,11 @@ def normalize_option_chain_segment(segment):
         return None
     return OPTION_CHAIN_SEGMENT_MAP.get(normalized, normalized)
 
-
 def _marketfeed_segment(segment):
     normalized = normalize_exchange_segment(segment)
     if not normalized:
         return None
     return MARKETFEED_SEGMENT_MAP.get(normalized, normalized)
-
 
 def _emit_debug_info(context, endpoint, payload, status_code, response_json):
     if st is None:
@@ -78,7 +74,6 @@ def _emit_debug_info(context, endpoint, payload, status_code, response_json):
     except Exception:
         return
 
-
 def _extract_error_message(payload):
     if not isinstance(payload, dict):
         return None
@@ -91,11 +86,9 @@ def _extract_error_message(payload):
                 return str(value)
     return None
 
-
 def _log_validation_error(message):
     _logger.warning(message)
     return message
-
 
 def _rate_limit():
     global _last_call
@@ -103,7 +96,6 @@ def _rate_limit():
     if elapsed < 1.0:
         time.sleep(1.0 - elapsed)
     _last_call = time.time()
-
 
 def _rest_call(context, endpoint, payload):
     url = f"{BASE_URL}/{endpoint.lstrip('/')}"
@@ -161,5 +153,34 @@ def _rest_call(context, endpoint, payload):
 
     return None, f"{context} failed after retries"
 
+# ---------- Option chain wrappers ----------
+def sdk_option_chain_expiry_list(security_id, segment):
+    seg = normalize_option_chain_segment(segment)
+    if not seg:
+        return None, _log_validation_error("Invalid segment for option chain expiry list")
+    try:
+        sec_id = int(security_id)
+    except Exception:
+        return None, _log_validation_error("UnderlyingScrip must be int")
+    payload = {"UnderlyingScrip": sec_id, "UnderlyingSeg": seg}
+    return _rest_call("OptionChainExpiryList", "optionChain/expiryList", payload)
 
-# other validation helpers remain unchanged
+def sdk_option_chain(security_id, segment, expiry):
+    seg = normalize_option_chain_segment(segment)
+    if not seg:
+        return None, _log_validation_error("Invalid segment for option chain")
+    try:
+        sec_id = int(security_id)
+    except Exception:
+        return None, _log_validation_error("UnderlyingScrip must be int")
+    if expiry is None:
+        return None, _log_validation_error("Expiry is required")
+    payload = {"UnderlyingScrip": sec_id, "UnderlyingSeg": seg, "Expiry": str(expiry)}
+    return _rest_call("OptionChain", "optionChain", payload)
+
+__all__ = [
+    "normalize_exchange_segment",
+    "normalize_option_chain_segment",
+    "sdk_option_chain",
+    "sdk_option_chain_expiry_list",
+]
