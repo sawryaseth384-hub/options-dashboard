@@ -103,18 +103,14 @@ else:
 # ---------------- EXPIRY ----------------
 
 expiries = get_expiry_list(security_id, segment)
-
 if isinstance(expiries, tuple):
     expiries, err = expiries
 else:
     err = None
-
 expiry = expiries[0] if expiries else None
-
 if err or not expiry:
-    st.error("❌ No expiry received from API")
+    st.error("Expiry API failed due to authentication or payload issue")
     st.stop()
-
 # ---------------- TABS ----------------
 
 tabs = st.tabs(["Option Chain", "Charts", "Market Depth", "Debug"])
