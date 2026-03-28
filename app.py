@@ -185,25 +185,8 @@ app.layout = dbc.Container(
     Output("history-store", "data"),
     Input("ltp-interval", "n_intervals"),
     State("history-store", "data"),
-    prevent_initial_call=False,
-)
-def update_ltp(n, history):
-    history = history or []
-
-    # FIRST LOAD SAFE (no API call)
-    if n is None or n == 0:
-        return "Loading...", "Waiting for first tick", "warning", build_chart(history), history
-
-    ltp, err = fetch_ltp()
-    if err:
-        return "ERROR", err, "warning", build_chart(history), history
-
-    history.append({"time": datetime.now().strftime("%H:%M:%S"), "price": ltp})
-    history = history[-MAX_POINTS:]
-
-    return f"{ltp:.2f}", "LIVE", "success", build_chart(history), history
-
-# ---------- CALLBACK 2 ----------
+    prevent_initial_call="initial_duplicate",  # ✅ YE CHANGE KARNA HAI
+)# ---------- CALLBACK 2 ----------
 @app.callback(
     Output("table", "data"),
     Output("status", "children", allow_duplicate=True),
