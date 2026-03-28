@@ -67,7 +67,7 @@ def ttl_cache(key: str, fn, ttl: int = CACHE_TTL):
         with _cache_lock:
             _cache[key] = {"val": val, "ts": time.time()}
         return val, None
-    except Exception as exc:  # noqa: BLE001
+    except (RuntimeError, ValueError, TypeError, requests.exceptions.RequestException) as exc:
         _logger.error("Cache fn error for key=%s: %s", key, exc)
         return None, str(exc)
 
@@ -183,9 +183,11 @@ def compute_ema(prices: pd.Series, period: int) -> pd.Series:
 
 
 def compute_vwap(df: pd.DataFrame) -> pd.Series:
-    """VWAP = cumsum(price * vol) / cumsum(vol). Requires 'close' and 'volume'."""
+    """VWAP = cumsum(price * vol) / cumsum(vol). Requires 'close' and 'volume'.
+    NOTE: Returns close price when volume data is unavailable (e.g. synthetic bars).
+    """
     if "volume" not in df.columns or df["volume"].sum() == 0:
-        return pd.Series([df["close"].mean()] * len(df), index=df.index)
+        return df["close"].copy()
     tp = (df["high"] + df["low"] + df["close"]) / 3
     return (tp * df["volume"]).cumsum() / df["volume"].cumsum()
 
@@ -327,7 +329,7 @@ def build_chart(ltp: float, signals: dict) -> go.Figure:
     df_hist.set_index("time", inplace=True)
     ohlcv = df_hist["ltp"].resample("1min").ohlc()
     ohlcv.columns = ["open", "high", "low", "close"]
-    ohlcv["volume"] = 1  # placeholder
+    ohlcv["volume"] = 0  # No tick volume from LTP polling; VWAP is close-based
     ohlcv.dropna(inplace=True)
 
     if not ohlcv.empty:
@@ -630,7 +632,7 @@ def update_chart(ltp_data):
         df_h.set_index("time", inplace=True)
         ohlcv = df_h["ltp"].resample("1min").ohlc()
         ohlcv.columns = ["open", "high", "low", "close"]
-        ohlcv["volume"] = 1
+        ohlcv["volume"] = 0  # No tick volume from LTP polling; VWAP is close-based
         ohlcv.dropna(inplace=True)
         signals = generate_signals(ohlcv)
     else:
