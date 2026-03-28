@@ -1,5 +1,5 @@
-entrypoint = "dash_app.py"
-run = "python dash_app.py"
+entrypoint = "app.py"
+run = "python app.py"
 language = "python3"
 
 [env]
