@@ -283,15 +283,4 @@ def update_option_chain(_n, current_interval):
 
 # ---------- RUN ----------
 if __name__ == "__main__":
-    # Console-only verification for the fixed option chain fetch
-    print("Testing standalone option chain fetch (v2 endpoint)...")
-    _test_oc = fetch_option_chain_v2()
-    print("Test fetch result:", "OK" if _test_oc is not None else "FAILED")
-
-    print(f"Running on port {{PORT}}")
-    app.run(
-        host="0.0.0.0",
-        port=PORT,
-        debug=False,
-        use_reloader=False,  # single process to avoid artifact crash
-    )
+    app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)

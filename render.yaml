@@ -3,4 +3,4 @@ services:
     name: dhan-dashboard
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run app.py
+    startCommand: gunicorn app:server --bind 0.0.0.0:$PORT

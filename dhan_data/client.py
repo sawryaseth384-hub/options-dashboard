@@ -5,10 +5,6 @@ import time
 import requests
 from dhan_auth import get_headers, refresh_token
 
-try:
-    import streamlit as st
-except ImportError:  # pragma: no cover
-    st = None
 
 BASE_URL = "https://api.dhan.co/v2"
 
