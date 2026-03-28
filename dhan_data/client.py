@@ -5,11 +5,6 @@ import time
 import requests
 from dhan_auth import get_headers, refresh_token
 
-try:
-    import streamlit as st
-except ImportError:  # pragma: no cover
-    st = None
-
 BASE_URL = "https://api.dhan.co/v2"
 
 SEGMENT_ALIASES = {
@@ -76,9 +71,6 @@ def _rest_call(context, endpoint, payload):
     except Exception as e:
         debug = {"context": context, "url": url, "headers": _mask_headers(headers), "payload": payload, "error": str(e)}
         print(debug)
-        if st is not None:
-            with st.expander(f"🔥 API Debug → {context}", expanded=False):
-                st.json(debug)
         return None, f"{context} network error: {e}"
 
     try:
@@ -95,9 +87,6 @@ def _rest_call(context, endpoint, payload):
         "response": response_json,
     }
     print(debug)
-    if st is not None:
-        with st.expander(f"🔥 API Debug → {context}", expanded=False):
-            st.json(debug)
 
     if response.status_code == 401:
         return None, "Token invalid or expired (401). Update credentials."
