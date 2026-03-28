@@ -11,8 +11,6 @@ import dash_bootstrap_components as dbc
 # ---------- ENV ----------
 CLIENT_ID = os.getenv("CLIENT_ID")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
-PORT = int(os.environ.get("PORT", 3000))  # Replit-provided port (fallback 3000)
-
 HEADERS = {
     "access-token": DHAN_ACCESS_TOKEN,
     "client-id": CLIENT_ID,
@@ -41,7 +39,7 @@ expiry_cache = {"code": None, "time": 0}
 FALLBACK_ROWS = [{"Strike": "-", "CE LTP": "-", "PE LTP": "-"} for _ in range(10)]
 
 def _log(label, url, payload, resp):
-    """Lightweight console log for debugging on Replit."""
+    """Lightweight console log for debugging."""
     try:
         body = resp.text[:400]
         status = resp.status_code
@@ -283,15 +281,4 @@ def update_option_chain(_n, current_interval):
 
 # ---------- RUN ----------
 if __name__ == "__main__":
-    # Console-only verification for the fixed option chain fetch
-    print("Testing standalone option chain fetch (v2 endpoint)...")
-    _test_oc = fetch_option_chain_v2()
-    print("Test fetch result:", "OK" if _test_oc is not None else "FAILED")
-
-    print(f"Running on port {{PORT}}")
-    app.run(
-        host="0.0.0.0",
-        port=PORT,
-        debug=False,
-        use_reloader=False,  # single process to avoid artifact crash
-    )
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)), debug=False, use_reloader=False)
