@@ -12,6 +12,15 @@ CLIENT_ID = os.getenv("CLIENT_ID")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 PORT = int(os.environ.get("PORT", 3000))
 
+if not CLIENT_ID or not DHAN_ACCESS_TOKEN:
+    import warnings
+    warnings.warn(
+        "CLIENT_ID and/or DHAN_ACCESS_TOKEN env vars are not set. "
+        "API calls will fail until these are configured.",
+        RuntimeWarning,
+        stacklevel=1,
+    )
+
 # ---------- SESSION ----------
 SESSION = requests.Session()
 SESSION.headers.update(
@@ -175,6 +184,9 @@ def fetch_option_chain(latest_ltp=None):
 
 # ---------- INTELLIGENCE ----------
 def estimate_delta(strike, spot, is_call=True):
+    """Coarse delta proxy based on moneyness only (no IV/time/rate).
+    Maps moneyness to [0.01, 0.99] via a linear heuristic — NOT Black-Scholes.
+    Use only as a rough directional indicator."""
     if strike is None or spot is None:
         return "-"
     try:
@@ -253,9 +265,9 @@ def compute_signal(candles, price):
             return "NEUTRAL", "secondary", 50
 
         ema21 = closes.ewm(span=21, adjust=False).mean().iloc[-1]
-        vwap_val = (closes * pd.Series(1, index=closes.index)).cumsum().iloc[-1] / len(
-            closes
-        )
+        # Tick-weighted average price proxy: use tick counts as volume weights
+        ticks = df["ticks"].astype(float) if "ticks" in df.columns else pd.Series(1.0, index=closes.index)
+        tick_vwap = (closes * ticks).sum() / ticks.sum() if ticks.sum() > 0 else closes.mean()
 
         momentum = 0
         if len(closes) >= 5:
@@ -267,9 +279,9 @@ def compute_signal(candles, price):
         elif price < ema21:
             score -= 40
 
-        if price > vwap_val:
+        if price > tick_vwap:
             score += 30
-        elif price < vwap_val:
+        elif price < tick_vwap:
             score -= 30
 
         if momentum > 0:
@@ -350,7 +362,7 @@ def generate_trade_plan(rows, spot, signal):
 # ---------- CANDLE BUILDER ----------
 def update_candles(price, candles):
     candles = candles or []
-    now = datetime.utcnow().replace(second=0, microsecond=0)
+    now = datetime.utcnow().replace(second=0, microsecond=0)  # UTC for consistent bucketing
     bucket = now.isoformat()
 
     if not candles:
@@ -407,18 +419,24 @@ def add_ema_traces(fig, x, series):
         pass
 
 
-def add_vwap_trace(fig, x, series):
+def add_vwap_trace(fig, x, series, ticks=None):
+    """Cumulative tick-weighted average price. Uses tick counts as volume proxy
+    when available; falls back to a uniform-weight cumulative average."""
     try:
         s = pd.Series(list(series), index=pd.to_datetime(list(x)))
-        weights = pd.Series(1, index=s.index)
-        vwap = (s * weights).cumsum() / weights.cumsum()
+        if ticks is not None and len(ticks) == len(s):
+            w = pd.Series(list(ticks), index=s.index).astype(float).clip(lower=1)
+        else:
+            w = pd.Series(1.0, index=s.index)
+        vwap = (s * w).cumsum() / w.cumsum()
+        label = "Tick-VWAP" if ticks is not None else "Cum Avg"
         fig.add_trace(
             go.Scatter(
                 x=vwap.index,
                 y=vwap.values,
                 mode="lines",
                 line=dict(width=1.4, color="#e67e22", dash="dot"),
-                name="VWAP",
+                name=label,
             )
         )
     except Exception:
@@ -504,7 +522,8 @@ def build_price_figure(candles, history, mode="candle", ltp=None):
                 )
             )
             add_ema_traces(fig, df["ts"], df["close"])
-            add_vwap_trace(fig, df["ts"], df["close"])
+            tick_data = df["ticks"].tolist() if "ticks" in df.columns else None
+            add_vwap_trace(fig, df["ts"], df["close"], ticks=tick_data)
             add_prev_high_low(fig, candles)
             if "ticks" in df.columns:
                 fig.add_trace(
