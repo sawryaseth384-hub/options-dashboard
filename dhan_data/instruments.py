@@ -1,12 +1,43 @@
+import os
 import pandas as pd
 import streamlit as st
 
 URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 
+def save_filtered_instruments(path: str = "instruments_small.csv"):
+    """
+    Create a trimmed instruments CSV keeping only EXCH_SEG in ["IDX_I", "NSE_EQ"]
+    (indices and stocks) and excluding derivatives. Does not alter existing logic.
+    """
+    try:
+        df = pd.read_csv(URL, low_memory=False)
+    except Exception as e:
+        print(f"[ERROR] Failed to load CSV: {e}")
+        return None
+
+    if "EXCH_SEG" not in df.columns:
+        print("[ERROR] EXCH_SEG column missing")
+        return None
+
+    filtered = df[df["EXCH_SEG"].isin(["IDX_I", "NSE_EQ"])]
+
+    print(f"[INFO] Original rows: {len(df)}")
+    print(f"[INFO] Filtered rows: {len(filtered)}")
+
+    filtered.to_csv(path, index=False)
+    print(f"[SUCCESS] Saved to {path}")
+
+    return filtered
+
 @st.cache_data(ttl=3600)
 def load_instruments():
     try:
-        df = pd.read_csv(URL, low_memory=False)
+        if os.path.exists("instruments_small.csv"):
+            print("[INFO] Loading from local filtered CSV")
+            df = pd.read_csv("instruments_small.csv", low_memory=False)
+        else:
+            print("[INFO] Loading from remote CSV")
+            df = pd.read_csv(URL, low_memory=False)
     except Exception as e:
         st.error(f"Failed to load scrip master: {e}")
         return pd.DataFrame()
