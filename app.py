@@ -179,21 +179,39 @@ app.layout = dbc.Container(
 # ---------- CALLBACK 1 ----------
 @app.callback(
     Output("ltp", "children"),
-    Output("status", "children", allow_duplicate=True),
-    Output("status", "color", allow_duplicate=True),
+    Output("status", "children"),
+    Output("status", "color"),
     Output("chart", "figure"),
     Output("history-store", "data"),
     Input("ltp-interval", "n_intervals"),
     State("history-store", "data"),
-    prevent_initial_call="initial_duplicate",  # ✅ YE CHANGE KARNA HAI
-)# ---------- CALLBACK 2 ----------
+    prevent_initial_call=True,
+)
+def update_ltp(n, history):
+    if not n:
+        return "", "Waiting...", "warning", go.Figure(), history or []
+
+    price, err = fetch_ltp()
+    if err or price is None:
+        msg = f"Error: {err}" if err else "No LTP data"
+        return "", msg, "danger", go.Figure(), history or []
+
+    # append to history (bounded)
+    history = (history or [])[-(MAX_POINTS - 1):] + [
+        {"time": datetime.now().strftime("%H:%M:%S"), "price": price}
+    ]
+    fig = build_chart(history)
+    return f"LTP: {price}", "LIVE", "success", fig, history
+
+
+# ---------- CALLBACK 2 ----------
 @app.callback(
     Output("table", "data"),
     Input("oc-interval", "n_intervals"),
     prevent_initial_call=True,
 )
 def update_option_chain(n):
-    if n is None or n == 0:
+    if not n:
         return []
 
     rows, err = fetch_option_chain()
