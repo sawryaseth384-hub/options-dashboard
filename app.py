@@ -1,6 +1,7 @@
 import os
+import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 import pandas as pd
 import plotly.graph_objs as go
@@ -11,6 +12,10 @@ import dash_bootstrap_components as dbc
 CLIENT_ID = os.getenv("CLIENT_ID")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 PORT = int(os.environ.get("PORT", 3000))
+
+if not CLIENT_ID or not DHAN_ACCESS_TOKEN:
+    print("ERROR: CLIENT_ID and DHAN_ACCESS_TOKEN environment variables must be set.", file=sys.stderr)
+    sys.exit(1)
 
 # ---------- SESSION ----------
 SESSION = requests.Session()
@@ -345,7 +350,7 @@ def build_price_figure(candles, history, mode, last_price):
 # ---------- CANDLE BUILDER ----------
 def update_candles(price, candles):
     candles = candles or []
-    now = datetime.utcnow().replace(second=0, microsecond=0)
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     bucket = now.isoformat()
     if not candles:
         candles.append({"ts": bucket, "open": price, "high": price, "low": price, "close": price, "ticks": 1})
@@ -551,7 +556,7 @@ def update_ltp(_n, history, current_interval, candles, chart_mode, _current_fig,
         fig = build_price_figure(candles, history, chart_mode, history[-1]["price"] if history else None)
         return (
             "ERROR",
-            datetime.now().strftime("%H:%M:%S"),
+            datetime.now(timezone.utc).strftime("%H:%M:%S"),
             status_text,
             "warning",
             fig,
@@ -570,7 +575,7 @@ def update_ltp(_n, history, current_interval, candles, chart_mode, _current_fig,
             trade_card("PUT Plan", ["Strike: -", "Entry: -", "SL: -", "T1/T2: -/-"]).children,
         )
 
-    timestamp = datetime.now().strftime("%H:%M:%S")
+    timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
     history.append({"time": timestamp, "price": ltp})
     history = history[-MAX_POINTS:]
     candles = update_candles(ltp, candles)
