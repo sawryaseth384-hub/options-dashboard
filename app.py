@@ -53,6 +53,11 @@ BACKOFF_CAP_MS = 30_000      # 30 s
 
 STRIKE_STEP = 50             # NIFTY strike distance
 DELTA_LO, DELTA_HI = 0.30, 0.60
+DELTA_MONEYNESS_FACTOR = 5.0  # linear approximation factor for delta vs moneyness
+OI_WEIGHT = 0.6              # strike-scoring weight for open interest
+LTP_WEIGHT = 0.4             # strike-scoring weight for option premium
+MIN_SL_PCT = 0.85            # floor SL at 85% of entry (max 15% loss)
+T2_MULTIPLIER = 2            # T2 = entry + risk * risk_reward * T2_MULTIPLIER
 
 # ---------------------------------------------------------------------------
 # SHARED HTTP SESSION (connection pooling)
@@ -116,7 +121,7 @@ def _estimate_delta(strike: float, spot: float, is_call: bool) -> float:
     if spot <= 0:
         return 0.0
     moneyness = (spot - strike) / spot
-    raw = 0.5 + moneyness * 5.0
+    raw = 0.5 + moneyness * DELTA_MONEYNESS_FACTOR
     raw = max(0.01, min(0.99, raw))
     return round(raw if is_call else (1.0 - raw), 2)
 
@@ -293,7 +298,7 @@ def select_smart_strikes(rows: list[dict], spot: float) -> tuple[dict | None, di
             return -1.0
         oi = _safe_float(row.get("_ce_oi" if is_call else "_pe_oi", 0))
         ltp = _safe_float(row.get("_ce_ltp" if is_call else "_pe_ltp", 0))
-        return oi * 0.6 + ltp * 0.4
+        return oi * OI_WEIGHT + ltp * LTP_WEIGHT
 
     valid_rows = [r for r in rows if isinstance(r.get("Strike"), (int, float))]
     best_ce = max(valid_rows, key=lambda r: score(r, True), default=None)
@@ -448,9 +453,9 @@ def make_trade_plan(
     if entry_signal == "CALL BUY" and ce_row:
         entry = _safe_float(ce_row.get("_ce_ltp", 0))
         sl_pts = _safe_float(prices[-1]) - prev_low
-        sl = max(entry - sl_pts, entry * 0.85)
+        sl = max(entry - sl_pts, entry * MIN_SL_PCT)
         t1 = entry + sl_pts * risk_reward
-        t2 = entry + sl_pts * risk_reward * 2
+        t2 = entry + sl_pts * risk_reward * T2_MULTIPLIER
         plan = {
             "side": "CALL BUY",
             "strike": ce_row.get("Strike"),
@@ -463,9 +468,9 @@ def make_trade_plan(
     elif entry_signal == "PUT BUY" and pe_row:
         entry = _safe_float(pe_row.get("_pe_ltp", 0))
         sl_pts = prev_high - _safe_float(prices[-1])
-        sl = max(entry - sl_pts, entry * 0.85)
+        sl = max(entry - sl_pts, entry * MIN_SL_PCT)
         t1 = entry + sl_pts * risk_reward
-        t2 = entry + sl_pts * risk_reward * 2
+        t2 = entry + sl_pts * risk_reward * T2_MULTIPLIER
         plan = {
             "side": "PUT BUY",
             "strike": pe_row.get("Strike"),
@@ -997,13 +1002,10 @@ def update_option_chain(_n, history):
 
     # build display rows (hide internal keys)
     display_cols = ["Strike", "CE LTP", "CE OI", "CE Δ", "PE Δ", "PE OI", "PE LTP"]
-    display_rows = []
-    for r in rows:
-        row = {k: r.get(k, "—") for k in display_cols}
-        # rename keys
-        row["CE OI"] = r.get("CE OI", "—")
-        row["PE OI"] = r.get("PE OI", "—")
-        display_rows.append(row)
+    display_rows = [
+        {k: r.get(k, "—") for k in display_cols}
+        for r in rows
+    ]
 
     # conditional styles
     styles = []
