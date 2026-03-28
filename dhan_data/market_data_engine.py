@@ -1,6 +1,5 @@
 import datetime as dt
 import logging
-import streamlit as st
 
 from core.token_manager import get_token
 from dhan_data.client import (
@@ -186,7 +185,6 @@ def _empty_market_data(errors=None):
     }
 
 
-@st.cache_data(ttl=5)
 def _fetch_ltp(instrument_key):
     try:
         records = []
@@ -247,7 +245,6 @@ def _map_ltp_record(record):
     }
 
 
-@st.cache_data(ttl=3600)
 def _fetch_expiry_list(security_id, segment):
     try:
         expiries, err = fetch_expiry_list(security_id, segment)
@@ -259,7 +256,6 @@ def _fetch_expiry_list(security_id, segment):
     return expiries
 
 
-@st.cache_data(ttl=30)
 def _fetch_option_chain(security_id, segment, expiry, symbol=None):
     try:
         segment = _normalize_segment(segment, symbol)
@@ -395,7 +391,6 @@ def _oi_analysis(chain_rows):
     return {"summary": summary, "details": details}
 
 
-@st.cache_data(ttl=30)
 def _fetch_intraday(security_id, segment):
     try:
         segment = _normalize_segment(segment)
@@ -418,7 +413,6 @@ def _fetch_intraday(security_id, segment):
     return _parse_ohlc_series(data), None
 
 
-@st.cache_data(ttl=3600)
 def _fetch_historical(security_id, segment):
     try:
         segment = _normalize_segment(segment)
@@ -485,7 +479,6 @@ def _detect_volume_spike(intraday_rows):
     }
 
 
-@st.cache_data(ttl=10)
 def _build_market_data():
     errors = []
     if not get_token():

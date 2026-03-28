@@ -1,7 +1,5 @@
 import os
 import pandas as pd
-import streamlit as st
-
 URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 
 def save_filtered_instruments(path: str = "instruments_small.csv"):
@@ -29,7 +27,6 @@ def save_filtered_instruments(path: str = "instruments_small.csv"):
 
     return filtered
 
-@st.cache_data(ttl=3600)
 def load_instruments():
     try:
         if os.path.exists("instruments_small.csv"):
@@ -39,7 +36,7 @@ def load_instruments():
             print("[INFO] Loading from remote CSV")
             df = pd.read_csv(URL, low_memory=False)
     except Exception as e:
-        st.error(f"Failed to load scrip master: {e}")
+        print(f"[ERROR] Failed to load scrip master: {e}")
         return pd.DataFrame()
 
     # Find the exchange column
@@ -47,7 +44,7 @@ def load_instruments():
     if exch_col:
         df = df.rename(columns={exch_col: "EXCH_ID"})
     else:
-        st.error("No exchange column found in master CSV")
+        print("[ERROR] No exchange column found in master CSV")
         return pd.DataFrame()
 
     # Find the segment column
@@ -55,7 +52,7 @@ def load_instruments():
     if seg_col:
         df = df.rename(columns={seg_col: "SEGMENT"})
     else:
-        st.error("No segment column found in master CSV")
+        print("[ERROR] No segment column found in master CSV")
         return pd.DataFrame()
 
     # Keep only NSE
@@ -99,7 +96,6 @@ def get_index_df():
     index_df["SEGMENT"] = "NSE_INDEX"
     return index_df[["SEM_TRADING_SYMBOL", "SEM_SMST_SECURITY_ID", "SEGMENT"]]
 
-@st.cache_data
 def get_instrument_df():
     stock_df = get_stock_df()
     index_df = get_index_df()

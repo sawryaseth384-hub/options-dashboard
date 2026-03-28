@@ -1,20 +1,7 @@
 import logging
 
-try:
-    import streamlit as st
-except Exception:  # pragma: no cover - streamlit not available in some contexts
-    st = None
 
 _logger = logging.getLogger(__name__)
-
-
-def _show_info(message):
-    if st is None:
-        return
-    try:
-        st.info(message)
-    except Exception:
-        pass
 
 
 def get_expired_options(security_id, segment, option_type="CALL"):
@@ -25,5 +12,4 @@ def get_expired_options(security_id, segment, option_type="CALL"):
         segment,
         option_type,
     )
-    _show_info("Expired options data is not supported by the Dhan data APIs.")
     return None

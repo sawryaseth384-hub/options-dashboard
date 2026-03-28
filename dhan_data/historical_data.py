@@ -1,7 +1,6 @@
-import streamlit as st
 from dhan_data.client import normalize_exchange_segment, sdk_historical_minute_charts
 
-@st.cache_data(ttl=30)
+
 def _normalize_historical_response(payload):
     """Normalize v2 historical responses into standard OHLC arrays."""
     if not isinstance(payload, dict):

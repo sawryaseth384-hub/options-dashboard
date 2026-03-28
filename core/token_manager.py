@@ -8,10 +8,6 @@ from typing import Any, Dict, Optional, Tuple
 import pyotp
 import requests
 
-try:
-    import streamlit as st  # noqa: WPS433
-except Exception:  # pragma: no cover
-    st = None
 
 from utils.secrets import get_secret  # type: ignore
 
