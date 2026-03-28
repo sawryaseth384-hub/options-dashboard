@@ -189,21 +189,17 @@ app.layout = dbc.Container(
 )# ---------- CALLBACK 2 ----------
 @app.callback(
     Output("table", "data"),
-    Output("status", "children", allow_duplicate=True),
-    Output("status", "color", allow_duplicate=True),
     Input("oc-interval", "n_intervals"),
     prevent_initial_call=True,
 )
 def update_option_chain(n):
-    # FIRST LOAD SAFE
     if n is None or n == 0:
-        return [], "Waiting for first tick", "warning"
+        return []
 
     rows, err = fetch_option_chain()
     if err:
-        return [], err, "warning"
+        return []
 
-    return rows, "LIVE", "success"
-
-# ---------- IMPORTANT ----------
+    return rows
+    # ---------- IMPORTANT ----------
 # No app.run(); Gunicorn serves via `server`
