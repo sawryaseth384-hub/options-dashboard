@@ -1,6 +1,0 @@
-entrypoint = "dash_app.py"
-run = "python dash_app.py"
-language = "python3"
-
-[env]
-PORT = "3000"
