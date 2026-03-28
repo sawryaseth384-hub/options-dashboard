@@ -1,5 +1,4 @@
 import os
-import time
 from datetime import datetime
 import requests
 import pandas as pd
@@ -12,15 +11,15 @@ CLIENT_ID = os.getenv("CLIENT_ID")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 PORT = int(os.environ.get("PORT", 3000))
 
-print("✅ APP STARTED")
-print("CLIENT:", CLIENT_ID)
-print("TOKEN:", "OK" if DHAN_ACCESS_TOKEN else "MISSING")
-
 HEADERS = {
     "access-token": DHAN_ACCESS_TOKEN,
     "client-id": CLIENT_ID,
     "Content-Type": "application/json",
 }
+
+print("APP STARTED")
+print("CLIENT:", CLIENT_ID)
+print("TOKEN:", "OK" if DHAN_ACCESS_TOKEN else "MISSING")
 
 # ---------- API ----------
 LTP_URL = "https://api.dhan.co/v2/marketfeed/ltp"
@@ -32,26 +31,27 @@ UNDERLYINGS = {"NIFTY": {"id": 13, "segment": "IDX_I"}}
 # ---------- SETTINGS ----------
 LTP_INTERVAL_MS = 1000
 OC_INTERVAL_MS = 8000
+REQUEST_TIMEOUT = 1
 MAX_POINTS = 150
 
-# ---------- SAFE HELPERS ----------
+# ---------- HELPERS ----------
 def fetch_ltp():
     try:
         payload = {"NSE_INDEX": [UNDERLYINGS["NIFTY"]["id"]]}
-        r = requests.post(LTP_URL, headers=HEADERS, json=payload, timeout=1)
+        r = requests.post(LTP_URL, headers=HEADERS, json=payload, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
-
         data = r.json().get("data", {})
 
         if isinstance(data, list) and data:
             price = data[0].get("ltp") or data[0].get("lastPrice")
-            return float(price), None if price else (0, "No price")
+            if price:
+                return float(price), None
 
-        return 0, "No data"
+        return None, "No LTP data"
 
     except Exception as e:
         print("LTP ERROR:", e)
-        return 22000, "fallback"   # 🔥 never crash
+        return None, str(e)
 
 
 def fetch_expiry():
@@ -60,18 +60,19 @@ def fetch_expiry():
             "UnderlyingScrip": UNDERLYINGS["NIFTY"]["id"],
             "UnderlyingSeg": UNDERLYINGS["NIFTY"]["segment"],
         }
-        r = requests.post(EXPIRY_URL, headers=HEADERS, json=payload, timeout=2)
+
+        r = requests.post(EXPIRY_URL, headers=HEADERS, json=payload, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
 
         data = r.json().get("data", [])
         if not data:
-            return None, "Empty expiry"
+            return None, "No expiry data"
 
         return data[0].get("expiryCode"), None
 
     except Exception as e:
         print("EXPIRY ERROR:", e)
-        return None, "fallback"
+        return None, str(e)
 
 
 def fetch_option_chain():
@@ -86,13 +87,13 @@ def fetch_option_chain():
             "ExpiryCode": expiry,
         }
 
-        r = requests.post(OPTION_CHAIN_URL, headers=HEADERS, json=payload, timeout=2)
+        r = requests.post(OPTION_CHAIN_URL, headers=HEADERS, json=payload, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
 
         data = r.json().get("data", [])
 
         rows = []
-        for item in data[:50]:  # 🔥 limit load
+        for item in data[:30]:  # limit for speed
             rows.append({
                 "Strike": item.get("strikePrice"),
                 "CE LTP": item.get("CE", {}).get("ltp"),
@@ -103,7 +104,7 @@ def fetch_option_chain():
 
     except Exception as e:
         print("OC ERROR:", e)
-        return [], "fallback"
+        return [], str(e)
 
 
 def build_chart(history):
@@ -112,6 +113,9 @@ def build_chart(history):
             return go.Figure(layout=go.Layout(template="plotly_dark", title="Live LTP"))
 
         df = pd.DataFrame(history)
+
+        if "time" not in df or "price" not in df:
+            return go.Figure()
 
         return go.Figure(
             data=[go.Scatter(x=df["time"], y=df["price"], mode="lines")],
@@ -122,12 +126,12 @@ def build_chart(history):
         print("CHART ERROR:", e)
         return go.Figure()
 
+
 # ---------- APP ----------
 app = Dash(
     __name__,
     external_stylesheets=[dbc.themes.CYBORG],
-    suppress_callback_exceptions=True,
-    prevent_initial_callbacks="initial_duplicate"
+    suppress_callback_exceptions=True
 )
 
 app.title = "Trading Dashboard"
@@ -137,7 +141,7 @@ server = app.server
 # ---------- LAYOUT ----------
 app.layout = dbc.Container([
     html.H2("🔥 AI Trading Dashboard"),
-    dbc.Alert("Starting...", id="status"),
+    dbc.Alert("Waiting...", id="status"),
     html.H3(id="ltp"),
     dcc.Graph(id="chart"),
     dash_table.DataTable(
@@ -154,6 +158,7 @@ app.layout = dbc.Container([
     dcc.Interval(id="oc-interval", interval=OC_INTERVAL_MS),
 ], fluid=True)
 
+
 # ---------- CALLBACK 1 ----------
 @app.callback(
     Output("ltp", "children"),
@@ -164,13 +169,18 @@ app.layout = dbc.Container([
     Input("ltp-interval", "n_intervals"),
     State("history-store", "data"),
 )
-def update_ltp(_, history):
+def update_ltp(n, history):
+
     history = history or []
+
+    # FIRST LOAD SAFE (no API call)
+    if n is None or n == 0:
+        return "Loading...", "Waiting for first tick", "warning", build_chart(history), history
 
     ltp, err = fetch_ltp()
 
     if err:
-        return "Loading...", err, "warning", build_chart(history), history
+        return "ERROR", err, "warning", build_chart(history), history
 
     history.append({
         "time": datetime.now().strftime("%H:%M:%S"),
@@ -181,6 +191,7 @@ def update_ltp(_, history):
 
     return f"{ltp:.2f}", "LIVE", "success", build_chart(history), history
 
+
 # ---------- CALLBACK 2 ----------
 @app.callback(
     Output("table", "data"),
@@ -189,15 +200,21 @@ def update_ltp(_, history):
     Input("oc-interval", "n_intervals"),
     prevent_initial_call=True
 )
-def update_option_chain(_):
+def update_option_chain(n):
+
+    # FIRST LOAD SAFE
+    if n is None or n == 0:
+        return [], "Waiting for first tick", "warning"
+
     rows, err = fetch_option_chain()
 
     if err:
-        return [], "Loading...", "warning"
+        return [], err, "warning"
 
     return rows, "LIVE", "success"
 
+
 # ---------- IMPORTANT ----------
-# 🚫 DO NOT RUN app.run() IN PRODUCTION (Gunicorn handles it)
+# 🚫 Do NOT run app.run in production (Gunicorn handles it)
 if __name__ == "__main__":
     print("Running locally only")
