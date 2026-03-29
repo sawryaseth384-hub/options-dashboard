@@ -57,14 +57,19 @@ def mock_oc():
 def log_request(name: str, url: str, payload: dict):
     logging.info("%s REQUEST url=%s payload=%s", name, url, payload)
 
+# prints are kept for quick Railway console visibility
+# in addition to logging
+
 def log_response(name: str, res: requests.Response):
     body_preview = res.text[:MAX_LOG_CHARS]
     logging.info("%s RESPONSE status=%s", name, res.status_code)
     logging.info("%s RESPONSE body(first %s chars)=%s", name, MAX_LOG_CHARS, body_preview)
 
+
 def ensure_not_empty(res: requests.Response):
     if not res.text or not res.text.strip():
         raise ValueError("No Data")
+
 
 def parse_json(res: requests.Response, label: str):
     try:
@@ -72,12 +77,14 @@ def parse_json(res: requests.Response, label: str):
     except ValueError:
         raise ValueError(f"{label} invalid JSON")
 
+
 def parse_price(item: dict):
     for key in ("lastPrice", "ltp", "price"):
         price = item.get(key)
         if price is not None:
             return price
     return None
+
 
 def map_status_code(status_code: int):
     if status_code == 401:
@@ -88,6 +95,7 @@ def map_status_code(status_code: int):
 
 # ---------- API CALL ----------
 def fetch_ltp():
+    print("FETCH LTP CALLED")
     payload = {"NSE_INDEX": [13]}
     try:
         log_request("LTP", LTP_URL, payload)
@@ -115,7 +123,9 @@ def fetch_ltp():
         logging.warning("⚠️ USING MOCK LTP")
         return {"price": mock_ltp(), "used_mock": True, "error": str(e)}
 
+
 def fetch_option_chain():
+    print("FETCH OC CALLED")
     try:
         expiry_payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I"}
         log_request("EXPIRY", EXPIRY_URL, expiry_payload)
@@ -190,8 +200,8 @@ app.layout = dbc.Container([
         page_size=10,
     ),
     dcc.Store(id="history", data=[]),
-    dcc.Interval(id="ltp-interval", interval=LTP_INTERVAL_MS),
-    dcc.Interval(id="oc-interval", interval=OC_INTERVAL_MS),
+    dcc.Interval(id="ltp-interval", interval=LTP_INTERVAL_MS, n_intervals=0),
+    dcc.Interval(id="oc-interval", interval=OC_INTERVAL_MS, n_intervals=0),
 ], fluid=True)
 
 # ---------- LTP CALLBACK ----------
@@ -203,8 +213,10 @@ app.layout = dbc.Container([
     Output("history", "data"),
     Input("ltp-interval", "n_intervals"),
     State("history", "data"),
+    prevent_initial_call=False,
 )
 def update_ltp(n, history):
+    print("LTP CALLBACK TRIGGERED", n)
     result = fetch_ltp()
     price = result["price"]
     used_mock = result["used_mock"]
@@ -239,8 +251,10 @@ def update_ltp(n, history):
 @app.callback(
     Output("table", "data"),
     Input("oc-interval", "n_intervals"),
+    prevent_initial_call=False,
 )
 def update_oc(n):
+    print("OC CALLBACK TRIGGERED", n)
     result = fetch_option_chain()
     return result["rows"]
 
