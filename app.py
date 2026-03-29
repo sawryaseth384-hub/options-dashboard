@@ -1,4 +1,5 @@
 import os
+import logging
 from datetime import datetime
 import requests
 import pandas as pd
@@ -6,10 +7,19 @@ import plotly.graph_objs as go
 from dash import Dash, html, dcc, dash_table, Input, Output, State
 import dash_bootstrap_components as dbc
 
+# ---------- LOGGING ----------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+
 # ---------- ENV ----------
 CLIENT_ID = os.getenv("CLIENT_ID")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 PORT = int(os.environ.get("PORT", 3000))
+
+logging.info("CLIENT_ID present=%s", bool(CLIENT_ID))
+logging.info("DHAN_ACCESS_TOKEN present=%s", bool(DHAN_ACCESS_TOKEN))
 
 HEADERS = {
     "access-token": DHAN_ACCESS_TOKEN,
@@ -21,10 +31,6 @@ HEADERS = {
 SESSION = requests.Session()
 SESSION.headers.update(HEADERS)
 
-print("🚀 DASH APP RUNNING")
-print("CLIENT:", CLIENT_ID)
-print("TOKEN:", "OK" if DHAN_ACCESS_TOKEN else "MISSING")
-
 # ---------- API ----------
 LTP_URL = "https://api.dhan.co/v2/marketfeed/ltp"
 EXPIRY_URL = "https://api.dhan.co/v2/optionChain/expiryList"
@@ -34,6 +40,7 @@ OPTION_CHAIN_URL = "https://api.dhan.co/v2/optionChain"
 LTP_INTERVAL_MS = 1000
 OC_INTERVAL_MS = 5000
 MAX_POINTS = 100
+MAX_LOG_CHARS = 500
 
 # ---------- FALLBACK ----------
 def mock_ltp():
@@ -46,32 +53,86 @@ def mock_oc():
         {"Strike": 22600, "CE LTP": 60, "PE LTP": 130, "CE OI": 90000, "PE OI": 140000},
     ]
 
+# ---------- HELPERS ----------
+def log_request(name: str, url: str, payload: dict):
+    logging.info("%s REQUEST url=%s payload=%s", name, url, payload)
+
+def log_response(name: str, res: requests.Response):
+    body_preview = res.text[:MAX_LOG_CHARS]
+    logging.info("%s RESPONSE status=%s", name, res.status_code)
+    logging.info("%s RESPONSE body(first %s chars)=%s", name, MAX_LOG_CHARS, body_preview)
+
+def ensure_not_empty(res: requests.Response):
+    if not res.text or not res.text.strip():
+        raise ValueError("No Data")
+
+def parse_json(res: requests.Response, label: str):
+    try:
+        return res.json()
+    except ValueError:
+        raise ValueError(f"{label} invalid JSON")
+
+def parse_price(item: dict):
+    for key in ("lastPrice", "ltp", "price"):
+        price = item.get(key)
+        if price is not None:
+            return price
+    return None
+
+def map_status_code(status_code: int):
+    if status_code == 401:
+        return "Invalid Token"
+    if status_code == 403:
+        return "Access Denied"
+    return None
+
 # ---------- API CALL ----------
 def fetch_ltp():
+    payload = {"NSE_INDEX": [13]}
     try:
-        payload = {"NSE_INDEX": [13]}
-        res = SESSION.post(LTP_URL, json=payload, timeout=2)
+        log_request("LTP", LTP_URL, payload)
+        res = SESSION.post(LTP_URL, json=payload, timeout=3)
+        log_response("LTP", res)
 
-        print("LTP STATUS:", res.status_code)
-        print("LTP RESPONSE:", res.text)
+        msg = map_status_code(res.status_code)
+        if msg:
+            raise ValueError(msg)
+        ensure_not_empty(res)
 
-        data = res.json()
-        price = data["data"][0].get("lastPrice")
+        data = parse_json(res, "LTP")
+        items = data.get("data") or []
+        if not items:
+            raise ValueError("No Data")
 
-        if not price:
-            raise Exception("No price")
+        price = parse_price(items[0])
+        if price is None:
+            raise ValueError("No price")
 
-        return price
+        return {"price": price, "used_mock": False, "error": None}
+
     except Exception as e:
-        print("❌ LTP ERROR:", e)
-        print("⚠️ USING MOCK LTP")
-        return mock_ltp()
+        logging.error("❌ LTP ERROR: %s", e)
+        logging.warning("⚠️ USING MOCK LTP")
+        return {"price": mock_ltp(), "used_mock": True, "error": str(e)}
 
 def fetch_option_chain():
     try:
         expiry_payload = {"UnderlyingScrip": 13, "UnderlyingSeg": "IDX_I"}
-        expiry_res = SESSION.post(EXPIRY_URL, json=expiry_payload, timeout=2)
-        expiry = expiry_res.json()["data"][0]["expiryCode"]
+        log_request("EXPIRY", EXPIRY_URL, expiry_payload)
+        expiry_res = SESSION.post(EXPIRY_URL, json=expiry_payload, timeout=3)
+        log_response("EXPIRY", expiry_res)
+
+        msg = map_status_code(expiry_res.status_code)
+        if msg:
+            raise ValueError(msg)
+        ensure_not_empty(expiry_res)
+        expiry_data = parse_json(expiry_res, "Expiry")
+        expiry_list = expiry_data.get("data") or []
+        if not expiry_list:
+            raise ValueError("No Data")
+        expiry = expiry_list[0].get("expiryCode")
+        if expiry is None:
+            raise ValueError("No Expiry Code")
 
         payload = {
             "UnderlyingScrip": 13,
@@ -79,8 +140,17 @@ def fetch_option_chain():
             "ExpiryCode": expiry,
         }
 
-        res = SESSION.post(OPTION_CHAIN_URL, json=payload, timeout=2)
-        data = res.json()["data"]
+        log_request("OC", OPTION_CHAIN_URL, payload)
+        res = SESSION.post(OPTION_CHAIN_URL, json=payload, timeout=3)
+        log_response("OC", res)
+
+        msg = map_status_code(res.status_code)
+        if msg:
+            raise ValueError(msg)
+        ensure_not_empty(res)
+        data = parse_json(res, "Option Chain").get("data") or []
+        if not data:
+            raise ValueError("No Data")
 
         rows = []
         for item in data[:20]:
@@ -92,12 +162,12 @@ def fetch_option_chain():
                 "PE OI": item.get("PE", {}).get("oi"),
             })
 
-        return rows
+        return {"rows": rows, "used_mock": False, "error": None}
 
     except Exception as e:
-        print("❌ OC ERROR:", e)
-        print("⚠️ USING MOCK OC")
-        return mock_oc()
+        logging.error("❌ OC ERROR: %s", e)
+        logging.warning("⚠️ USING MOCK OC")
+        return {"rows": mock_oc(), "used_mock": True, "error": str(e)}
 
 # ---------- DASH APP ----------
 app = Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
@@ -105,8 +175,8 @@ server = app.server
 
 app.layout = dbc.Container([
     html.H2("🔥 AI Trading Dashboard"),
-    dbc.Alert("Waiting...", id="status"),
-    html.H3(id="ltp"),
+    dbc.Alert("Waiting...", id="status", color="warning"),
+    html.Div(id="ltp"),
     dcc.Graph(id="chart"),
     dash_table.DataTable(
         id="table",
@@ -135,7 +205,10 @@ app.layout = dbc.Container([
     State("history", "data"),
 )
 def update_ltp(n, history):
-    price = fetch_ltp()
+    result = fetch_ltp()
+    price = result["price"]
+    used_mock = result["used_mock"]
+    error = result["error"]
 
     history = history or []
     history.append({
@@ -151,7 +224,16 @@ def update_ltp(n, history):
         layout=go.Layout(template="plotly_dark", title="LTP")
     )
 
-    return f"LTP: {price}", "LIVE", "success", fig, history
+    status_text = "LIVE"
+    status_color = "success"
+    if error:
+        status_text = f"ERROR: {error}" + (" | Using Mock Data" if used_mock else "")
+        status_color = "danger"
+    elif used_mock:
+        status_text = "Using Mock Data"
+        status_color = "warning"
+
+    return f"LTP: {price}", status_text, status_color, fig, history
 
 # ---------- OC CALLBACK ----------
 @app.callback(
@@ -159,7 +241,8 @@ def update_ltp(n, history):
     Input("oc-interval", "n_intervals"),
 )
 def update_oc(n):
-    return fetch_option_chain()
+    result = fetch_option_chain()
+    return result["rows"]
 
 # ---------- RUN ----------
 if __name__ == "__main__":
