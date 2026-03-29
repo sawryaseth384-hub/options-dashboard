@@ -51,24 +51,25 @@ def _post_with_retry(url, payload):
 
 
 def fetch_ltp():
+    payload = {
+        "NSE_INDEX": [13]
+    }
+
     try:
-        payload = {"NSE_INDEX": [UNDERLYINGS["NIFTY"]["id"]]}
-        data, err = _post_with_retry(LTP_URL, payload)
-        if err:
-            return None, err
+        response = SESSION.post(LTP_URL, json=payload)
+        print("LTP RAW:", response.text)   # 👈 IMPORTANT
 
-        data = data.get("data", {})
-        if isinstance(data, list) and data:
-            price = data[0].get("ltp") or data[0].get("lastPrice")
-            if price:
-                return float(price), None
+        data = response.json()
 
-        return None, "No LTP data"
+        if "data" not in data or not data["data"]:
+            return None, "No data from API"
+
+        price = data["data"][0].get("lastPrice")
+
+        return price, None
+
     except Exception as e:
-        print("LTP ERROR:", e)
         return None, str(e)
-
-
 def fetch_expiry():
     try:
         payload = {
