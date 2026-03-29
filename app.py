@@ -2,34 +2,27 @@ import os
 import logging
 from dash import Dash, html, dcc, Input, Output
 
-# ---------- LOGGING ----------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gunicorn.error")
 
-print("🚀 APP FILE IMPORTED")  # Gunicorn load check
+print("🚀 APP FILE IMPORTED")
 
-# ---------- ENV ----------
 PORT = int(os.environ.get("PORT", 8080))
 
-# ---------- APP ----------
-app = Dash(__name__)
-server = app.server  # 🔥 REQUIRED for Railway
+app = Dash(
+    __name__,
+    serve_locally=True   # 🔥 FIX
+)
+server = app.server
 
-# ---------- LAYOUT ----------
 app.layout = html.Div([
-    html.H1("🔥 Railway Dash LIVE"),
+    html.H1("🔥 Railway Dash FINAL"),
     html.H2(id="output"),
-    
-    dcc.Interval(
-        id="interval",
-        interval=2000,   # 2 sec
-        n_intervals=0
-    ),
+    dcc.Interval(id="interval", interval=2000, n_intervals=0),
 ])
 
 print("✅ LAYOUT LOADED")
 
-# ---------- CALLBACK ----------
 @app.callback(
     Output("output", "children"),
     Input("interval", "n_intervals"),
@@ -40,7 +33,5 @@ def update(n):
 
 print("✅ CALLBACK REGISTERED")
 
-# ---------- RUN (local only) ----------
 if __name__ == "__main__":
-    print("🚀 LOCAL RUN")
     app.run(host="0.0.0.0", port=PORT, debug=False)
