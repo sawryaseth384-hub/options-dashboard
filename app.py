@@ -2,7 +2,7 @@ import os
 import logging
 from dash import Dash, html, dcc, Input, Output
 
-# ✅ LOGGING FIX (MOST IMPORTANT)
+# Logging fix
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gunicorn.error")
 
@@ -12,17 +12,26 @@ app = Dash(__name__)
 server = app.server
 
 app.layout = html.Div([
-    html.H1("🔥 Railway Dash Test"),
+    html.H1("🔥 FINAL TEST"),
+    
+    html.Button("CLICK ME", id="btn"),   # 👈 BUTTON ADD
+    
     html.H2(id="output"),
-    dcc.Interval(id="test-interval", interval=2000, n_intervals=0),
+
+    dcc.Interval(
+        id="interval",
+        interval=2000,
+        n_intervals=0
+    ),
 ])
 
 @app.callback(
     Output("output", "children"),
-    Input("test-interval", "n_intervals"),
+    Input("interval", "n_intervals"),
+    Input("btn", "n_clicks"),
 )
-def update(n):
-    logger.info(f"🔥 CALLBACK RUNNING: {n}")
+def update(n, clicks):
+    logger.info(f"🔥 CALLBACK RUNNING: {n}, clicks: {clicks}")
     return f"Counter: {n}"
 
 if __name__ == "__main__":
