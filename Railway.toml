@@ -1,0 +1,9 @@
+[build]
+  command = "pip install -r requirements.txt"
+
+[deploy]
+  start_command = "gunicorn app:server"
+  healthcheck_path = "/"
+  
+[deploy.cdn]
+  enabled = false
