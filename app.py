@@ -1,105 +1,125 @@
-You are modifying an existing Python Dash app.
+import os
+import requests
+import dash
+from dash import dcc, html, Input, Output
+import pandas as pd
 
-STRICT RULES (VERY IMPORTANT):
+app = dash.Dash(__name__)
+server = app.server  # Railway ke liye important
 
-- DO NOT delete any existing code
-- DO NOT replace existing functions
-- DO NOT change UI layout
-- DO NOT rename variables
-- ONLY ADD new code safely
-- Existing dashboard must keep working exactly same
+# =========================
+# LAYOUT
+# =========================
+app.layout = html.Div([
+    html.H2("Options Dashboard"),
 
----
+    html.Div(id="ltp", style={"fontSize": "24px", "marginBottom": "10px"}),
 
-GOAL:
-Add DEBUG VIEW to show ALL API responses (LTP, Expiry, Option Chain)
+    dcc.Interval(id="interval", interval=5000, n_intervals=0),
 
----
+    dcc.Dropdown(
+        id="symbol",
+        options=[
+            {"label": "NIFTY", "value": "NIFTY"},
+            {"label": "BANKNIFTY", "value": "BANKNIFTY"},
+        ],
+        value="NIFTY"
+    ),
 
-TASK:
+    html.Table(id="option-table"),
 
-1. ADD RAW JSON PANEL
+    # ===== DEBUG PANEL =====
+    html.H3("DEBUG API DATA"),
+    html.Pre(
+        id="raw-json",
+        style={
+            "height": "300px",
+            "overflow": "scroll",
+            "backgroundColor": "black",
+            "color": "lime",
+            "padding": "10px"
+        }
+    )
+])
 
-Add this at the bottom of existing layout (DO NOT modify layout structure):
+# =========================
+# CALLBACK
+# =========================
+@app.callback(
+    [
+        Output("ltp", "children"),
+        Output("option-table", "children"),
+        Output("raw-json", "children")
+    ],
+    [
+        Input("interval", "n_intervals"),
+        Input("symbol", "value")
+    ]
+)
+def update_dashboard(n, symbol):
+    raw_output = ""
 
-html.H3("DEBUG API DATA"),
-html.Pre(id="raw-json", style={
-"height": "300px",
-"overflow": "scroll",
-"backgroundColor": "black",
-"color": "lime",
-"padding": "10px"
-})
+    try:
+        # =========================
+        # LTP API (example)
+        # =========================
+        ltp_url = f"https://api.example.com/ltp?symbol={symbol}"
+        response = requests.get(ltp_url)
 
----
+        raw_output += "\n\n--- LTP RESPONSE ---\n"
+        raw_output += response.text
 
-2. MODIFY MAIN CALLBACK
+        ltp_data = response.json()
+        ltp_value = f"LTP: {ltp_data.get('ltp', 'N/A')}"
 
-Find existing main callback (the one updating LTP + table)
+        # =========================
+        # EXPIRY API (example)
+        # =========================
+        expiry_url = f"https://api.example.com/expiry?symbol={symbol}"
+        expiry_response = requests.get(expiry_url)
 
-ADD one more output:
+        raw_output += "\n\n--- EXPIRY RESPONSE ---\n"
+        raw_output += expiry_response.text
 
-Output("raw-json", "children")
+        expiry_data = expiry_response.json()
+        expiry = expiry_data.get("expiry", "")
 
-DO NOT remove existing outputs
+        # =========================
+        # OPTION CHAIN API (example)
+        # =========================
+        chain_url = f"https://api.example.com/chain?symbol={symbol}&expiry={expiry}"
+        chain_response = requests.get(chain_url)
 
----
+        raw_output += "\n\n--- OPTION CHAIN RESPONSE ---\n"
+        raw_output += chain_response.text
 
-3. ADD RAW RESPONSE STORAGE
+        chain_data = chain_response.json()
 
-Inside callback, at top:
+        # =========================
+        # TABLE BUILD
+        # =========================
+        df = pd.DataFrame(chain_data.get("data", []))
 
-raw_output = ""
+        if df.empty:
+            table = html.Tr([html.Td("No Data")])
+        else:
+            table = [
+                html.Tr([html.Th(col) for col in df.columns])
+            ] + [
+                html.Tr([html.Td(df.iloc[i][col]) for col in df.columns])
+                for i in range(min(len(df), 10))
+            ]
 
----
+        return ltp_value, table, raw_output
 
-4. CAPTURE API RESPONSES
+    except Exception as e:
+        raw_output += "\n\nERROR:\n" + str(e)
+        return "Error loading data", html.Tr([html.Td("Error")]), raw_output
 
-After each API call:
 
-raw_output += "\n\n--- LTP RESPONSE ---\n"
-raw_output += response.text
-
-raw_output += "\n\n--- EXPIRY RESPONSE ---\n"
-raw_output += expiry_response.text
-
-raw_output += "\n\n--- OPTION CHAIN RESPONSE ---\n"
-raw_output += chain_response.text
-
----
-
-5. ADD ERROR LOGGING
-
-Inside exception:
-
-raw_output += "\n\nERROR:\n" + str(e)
-
----
-
-6. RETURN UPDATED OUTPUT
-
-At the end of callback:
-
-return existing_outputs..., raw_output
-
-(IMPORTANT: Keep existing outputs SAME order + add raw_output at end)
-
----
-
-7. DO NOT TOUCH:
-
-- UI structure
-- Existing dropdowns
-- Existing logic
-- Existing API calls
-
----
-
-FINAL RESULT:
-
-Dashboard should now show:
-
-- Existing UI (unchanged)
-- AND a debug panel showing FULL API responses
-
----
+# =========================
+# RUN (RAILWAY SAFE)
+# =========================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8050))
+    app.run(host="0.0.0.0", port=port)
