@@ -18,7 +18,7 @@ SYMBOL_MAP = {
 # ENV
 # =========================
 ACCESS_TOKEN = os.getenv("DHAN_TOKEN")
-CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
+CLIENT_ID = os.getenv("CLIENT_ID")
 
 # =========================
 # API FUNCTIONS
