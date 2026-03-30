@@ -17,16 +17,16 @@ SYMBOL_MAP = {
 # =========================
 # ENV - Set these before running
 # =========================
-CLIENT_ID = os.getenv("CLIENT_ID")
 ACCESS_TOKEN = os.getenv("DHAN_TOKEN")
+CLIENT_ID = os.getenv("CLIENT_ID")
+
 # =========================
 # API FUNCTIONS (Fixed)
 # =========================
 def get_headers():
-    return 
-    {
-        "client-id": CLIENT_ID,
+    return {
         "access-token": ACCESS_TOKEN,
+        "client-id": CLIENT_ID,
         "Content-Type": "application/json"
     }
 
