@@ -39,41 +39,50 @@ def get_session():
 # ------------------ LTP ------------------
 def get_ltp(symbol):
     try:
-        session = requests.Session()
-        headers = {"User-Agent": "Mozilla/5.0"}
+        import requests
 
-        session.get("https://www.nseindia.com", headers=headers)
+        security_id = symbol_map.get(symbol, 13)
 
-        url = f"https://www.nseindia.com/api/quote-derivative?symbol={symbol}"
-        response = session.get(url, headers=headers, timeout=5)
-
-        data = response.json()
-        return data.get("underlyingValue", "-")
-
-    except:
-        return "-"
-# ------------------ OPTION CHAIN ------------------
-def get_option_chain(symbol):
-    try:
-        session = requests.Session()
+        url = "https://api.dhan.co/market/v2/ltp"
 
         headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept-Language": "en-US,en;q=0.9"
+            "access-token": DHAN_TOKEN,
+            "Content-Type": "application/json"
         }
 
-        session.get("https://www.nseindia.com", headers=headers)
+        payload = {
+            "IDX_I": [security_id]
+        }
 
-        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-        response = session.get(url, headers=headers, timeout=5)
+        res = requests.post(url, json=payload, headers=headers)
+        data = res.json()
 
-        data = response.json()
+        return data["data"]["IDX_I"][str(security_id)]["last_price"]
 
-        # SAFE CHECK
-        if "records" not in data:
-            return [html.Tr([html.Td("NSE blocked / No data")])], data
+    except Exception as e:
+        return "-"# ------------------ OPTION CHAIN ------------------
+def get_option_chain(symbol):
+    try:
+        import requests
 
-        rows = data["records"]["data"][:5]
+        security_id = symbol_map.get(symbol, 13)
+
+        url = "https://api.dhan.co/market/v2/option-chain"
+
+        headers = {
+            "access-token": DHAN_TOKEN,
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "underlyingScrip": security_id,
+            "exchangeSegment": "IDX_I"
+        }
+
+        res = requests.post(url, json=payload, headers=headers)
+        data = res.json()
+
+        rows = data.get("data", [])[:5]
 
         table = [
             html.Tr([
@@ -87,14 +96,15 @@ def get_option_chain(symbol):
             table.append(
                 html.Tr([
                     html.Td(str(row.get("strikePrice", "-"))),
-                    html.Td(str(row.get("CE", {}).get("openInterest", "-"))),
-                    html.Td(str(row.get("PE", {}).get("openInterest", "-")))
+                    html.Td(str(row.get("callOI", "-"))),
+                    html.Td(str(row.get("putOI", "-")))
                 ])
             )
 
         return table, data
 
     except Exception as e:
+        return [html.Tr([html.Td("Error loading data")])], {"error": str(e)}    except Exception as e:
         return [html.Tr([html.Td("Error")])], {"error": str(e)}# ------------------ CALLBACK ------------------
 @app.callback(
     [
