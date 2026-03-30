@@ -48,7 +48,19 @@ app.layout = html.Div([
             "color": "lime",
             "padding": "10px"
         }
-    )
+    ),
+
+    # ===== PRO ANALYTICS PANEL =====
+    html.H3("PRO ANALYTICS"),
+    html.Div(id="market-status", style={
+        "color": "yellow",
+        "fontSize": "18px",
+        "whiteSpace": "pre-line"
+    }),
+    html.Div(id="ai-signal", style={
+        "color": "cyan",
+        "fontSize": "18px"
+    })
 ])
 
 # =========================
@@ -58,7 +70,9 @@ app.layout = html.Div([
     [
         Output("ltp", "children"),
         Output("option-table", "children"),
-        Output("raw-json", "children")
+        Output("raw-json", "children"),
+        Output("market-status", "children"),
+        Output("ai-signal", "children")
     ],
     [
         Input("interval", "n_intervals"),
@@ -67,6 +81,8 @@ app.layout = html.Div([
 )
 def update_dashboard(n, symbol):
     raw_output = ""
+    market_status = "Loading..."
+    ai_signal = "Analyzing..."
 
     try:
         session = requests.Session()
@@ -119,11 +135,76 @@ def update_dashboard(n, symbol):
 
         table = [table_header] + table_rows
 
-        return ltp_value, table, raw_output
+        # =========================
+        # PRO ANALYTICS
+        # =========================
+        total_ce_oi = 0
+        total_pe_oi = 0
+
+        for r in rows:
+            total_ce_oi += r.get("ce", {}).get("oi", 0)
+            total_pe_oi += r.get("pe", {}).get("oi", 0)
+
+        pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi else 0
+
+        # Trend Detection
+        if pcr > 1.3:
+            trend = "BULLISH 🟢"
+        elif pcr < 0.7:
+            trend = "BEARISH 🔴"
+        else:
+            trend = "SIDEWAYS 🟡"
+
+        atm = min(
+            [r.get("strikePrice", 0) for r in rows if r.get("strikePrice")],
+            key=lambda x: abs(x - (underlying if isinstance(underlying, (int, float)) else 0)),
+            default=0
+        ) if rows else 0
+
+        market_status = f"""Spot: {ltp_value}
+ATM: {atm}
+PCR: {pcr}
+Trend: {trend}
+"""
+
+        # =========================
+        # AI STRIKE SELECTION
+        # =========================
+        best_call = None
+        best_put = None
+        max_call_score = 0
+        max_put_score = 0
+
+        for r in rows:
+            ce = r.get("ce", {})
+            pe = r.get("pe", {})
+
+            call_score = ce.get("oi_change", 0) + ce.get("volume", 0)
+            put_score = pe.get("oi_change", 0) + pe.get("volume", 0)
+
+            if call_score > max_call_score:
+                max_call_score = call_score
+                best_call = r.get("strikePrice")
+
+            if put_score > max_put_score:
+                max_put_score = put_score
+                best_put = r.get("strikePrice")
+
+        # Final Signal
+        if pcr > 1:
+            ai_signal = f"BUY CALL → {best_call} CE 🚀" if best_call else "No Data"
+        elif pcr < 1:
+            ai_signal = f"BUY PUT → {best_put} PE 🔻" if best_put else "No Data"
+        else:
+            ai_signal = "NO CLEAR TRADE ❌"
+
+        return ltp_value, table, raw_output, market_status, ai_signal
 
     except Exception as e:
         raw_output += "\n\nERROR:\n" + str(e)
-        return "Error loading data", [html.Tr([html.Td("Error")])], raw_output
+        market_status = "Error loading analytics"
+        ai_signal = "Error generating signal"
+        return "Error loading data", [html.Tr([html.Td("Error")])], raw_output, market_status, ai_signal
 
 
 # =========================
