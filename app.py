@@ -41,17 +41,19 @@ def get_session():
 # ------------------ LTP ------------------
 def get_ltp(symbol):
     try:
-        session, headers = get_session()
+        session = requests.Session()
+        headers = {"User-Agent": "Mozilla/5.0"}
+
+        session.get("https://www.nseindia.com", headers=headers)
 
         url = f"https://www.nseindia.com/api/quote-derivative?symbol={symbol}"
         response = session.get(url, headers=headers, timeout=5)
 
         data = response.json()
-        return data.get("underlyingValue", "N/A")
+        return data.get("underlyingValue", "-")
 
-    except Exception as e:
-        return f"Error: {e}"
-
+    except:
+        return "-"
 # ------------------ OPTION CHAIN ------------------
 def get_option_chain(symbol):
     try:
