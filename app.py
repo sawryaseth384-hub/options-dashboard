@@ -1,13 +1,14 @@
 import json
+import requests
 from dash import Dash, html, dcc, Input, Output
 
-# Initialize app
+# ------------------ APP INIT ------------------
 app = Dash(__name__)
 server = app.server
 
-# Layout
+# ------------------ LAYOUT ------------------
 app.layout = html.Div([
-    html.H2("Options Dashboard"),
+    html.H1("Options Dashboard"),
 
     dcc.Dropdown(
         id="symbol",
@@ -18,21 +19,78 @@ app.layout = html.Div([
         value="NIFTY"
     ),
 
-    dcc.Interval(
-        id="interval",
-        interval=2000,  # 2 sec
-        n_intervals=0
-    ),
-
     html.H3(id="ltp"),
 
     html.Table(id="option-table"),
 
-    html.Pre(id="raw-json")
+    html.Pre(id="raw-json"),
+
+    dcc.Interval(id="interval", interval=2000, n_intervals=0)
 ])
 
+# ------------------ NSE SESSION ------------------
+def get_session():
+    session = requests.Session()
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "en-US,en;q=0.9"
+    }
+    session.get("https://www.nseindia.com", headers=headers)
+    return session, headers
 
-# Callback
+# ------------------ LTP ------------------
+def get_ltp(symbol):
+    try:
+        session, headers = get_session()
+
+        url = f"https://www.nseindia.com/api/quote-derivative?symbol={symbol}"
+        response = session.get(url, headers=headers, timeout=5)
+
+        data = response.json()
+        return data.get("underlyingValue", "N/A")
+
+    except Exception as e:
+        return f"Error: {e}"
+
+# ------------------ OPTION CHAIN ------------------
+def get_option_chain(symbol):
+    try:
+        session, headers = get_session()
+
+        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+        response = session.get(url, headers=headers, timeout=5)
+
+        data = response.json()
+        rows = data["records"]["data"][:5]
+
+        table = [
+            html.Tr([
+                html.Th("Strike"),
+                html.Th("Call OI"),
+                html.Th("Put OI")
+            ])
+        ]
+
+        for row in rows:
+            strike = row.get("strikePrice", "-")
+
+            call_oi = row.get("CE", {}).get("openInterest", "-")
+            put_oi = row.get("PE", {}).get("openInterest", "-")
+
+            table.append(
+                html.Tr([
+                    html.Td(str(strike)),
+                    html.Td(str(call_oi)),
+                    html.Td(str(put_oi))
+                ])
+            )
+
+        return table, data
+
+    except Exception as e:
+        return [html.Tr([html.Td("Error loading data")])], {"error": str(e)}
+
+# ------------------ CALLBACK ------------------
 @app.callback(
     [
         Output("ltp", "children"),
@@ -45,31 +103,17 @@ app.layout = html.Div([
     ]
 )
 def update_dashboard(n, symbol):
-    ltp_text = f"{symbol} LTP: Loading..."
-    
-    # Dummy table (safe)
-    table_children = [
-        html.Tr([
-            html.Th("Strike"),
-            html.Th("Call OI"),
-            html.Th("Put OI")
-        ]),
-        html.Tr([
-            html.Td("22000"),
-            html.Td("1000"),
-            html.Td("1200")
-        ])
-    ]
+    try:
+        ltp = get_ltp(symbol)
+        ltp_text = f"{symbol} LTP: {ltp}"
 
-    raw_output = {
-        "status": "running",
-        "symbol": symbol,
-        "interval": n
-    }
+        table_children, raw_output = get_option_chain(symbol)
 
-    return ltp_text, table_children, json.dumps(raw_output, indent=2)
+        return ltp_text, table_children, json.dumps(raw_output, indent=2)
 
+    except Exception as e:
+        return "Error", [], str(e)
 
-# Run (for local)
+# ------------------ RUN ------------------
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8080)
+    app.run(debug=True)
