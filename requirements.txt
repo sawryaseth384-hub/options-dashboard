@@ -1,5 +1,5 @@
-dash
-gunicorn
-pandas
-plotly
-requests
+dash==2.14.0
+requests==2.31.0
+pandas==2.0.3
+plotly==5.17.0
+gunicorn==21.2.0
