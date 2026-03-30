@@ -4,7 +4,7 @@ from dash import Dash, html, dcc
 from dash.dependencies import Input, Output
 
 # =========================
-# ENV VARIABLES (Railway)
+# ENV VARIABLES
 # =========================
 DHAN_TOKEN = os.getenv("DHAN_TOKEN")
 
@@ -48,6 +48,9 @@ app.layout = html.Div([
 # =========================
 def get_option_chain(symbol):
     try:
+        if not DHAN_TOKEN:
+            return [html.Tr([html.Td("Missing DHAN_TOKEN")])]
+
         security_id = symbol_map.get(symbol, 13)
 
         url = "https://api.dhan.co/market/v2/option-chain"
@@ -63,8 +66,11 @@ def get_option_chain(symbol):
         }
 
         res = requests.post(url, json=payload, headers=headers)
-        data = res.json()
 
+        if res.status_code != 200:
+            return [html.Tr([html.Td(f"API Error: {res.status_code}")])]
+
+        data = res.json()
         rows = data.get("data", [])[:5]
 
         table = [
@@ -101,7 +107,7 @@ def update_table(symbol, n):
     return get_option_chain(symbol)
 
 # =========================
-# RUN
+# RUN LOCAL
 # =========================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
