@@ -1,40 +1,75 @@
-# Updated app.py
+import json
+from dash import Dash, html, dcc, Input, Output
 
-# Adding safe defaults at the top of update_dashboard
-ltp_text = ''
-table_children = []
-raw_output = ''
-market_status = ''
-ai_signal = ''
+# Initialize app
+app = Dash(__name__)
+server = app.server
 
+# Layout
+app.layout = html.Div([
+    html.H2("Options Dashboard"),
+
+    dcc.Dropdown(
+        id="symbol",
+        options=[
+            {"label": "NIFTY", "value": "NIFTY"},
+            {"label": "BANKNIFTY", "value": "BANKNIFTY"}
+        ],
+        value="NIFTY"
+    ),
+
+    dcc.Interval(
+        id="interval",
+        interval=2000,  # 2 sec
+        n_intervals=0
+    ),
+
+    html.H3(id="ltp"),
+
+    html.Table(id="option-table"),
+
+    html.Pre(id="raw-json")
+])
+
+
+# Callback
 @app.callback(
-    [Output('table-id', 'children'),  
-     Output('market-status', 'children'),  
-     Output('ai-signal', 'children')]
+    [
+        Output("ltp", "children"),
+        Output("option-table", "children"),
+        Output("raw-json", "children")
+    ],
+    [
+        Input("interval", "n_intervals"),
+        Input("symbol", "value")
+    ]
 )
-def update_dashboard(...):
-    try:
-        # Existing logic
-        ...
+def update_dashboard(n, symbol):
+    ltp_text = f"{symbol} LTP: Loading..."
+    
+    # Dummy table (safe)
+    table_children = [
+        html.Tr([
+            html.Th("Strike"),
+            html.Th("Call OI"),
+            html.Th("Put OI")
+        ]),
+        html.Tr([
+            html.Td("22000"),
+            html.Td("1000"),
+            html.Td("1200")
+        ])
+    ]
 
-        # Handle empty rows and None ltp_value safely
-        if not rows or ltp_value is None:
-            raise ValueError("Invalid input data")
+    raw_output = {
+        "status": "running",
+        "symbol": symbol,
+        "interval": n
+    }
 
-        # Adding PRO ANALYTICS UI components
-        layout.children.append(...)
+    return ltp_text, table_children, json.dumps(raw_output, indent=2)
 
-        # Expanding existing outputs
-        return table_children, market_status, ai_signal
-    except Exception as e:
-        # Ensure raw_output is always a string
-        raw_output += str(e)
-        return ltp_text, table_children, raw_output, 'Error loading market status', 'Error generating signal'
 
-        # Add PRO analytics PCR/trend and AI strike selection logic
-        for row in rows:
-            # Map existing keys to expected output
-            oi = row.get('CE', {}).get('oi', 0)
-            oi_change = row.get('CE', {}).get('oi_change', 0)
-            volume = row.get('CE', {}).get('volume', 0)
-            # ... Process other logic
+# Run (for local)
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=8080)
