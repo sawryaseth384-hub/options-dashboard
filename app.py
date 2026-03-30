@@ -1,70 +1,53 @@
 import os
-DHAN_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
-# ------------------ APP INIT ------------------
+import requests
+from dash import Dash, html, dcc
+from dash.dependencies import Input, Output
+
+# =========================
+# ENV VARIABLES (Railway)
+# =========================
+DHAN_TOKEN = os.getenv("DHAN_TOKEN")
+
+# =========================
+# SYMBOL MAP
+# =========================
+symbol_map = {
+    "NIFTY": 13,
+    "BANKNIFTY": 25,
+    "FINNIFTY": 27
+}
+
+# =========================
+# DASH APP
+# =========================
 app = Dash(__name__)
 server = app.server
 
-# ------------------ LAYOUT ------------------
 app.layout = html.Div([
-    html.H1("Options Dashboard"),
+    html.H2("Option Chain Dashboard"),
 
     dcc.Dropdown(
         id="symbol",
         options=[
             {"label": "NIFTY", "value": "NIFTY"},
-            {"label": "BANKNIFTY", "value": "BANKNIFTY"}
+            {"label": "BANKNIFTY", "value": "BANKNIFTY"},
+            {"label": "FINNIFTY", "value": "FINNIFTY"},
         ],
         value="NIFTY"
     ),
 
-    html.H3(id="ltp"),
+    html.Br(),
 
     html.Table(id="option-table"),
 
-    html.Pre(id="raw-json"),
-
-    dcc.Interval(id="interval", interval=2000, n_intervals=0)
+    dcc.Interval(id="interval", interval=5000, n_intervals=0)
 ])
 
-# ------------------ NSE SESSION ------------------
-def get_session():
-    session = requests.Session()
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept-Language": "en-US,en;q=0.9"
-    }
-    session.get("https://www.nseindia.com", headers=headers)
-    return session, headers
-
-# ------------------ LTP ------------------
-def get_ltp(symbol):
-    try:
-        import requests
-
-        security_id = symbol_map.get(symbol, 13)
-
-        url = "https://api.dhan.co/market/v2/ltp"
-
-        headers = {
-            "access-token": DHAN_TOKEN,
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "IDX_I": [security_id]
-        }
-
-        res = requests.post(url, json=payload, headers=headers)
-        data = res.json()
-
-        return data["data"]["IDX_I"][str(security_id)]["last_price"]
-
-    except Exception as e:
-        return "-"# ------------------ OPTION CHAIN ------------------
+# =========================
+# API FUNCTION
+# =========================
 def get_option_chain(symbol):
     try:
-        import requests
-
         security_id = symbol_map.get(symbol, 13)
 
         url = "https://api.dhan.co/market/v2/option-chain"
@@ -101,34 +84,24 @@ def get_option_chain(symbol):
                 ])
             )
 
-        return table, data
+        return table
 
     except Exception as e:
-        return [html.Tr([html.Td("Error loading data")])], {"error": str(e)}    except Exception as e:
-        return [html.Tr([html.Td("Error")])], {"error": str(e)}# ------------------ CALLBACK ------------------
+        return [html.Tr([html.Td(f"Error: {str(e)}")])]
+
+# =========================
+# CALLBACK
+# =========================
 @app.callback(
-    [
-        Output("ltp", "children"),
-        Output("option-table", "children"),
-        Output("raw-json", "children")
-    ],
-    [
-        Input("interval", "n_intervals"),
-        Input("symbol", "value")
-    ]
+    Output("option-table", "children"),
+    Input("symbol", "value"),
+    Input("interval", "n_intervals")
 )
-def update_dashboard(n, symbol):
-    try:
-        ltp = get_ltp(symbol)
-        ltp_text = f"{symbol} LTP: {ltp}"
+def update_table(symbol, n):
+    return get_option_chain(symbol)
 
-        table_children, raw_output = get_option_chain(symbol)
-
-        return ltp_text, table_children, json.dumps(raw_output, indent=2)
-
-    except Exception as e:
-        return "Error", [], str(e)
-
-# ------------------ RUN ------------------
+# =========================
+# RUN
+# =========================
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8080)
