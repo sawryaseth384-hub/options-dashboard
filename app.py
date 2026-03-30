@@ -1,7 +1,5 @@
-import json
-import requests
-from dash import Dash, html, dcc, Input, Output
-
+import os
+DHAN_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 # ------------------ APP INIT ------------------
 app = Dash(__name__)
 server = app.server
