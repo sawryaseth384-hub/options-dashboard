@@ -55,12 +55,24 @@ def get_ltp(symbol):
 # ------------------ OPTION CHAIN ------------------
 def get_option_chain(symbol):
     try:
-        session, headers = get_session()
+        session = requests.Session()
+
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept-Language": "en-US,en;q=0.9"
+        }
+
+        session.get("https://www.nseindia.com", headers=headers)
 
         url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
         response = session.get(url, headers=headers, timeout=5)
 
         data = response.json()
+
+        # SAFE CHECK
+        if "records" not in data:
+            return [html.Tr([html.Td("NSE blocked / No data")])], data
+
         rows = data["records"]["data"][:5]
 
         table = [
@@ -72,25 +84,18 @@ def get_option_chain(symbol):
         ]
 
         for row in rows:
-            strike = row.get("strikePrice", "-")
-
-            call_oi = row.get("CE", {}).get("openInterest", "-")
-            put_oi = row.get("PE", {}).get("openInterest", "-")
-
             table.append(
                 html.Tr([
-                    html.Td(str(strike)),
-                    html.Td(str(call_oi)),
-                    html.Td(str(put_oi))
+                    html.Td(str(row.get("strikePrice", "-"))),
+                    html.Td(str(row.get("CE", {}).get("openInterest", "-"))),
+                    html.Td(str(row.get("PE", {}).get("openInterest", "-")))
                 ])
             )
 
         return table, data
 
     except Exception as e:
-        return [html.Tr([html.Td("Error loading data")])], {"error": str(e)}
-
-# ------------------ CALLBACK ------------------
+        return [html.Tr([html.Td("Error")])], {"error": str(e)}# ------------------ CALLBACK ------------------
 @app.callback(
     [
         Output("ltp", "children"),
