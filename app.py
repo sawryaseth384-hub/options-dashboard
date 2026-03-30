@@ -1,10 +1,11 @@
 import os
 import requests
+from datetime import datetime, timedelta
 from dash import Dash, html, dcc, Input, Output
 from dash.dash_table import DataTable
 
 # =========================
-# CONFIG
+# CONFIGURATION
 # =========================
 BASE_URL = "https://api.dhan.co/v2"
 
@@ -14,61 +15,76 @@ SYMBOL_MAP = {
     "FINNIFTY": 27
 }
 
-# =========================
-# ENV - Set these before running
-# =========================
+# Get from environment
 ACCESS_TOKEN = os.getenv("DHAN_TOKEN")
 CLIENT_ID = os.getenv("CLIENT_ID")
 
+# Validate on startup
+if not ACCESS_TOKEN:
+    print("❌ ERROR: DHAN_TOKEN environment variable not set!")
+if not CLIENT_ID:
+    print("❌ ERROR: CLIENT_ID environment variable not set!")
+
 # =========================
-# API FUNCTIONS (Fixed)
+# API FUNCTIONS
 # =========================
 def get_headers():
+    """Return headers for API requests"""
+    if not ACCESS_TOKEN or not CLIENT_ID:
+        raise ValueError("Missing ACCESS_TOKEN or CLIENT_ID")
+    
     return {
         "access-token": ACCESS_TOKEN,
         "client-id": CLIENT_ID,
         "Content-Type": "application/json"
     }
 
-def get_expiry(symbol):
+def test_token_validity():
+    """Test if current token is valid"""
+    try:
+        url = "https://api.dhan.co/v2/accounts/profile"
+        headers = {
+            "access-token": ACCESS_TOKEN,
+            "client-id": CLIENT_ID
+        }
+        res = requests.get(url, headers=headers, timeout=10)
+        return res.status_code == 200
+    except:
+        return False
+
+def get_expiry_list(symbol):
+    """Fetch available expiry dates"""
+    if not test_token_validity():
+        return [], "❌ Token expired! Please regenerate token."
+    
     try:
         url = f"{BASE_URL}/optionchain/expirylist"
         payload = {
             "UnderlyingScrip": SYMBOL_MAP[symbol],
             "UnderlyingSeg": "IDX_I"
         }
-
-        res = requests.post(url, json=payload, headers=get_headers())
-        print("EXPIRY FULL:", res.status_code, res.text)
-
-        if res.status_code != 200:
-            return []
-
-        data = res.json()
-
-        # 🔥 HANDLE ALL POSSIBLE STRUCTURES
-        expiry_data = data.get("data", {})
-
-        if isinstance(expiry_data, list):
-            return expiry_data
-
-        if isinstance(expiry_data, dict):
-            return expiry_data.get("expiryDates", [])
-
-        return []
-
+        
+        res = requests.post(url, json=payload, headers=get_headers(), timeout=10)
+        
+        if res.status_code == 200:
+            data = res.json()
+            expiries = data.get("data", [])
+            return expiries, ""
+        elif res.status_code == 401:
+            return [], "❌ Token expired! Please regenerate your access token."
+        elif res.status_code == 404:
+            return [], "❌ API endpoint not found. Check your URL."
+        else:
+            return [], f"❌ Error {res.status_code}: {res.text[:100]}"
+            
     except Exception as e:
-        print("Expiry Error:", e)
-        return []        data = res.json()
-        # Dhan returns expiry list in 'data' array
-        return data.get("data", [])
-
-    except Exception as e:
-        print("Expiry Error:", e)
-        return []
+        return [], f"❌ Exception: {str(e)}"
 
 def get_option_chain(symbol, expiry):
-    """Fetch option chain with proper parsing"""
+    """Fetch option chain data"""
+    if not test_token_validity():
+        return [], "❌ Token expired! Please regenerate token."
+    
     try:
         url = f"{BASE_URL}/optionchain"
         payload = {
@@ -76,55 +92,50 @@ def get_option_chain(symbol, expiry):
             "UnderlyingSeg": "IDX_I",
             "Expiry": expiry
         }
-
-        res = requests.post(url, json=payload, headers=get_headers())
-        print("CHAIN Response:", res.status_code)
-
-        if res.status_code != 200:
-            return [], f"API Error {res.status_code}: {res.text}"
-
-        data = res.json()
         
-        # Dhan's response structure:
-        # {
-        #   "data": {
-        #     "last_price": 23500.50,
-        #     "oc": {
-        #       "23500": { "ce": {...}, "pe": {...} },
-        #       "23600": { "ce": {...}, "pe": {...} }
-        #     }
-        #   }
-        # }
+        res = requests.post(url, json=payload, headers=get_headers(), timeout=10)
         
-        oc_data = data.get("data", {})
-        strikes_dict = oc_data.get("oc", {})
-        
-        rows = []
-        # Convert strikes to sorted list of integers
-        strikes = sorted([int(k) for k in strikes_dict.keys()])
-        
-        for strike in strikes[:20]:  # Limit to 20 strikes for performance
-            strike_str = str(strike)
-            contracts = strikes_dict.get(strike_str, {})
+        if res.status_code == 200:
+            data = res.json()
+            oc_data = data.get("data", {})
+            strikes_dict = oc_data.get("oc", {})
             
-            ce = contracts.get("ce", {})
-            pe = contracts.get("pe", {})
+            rows = []
+            strikes = sorted([int(k) for k in strikes_dict.keys()])
             
-            rows.append({
-                "Strike": strike,
-                "Call OI": ce.get("oi", "-"),
-                "Put OI": pe.get("oi", "-"),
-                "Call LTP": ce.get("last_price", "-"),
-                "Put LTP": pe.get("last_price", "-"),
-                "Call IV": ce.get("implied_volatility", "-"),
-                "Put IV": pe.get("implied_volatility", "-"),
-                "Underlying LTP": oc_data.get("last_price", "-")
-            })
-        
-        return rows, f"Underlying: {oc_data.get('last_price', '-')} | Strikes: {len(strikes)}"
-
+            for strike in strikes[:20]:
+                strike_str = str(strike)
+                contracts = strikes_dict.get(strike_str, {})
+                
+                ce = contracts.get("ce", {})
+                pe = contracts.get("pe", {})
+                
+                rows.append({
+                    "Strike": strike,
+                    "Call OI": ce.get("oi", "-"),
+                    "Put OI": pe.get("oi", "-"),
+                    "Call LTP": ce.get("last_price", "-"),
+                    "Put LTP": pe.get("last_price", "-"),
+                    "Call IV": ce.get("implied_volatility", "-"),
+                    "Put IV": pe.get("implied_volatility", "-")
+                })
+            
+            status_msg = f"✅ Loaded {len(rows)} strikes | Underlying: {oc_data.get('last_price', '-')}"
+            return rows, status_msg
+            
+        elif res.status_code == 401:
+            return [], "❌ Token expired! Generate new token from Dhan app."
+        elif res.status_code == 404:
+            return [], f"❌ No data for {expiry}. Try different expiry date."
+        elif res.status_code == 400:
+            return [], "❌ Invalid request. Check symbol or expiry format."
+        else:
+            return [], f"❌ Error {res.status_code}: {res.text[:100]}"
+            
+    except requests.exceptions.Timeout:
+        return [], "❌ Request timeout. Check your internet."
     except Exception as e:
-        return [], str(e)
+        return [], f"❌ Exception: {str(e)}"
 
 # =========================
 # DASH APP
@@ -133,24 +144,28 @@ app = Dash(__name__)
 server = app.server
 
 app.layout = html.Div([
-    html.H2("Dhan Option Chain Dashboard", style={"textAlign": "center"}),
+    html.H2("📊 Dhan Option Chain Dashboard", style={"textAlign": "center"}),
     
     html.Div([
-        html.Label("Select Index:"),
-        dcc.Dropdown(
-            id="symbol",
-            options=[{"label": k, "value": k} for k in SYMBOL_MAP.keys()],
-            value="NIFTY",
-            style={"width": "50%"}
-        ),
+        html.Div([
+            html.Label("Select Index:"),
+            dcc.Dropdown(
+                id="symbol",
+                options=[{"label": k, "value": k} for k in SYMBOL_MAP.keys()],
+                value="NIFTY",
+                clearable=False
+            )
+        ], style={"width": "30%", "display": "inline-block", "marginRight": "20px"}),
+        
+        html.Div([
+            html.Label("Select Expiry:"),
+            dcc.Dropdown(id="expiry", clearable=False)
+        ], style={"width": "40%", "display": "inline-block"})
     ], style={"margin": "20px"}),
     
-    html.Div([
-        html.Label("Select Expiry:"),
-        dcc.Dropdown(id="expiry", style={"width": "50%"}),
-    ], style={"margin": "20px"}),
+    html.Div(id="status", style={"color": "red", "margin": "20px", "fontWeight": "bold"}),
     
-    html.Div(id="status", style={"color": "red", "margin": "20px"}),
+    html.Div(id="token-status", style={"color": "orange", "margin": "20px"}),
     
     DataTable(
         id="table",
@@ -160,33 +175,47 @@ app.layout = html.Div([
             {"name": "Put OI", "id": "Put OI"},
             {"name": "Call LTP", "id": "Call LTP"},
             {"name": "Put LTP", "id": "Put LTP"},
-            {"name": "Call IV", "id": "Call IV"},
-            {"name": "Put IV", "id": "Put IV"},
-            {"name": "Underlying LTP", "id": "Underlying LTP"},
+            {"name": "Call IV (%)", "id": "Call IV"},
+            {"name": "Put IV (%)", "id": "Put IV"}
         ],
-        style_cell={"textAlign": "center"},
-        style_header={"backgroundColor": "lightgray", "fontWeight": "bold"},
-        page_size=20
+        style_cell={"textAlign": "center", "padding": "10px"},
+        style_header={"backgroundColor": "#2c3e50", "color": "white", "fontWeight": "bold"},
+        style_data={"backgroundColor": "#ecf0f1"},
+        page_size=15
     ),
     
-    dcc.Interval(id="refresh", interval=5000)  # Refresh every 5 seconds
+    dcc.Interval(id="refresh", interval=10000)  # Refresh every 10 seconds
 ])
 
 # =========================
 # CALLBACKS
 # =========================
 @app.callback(
+    Output("token-status", "children"),
+    Input("refresh", "n_intervals")
+)
+def check_token(n):
+    if not ACCESS_TOKEN or not CLIENT_ID:
+        return "⚠️ Missing DHAN_TOKEN or CLIENT_ID environment variables!"
+    
+    if test_token_validity():
+        return "✅ Token valid"
+    else:
+        return "⚠️ Token expired! Please generate new token from Dhan app."
+
+@app.callback(
     Output("expiry", "options"),
     Output("expiry", "value"),
     Input("symbol", "value")
 )
 def load_expiry(symbol):
-    if not ACCESS_TOKEN or not CLIENT_ID:
+    expiries, error = get_expiry_list(symbol)
+    
+    if error:
+        print(f"Expiry error: {error}")
         return [], None
     
-    expiries = get_expiry(symbol)
     opts = [{"label": e, "value": e} for e in expiries]
-    
     return opts, expiries[0] if expiries else None
 
 @app.callback(
@@ -196,34 +225,26 @@ def load_expiry(symbol):
     Input("expiry", "value"),
     Input("refresh", "n_intervals")
 )
-def update(symbol, expiry, n):
-    # Validation
+def update_table(symbol, expiry, n):
     if not ACCESS_TOKEN or not CLIENT_ID:
-        return [], "❌ Missing DHAN_TOKEN or CLIENT_ID environment variables"
+        return [], "❌ Missing environment variables!"
     
     if not expiry:
         return [], "⏳ Loading expiries..."
     
-    if symbol not in SYMBOL_MAP:
-        return [], f"❌ Invalid symbol: {symbol}"
-    
-    # Fetch data
     data, status = get_option_chain(symbol, expiry)
-    
-    if not data and "Error" not in status:
-        status = "⚠️ No data received. Check token validity."
-    
     return data, status
 
 # =========================
 # RUN
 # =========================
 if __name__ == "__main__":
-    print("=" * 50)
-    print("Dhan Option Chain Dashboard")
+    print("\n" + "=" * 50)
+    print("🚀 DHAN OPTION CHAIN DASHBOARD")
     print("=" * 50)
     print(f"Client ID: {CLIENT_ID[:4] + '****' if CLIENT_ID else 'NOT SET'}")
-    print(f"Access Token: {'SET' if ACCESS_TOKEN else 'NOT SET'}")
+    print(f"Token: {'✅ SET' if ACCESS_TOKEN else '❌ NOT SET'}")
+    print(f"Token Valid: {test_token_validity()}")
     print("=" * 50)
     
     port = int(os.getenv("PORT", 8080))
