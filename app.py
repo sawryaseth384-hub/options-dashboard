@@ -31,7 +31,6 @@ def get_headers():
     }
 
 def get_expiry(symbol):
-    """Fetch list of available expiries"""
     try:
         url = f"{BASE_URL}/optionchain/expirylist"
         payload = {
@@ -40,13 +39,27 @@ def get_expiry(symbol):
         }
 
         res = requests.post(url, json=payload, headers=get_headers())
-        print("EXPIRY Response:", res.status_code)
+        print("EXPIRY FULL:", res.status_code, res.text)
 
         if res.status_code != 200:
-            print("Expiry Error:", res.text)
             return []
 
         data = res.json()
+
+        # 🔥 HANDLE ALL POSSIBLE STRUCTURES
+        expiry_data = data.get("data", {})
+
+        if isinstance(expiry_data, list):
+            return expiry_data
+
+        if isinstance(expiry_data, dict):
+            return expiry_data.get("expiryDates", [])
+
+        return []
+
+    except Exception as e:
+        print("Expiry Error:", e)
+        return []        data = res.json()
         # Dhan returns expiry list in 'data' array
         return data.get("data", [])
 
@@ -214,4 +227,4 @@ if __name__ == "__main__":
     print("=" * 50)
     
     port = int(os.getenv("PORT", 8080))
-    app.run_server(host="0.0.0.0", port=port, debug=True)
+    app.run_server(host="0.0.0.0", port=port, debug=False)
