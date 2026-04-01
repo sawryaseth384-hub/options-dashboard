@@ -235,17 +235,4 @@ def update_table(symbol, expiry, n):
     data, status = get_option_chain(symbol, expiry)
     return data, status
 
-# =========================
-# RUN
-# =========================
-if __name__ == "__main__":
-    print("\n" + "=" * 50)
-    print("🚀 DHAN OPTION CHAIN DASHBOARD")
-    print("=" * 50)
-    print(f"Client ID: {CLIENT_ID[:4] + '****' if CLIENT_ID else 'NOT SET'}")
-    print(f"Token: {'✅ SET' if ACCESS_TOKEN else '❌ NOT SET'}")
-    print(f"Token Valid: {test_token_validity()}")
-    print("=" * 50)
-    
-    port = int(os.getenv("PORT", 8080))
-    app.run_server(host="0.0.0.0", port=port, debug=False)
+
