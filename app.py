@@ -47,7 +47,7 @@ def test_token_validity():
             "access-token": ACCESS_TOKEN,
             "client-id": CLIENT_ID
         }
-        res = requests.get(url, headers=headers, timeout=10)
+        res = requests.get(url, headers=headers, timeout=5)  # 5 second timeout
         return res.status_code == 200
     except:
         return False
@@ -198,10 +198,13 @@ def check_token(n):
     if not ACCESS_TOKEN or not CLIENT_ID:
         return "⚠️ Missing DHAN_TOKEN or CLIENT_ID environment variables!"
     
-    if test_token_validity():
-        return "✅ Token valid"
-    else:
-        return "⚠️ Token expired! Please generate new token from Dhan app."
+    try:
+        if test_token_validity():
+            return "✅ Token valid"
+        else:
+            return "⚠️ Token expired! Please generate new token from Dhan app."
+    except Exception as e:
+        return f"⚠️ Token check failed: {str(e)[:50]}"
 
 @app.callback(
     Output("expiry", "options"),
@@ -235,17 +238,3 @@ def update_table(symbol, expiry, n):
     data, status = get_option_chain(symbol, expiry)
     return data, status
 
-# =========================
-# RUN
-# =========================
-if __name__ == "__main__":
-    print("\n" + "=" * 50)
-    print("🚀 DHAN OPTION CHAIN DASHBOARD")
-    print("=" * 50)
-    print(f"Client ID: {CLIENT_ID[:4] + '****' if CLIENT_ID else 'NOT SET'}")
-    print(f"Token: {'✅ SET' if ACCESS_TOKEN else '❌ NOT SET'}")
-    print(f"Token Valid: {test_token_validity()}")
-    print("=" * 50)
-    
-    port = int(os.getenv("PORT", 8080))
-    app.run_server(host="0.0.0.0", port=port, debug=False)
